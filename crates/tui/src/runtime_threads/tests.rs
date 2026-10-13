@@ -13047,7 +13047,7 @@ async fn user_input_tool_timeout_and_cancel_clear_snapshot_before_turn_end() -> 
                 result: Err(error),
             })
             .await?;
-        tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::time::timeout(TURN_SETTLEMENT_DEADLOCK_TIMEOUT, async {
             loop {
                 let detail = manager.get_thread_detail(&thread.id).await?;
                 let events = manager.events_since(&thread.id, None)?;
