@@ -468,15 +468,33 @@ impl LlmError {
     /// - Status code (429 = rate limit, 401/403 = auth, 499/5xx = transient upstream error)
     /// - Response body keywords (`context_length`, `content_policy`, safety, etc.)
     pub fn from_http_response(status: u16, body: &str) -> Self {
-        if let Some(error) = explicit_quota_code(body)
-            .or_else(|| explicit_quota_code_marker(body))
+        Self::from_http_response_with_retry_hints(
+            status,
+            body,
+            None,
+            retry_delay_from_error_body(body),
+        )
+    }
+
+    pub(crate) fn from_http_response_with_retry_hints(
+        status: u16,
+        body: &str,
+        retry_after: Option<Duration>,
+        body_retry_after: Option<Duration>,
+    ) -> Self {
+        let body_retry_after = body_retry_after.filter(|delay| *delay <= PROVIDER_RETRY_HINT_MAX);
+        let quota_code = explicit_quota_code(body).or_else(|| explicit_quota_code_marker(body));
+        if let Some(error) = quota_code
             .as_deref()
             .and_then(Self::from_subscription_sharing_error_code)
         {
             return error;
         }
         // xAI refuses an exhausted account with a 403, not a 402/429.
-        if matches!(status, 400 | 402 | 403 | 429) && has_explicit_quota_evidence(body) {
+        if matches!(status, 400 | 402 | 403 | 429)
+            && (quota_code.is_some()
+                || has_explicit_quota_phrase(body, status == 429 && body_retry_after.is_some()))
+        {
             return LlmError::QuotaExhausted(QuotaExhaustionError::from_http_message(
                 body.to_string(),
             ));
@@ -485,7 +503,7 @@ impl LlmError {
         match status {
             429 => LlmError::RateLimited {
                 message: body.to_string(),
-                retry_after: None,
+                retry_after: retry_after.or(body_retry_after),
             },
             401 => Self::authentication_error(body),
             403 => {
@@ -631,23 +649,6 @@ impl LlmError {
         }
     }
 
-    /// Constructs an `LlmError` from HTTP status code, body, and optional Retry-After header.
-    pub fn from_http_response_with_retry_after(
-        status: u16,
-        body: &str,
-        retry_after: Option<Duration>,
-    ) -> Self {
-        let mut error = Self::from_http_response(status, body);
-        if let LlmError::RateLimited {
-            retry_after: ref mut ra,
-            ..
-        } = error
-        {
-            *ra = retry_after;
-        }
-        error
-    }
-
     /// Constructs an `LlmError` from a reqwest error.
     pub fn from_reqwest(err: &reqwest::Error) -> Self {
         if err.is_timeout() {
@@ -786,15 +787,6 @@ pub(crate) fn is_context_length_message(lower: &str) -> bool {
     .any(|phrase| lower.contains(phrase))
 }
 
-/// Quota exhaustion is a durable account state, not a generic rate-limit
-/// synonym. Accept only explicit provider evidence at the HTTP/parser boundary;
-/// callers holding a stringified error must never promote it to this type.
-fn has_explicit_quota_evidence(body: &str) -> bool {
-    explicit_quota_code(body).is_some()
-        || explicit_quota_code_marker(body).is_some()
-        || has_explicit_quota_phrase(body)
-}
-
 fn explicit_quota_code(body: &str) -> Option<String> {
     let value: Value = serde_json::from_str(body).ok()?;
     [
@@ -848,7 +840,7 @@ fn explicit_quota_code_marker(body: &str) -> Option<String> {
     is_explicit_quota_code(code).then(|| code.to_string())
 }
 
-fn has_explicit_quota_phrase(body: &str) -> bool {
+fn has_explicit_quota_phrase(body: &str, bounded_rate_limit_hint: bool) -> bool {
     let lower = body.to_ascii_lowercase();
     let current_quota_exhausted = lower.contains("exceeded your current quota")
         || lower.contains("current quota has been exceeded");
@@ -889,7 +881,7 @@ fn has_explicit_quota_phrase(body: &str) -> bool {
         || lower.contains("credit balance exhausted")
         || lower.contains("credit balance is exhausted")
         || durable_scope_exhausted
-        || (current_quota_exhausted && plan_and_billing_guidance)
+        || (current_quota_exhausted && plan_and_billing_guidance && !bounded_rate_limit_hint)
 }
 
 fn extract_json_error_message(body: &str) -> Option<String> {

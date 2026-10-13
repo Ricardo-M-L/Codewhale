@@ -2043,6 +2043,7 @@ impl CodewhaleClient {
         status: u16,
         body: &str,
         retry_after: Option<Duration>,
+        body_retry_after: Option<Duration>,
     ) -> LlmError {
         let route = self.admitted_identity.key.as_str();
         let error = match status {
@@ -2060,7 +2061,12 @@ impl CodewhaleClient {
                     .with_fix(auth_fix_hint(route, &self.api_key_source)),
                 ),
             ),
-            _ => LlmError::from_http_response_with_retry_after(status, body, retry_after),
+            _ => LlmError::from_http_response_with_retry_hints(
+                status,
+                body,
+                retry_after,
+                body_retry_after,
+            ),
         };
         match error {
             LlmError::ModelError(message) => LlmError::ModelError(format!(
@@ -4149,10 +4155,14 @@ impl CodewhaleClient {
                     }
                     let header_retry_after = extract_retry_after(response.headers());
                     let raw = bounded_error_text(response, ERROR_BODY_MAX_BYTES).await;
-                    let retry_after =
-                        header_retry_after.or_else(|| retry_delay_from_error_body(&raw));
+                    let body_retry_after = retry_delay_from_error_body(&raw);
                     let body = self.disclosed_http_error_body(disclosure, status.as_u16(), &raw);
-                    Err(self.http_error_with_route_context(status.as_u16(), &body, retry_after))
+                    Err(self.http_error_with_route_context(
+                        status.as_u16(),
+                        &body,
+                        header_retry_after,
+                        body_retry_after,
+                    ))
                 }
             },
             Some(Box::new(move |err, attempt, delay| {
@@ -4268,11 +4278,15 @@ impl CodewhaleClient {
                         }
                         let header_retry_after = extract_retry_after(response.headers());
                         let raw = bounded_error_text(response, ERROR_BODY_MAX_BYTES).await;
-                        let retry_after =
-                            header_retry_after.or_else(|| retry_delay_from_error_body(&raw));
+                        let body_retry_after = retry_delay_from_error_body(&raw);
                         let body =
                             self.disclosed_http_error_body(disclosure, status.as_u16(), &raw);
-                        Err(self.http_error_with_route_context(status.as_u16(), &body, retry_after))
+                        Err(self.http_error_with_route_context(
+                            status.as_u16(),
+                            &body,
+                            header_retry_after,
+                            body_retry_after,
+                        ))
                     }
                 },
                 Some(Box::new(|err, attempt, delay| {
