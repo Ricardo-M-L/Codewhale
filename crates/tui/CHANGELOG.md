@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.2] - 2026-10-13
 
+- Windows mouse-wheel scrolling is restored after returning from the external
+  editor. The handoff now releases both Windows console mouse capture and
+  terminal mouse modes. Thanks @SparkofSpike for distinguishing terminal
+  scrollback from transcript scrolling in #6652; the separate hours-long
+  scrolling slowdown still needs reproduction.
 - Shell classification accepts PowerShell’s call operator, quoted ampersands
   and combined output redirection without losing destructive commands in
   nested shell payloads or after command separators. Thanks @SparkofSpike
