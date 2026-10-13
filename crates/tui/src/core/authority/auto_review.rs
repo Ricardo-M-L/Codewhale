@@ -400,7 +400,7 @@ impl SessionRuntimeRisk {
                 "unbounded process termination can kill this or another Codewhale npm session's Node launcher; stop the owned server by PID or port instead"
             }
             Self::UnclassifiedWindowsInvocation => {
-                "Windows command input cannot be classified safely enough to exclude termination of Codewhale npm launchers; use a direct PID- or port-specific command"
+                "Windows command input could not be classified; review the command before execution"
             }
         }
     }
@@ -651,7 +651,14 @@ fn deterministic_fallback(
     if ctx.approval_mode != ApprovalMode::Bypass
         && let Some(risk) = ctx.session_runtime_risk
     {
-        return AutoReviewDecision::safety_gate(risk.reason());
+        return match risk {
+            SessionRuntimeRisk::WindowsNodeImageKill => {
+                AutoReviewDecision::safety_gate(risk.reason())
+            }
+            SessionRuntimeRisk::UnclassifiedWindowsInvocation => {
+                AutoReviewDecision::new(AutoReviewAction::AskUser, risk.reason())
+            }
+        };
     }
 
     // Gate on the action, not the broad modal-styling risk bucket. Full Access
@@ -2029,6 +2036,39 @@ mod tests {
             windows_session_runtime_risk(&nested),
             Some(SessionRuntimeRisk::UnclassifiedWindowsInvocation)
         );
+        for mode in [
+            ApprovalMode::Suggest,
+            ApprovalMode::Auto,
+            ApprovalMode::Never,
+        ] {
+            let mut unclassified = ctx_for(
+                "bash",
+                json!({"command": nested}),
+                RunOrigin::Interactive,
+                mode,
+            );
+            unclassified.session_runtime_risk =
+                Some(SessionRuntimeRisk::UnclassifiedWindowsInvocation);
+            let policy = AutoReviewPolicy::default();
+            let decision = policy.evaluate(&unclassified);
+            assert_eq!(decision.action, AutoReviewAction::AskUser);
+            assert!(!decision.built_in_safety_gate);
+            assert!(decision.reason.contains("could not be classified"));
+            let (plan, audit) =
+                crate::core::engine::auto_review_plan_decision_for_context(&policy, &unclassified);
+            assert_eq!(audit["decision"], "ask_user");
+            if mode == ApprovalMode::Auto {
+                assert!(matches!(
+                    plan,
+                    crate::core::engine::AutoReviewPlanDecision::ConsultReviewer(_)
+                ));
+            } else {
+                assert!(matches!(
+                    plan,
+                    crate::core::engine::AutoReviewPlanDecision::NoChange
+                ));
+            }
+        }
         let ctx = ctx_for(
             "bash",
             json!({"command": "taskkill /F /IM node.exe"}),
