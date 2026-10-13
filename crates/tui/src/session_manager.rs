@@ -3426,14 +3426,21 @@ impl SessionManager {
                 let mut file = fs::File::open(&path)?;
                 if file.metadata()?.len() > limit as u64 {
                     let before = file.metadata()?.len();
-                    let compacted = self.compact_oversized_session(id).is_ok();
+                    self.compact_oversized_session(id).map_err(|error| {
+                        io::Error::new(
+                            error.kind(),
+                            format!(
+                                "session exceeds its full-history transport limit and compaction failed: {error}; source retained"
+                            ),
+                        )
+                    })?;
                     file = fs::File::open(&path)?;
                     let after = file.metadata()?.len();
-                    if !compacted || after > limit as u64 {
+                    if after > limit as u64 {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             format!(
-                                "session is {:.1} MiB and the full-history transport limit is {:.1} MiB; archiving its off-branch journal entries left it at {:.1} MiB, so its active conversation alone is over the limit; source retained",
+                                "session is {:.1} MiB and the full-history transport limit is {:.1} MiB; off-branch compaction left it at {:.1} MiB; source retained",
                                 before as f64 / 1_048_576.0,
                                 limit as f64 / 1_048_576.0,
                                 after as f64 / 1_048_576.0,
