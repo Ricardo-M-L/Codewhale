@@ -411,6 +411,10 @@ launcher guidance.
   home when its junction target already exists. Containment checks use the
   same resolved state root throughout the operation (Refs #6949, thanks
   @SparkofSpike).
+- Saving a DeepSeek key in the TUI writes the provider's durable-key marker,
+  so its saved credential remains visible after restart while another
+  provider is active. Older saves missing that marker need one re-save
+  (Refs #6972, thanks @gaord).
 - A workflow gate that blocks its own role is rejected when the plan is
   admitted instead of deadlocking the run (#6945).
 - Auto-Review gives its guardian an output budget a reasoning model can think
@@ -576,7 +580,7 @@ launcher guidance.
 - **[@LIghtJUNction](https://github.com/LIghtJUNction)** — plugin shell install and in-TUI plugin OAuth sign-in ([#6950](https://github.com/codewhale-hq/Codewhale/pull/6950)).
 - **[@SparkofSpike](https://github.com/SparkofSpike)** — live network-policy updates and goal milestone hand-back ([#6928](https://github.com/codewhale-hq/Codewhale/pull/6928), [#6930](https://github.com/codewhale-hq/Codewhale/pull/6930)), Windows ampersand classification ([#6929](https://github.com/codewhale-hq/Codewhale/pull/6929)), and a relocated Codewhale home including sub-agent state ([#6947](https://github.com/codewhale-hq/Codewhale/issues/6947), [#6949](https://github.com/codewhale-hq/Codewhale/pull/6949)).
 - **[@dajiaohuang](https://github.com/dajiaohuang)** — cache-write token accounting ([#6913](https://github.com/codewhale-hq/Codewhale/pull/6913)).
-- **[@gaord](https://github.com/gaord)** — embedder telemetry surface support ([#6916](https://github.com/codewhale-hq/Codewhale/pull/6916)).
+- **[@gaord](https://github.com/gaord)** — embedder telemetry surface support ([#6916](https://github.com/codewhale-hq/Codewhale/pull/6916)) and the DeepSeek saved-key marker diagnosis ([#6972](https://github.com/codewhale-hq/Codewhale/issues/6972)).
 - **[@Lstarsky0](https://github.com/Lstarsky0)** — localized profile replies ([#6919](https://github.com/codewhale-hq/Codewhale/pull/6919)), workflow gates that block their own role ([#6952](https://github.com/codewhale-hq/Codewhale/pull/6952)), and proxy-independent MCP loopback checks ([#6971](https://github.com/codewhale-hq/Codewhale/pull/6971)).
 - **[@jayanthvee](https://github.com/jayanthvee)** — Windows npm launcher guidance ([#6906](https://github.com/codewhale-hq/Codewhale/pull/6906)).
 - **[@asto18089](https://github.com/asto18089)** — callback-window reference fix for longer browser sign-in waits ([#6865](https://github.com/codewhale-hq/Codewhale/issues/6865)).
