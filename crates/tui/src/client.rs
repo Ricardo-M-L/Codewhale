@@ -2226,6 +2226,24 @@ impl CodewhaleClient {
             })
     }
 
+    fn catalog_facts_for_model(
+        &self,
+        model: &str,
+    ) -> Option<Arc<codewhale_config::catalog::CatalogOffering>> {
+        let mut config = Config::default();
+        let _ = config
+            .custom_models
+            .replace(self.configured_models.as_ref().clone());
+        crate::provider_lake::configured_catalog_offering_for_route(
+            &config,
+            self.api_provider,
+            self.admitted_identity.key.as_str(),
+            &self.base_url,
+            model,
+        )
+        .map(Arc::new)
+    }
+
     /// Resolve `model` through the central route resolver and rebuild this
     /// client whenever its exact wire identity, limits, or protocol differs
     /// from the route bound at construction (#5042). `Ok(None)` means the
@@ -2259,6 +2277,7 @@ impl CodewhaleClient {
             let mut rebound = self.clone();
             rebound.default_model = candidate.wire_model_id().as_str().to_string();
             rebound.route_limits = candidate_limits;
+            rebound.route_facts = rebound.catalog_facts_for_model(&rebound.default_model);
             return Ok(Some(rebound));
         }
         let config = config.ok_or_else(|| {
@@ -2272,6 +2291,7 @@ impl CodewhaleClient {
         })?;
         let mut rebound = Self::from_candidate(config, &candidate)?;
         rebound.configured_models = Arc::clone(&self.configured_models);
+        rebound.route_facts = rebound.catalog_facts_for_model(&rebound.default_model);
         Ok(Some(rebound))
     }
 
@@ -2927,14 +2947,9 @@ impl CodewhaleClient {
         let facts = if request.model == self.default_model {
             self.route_facts.clone()
         } else {
-            crate::provider_lake::catalog_offering_for_route(
-                self.api_provider,
-                self.admitted_identity.key.as_str(),
-                &self.base_url,
-                &request.model,
-            )
-            .map(Arc::new)
-        };
+            self.catalog_facts_for_model(&request.model)
+        }
+        .filter(|facts| facts.wire_model_id == request.model);
         if let Some(facts) = facts.as_deref() {
             if facts.temperature == Some(false) {
                 request.temperature = None;
@@ -6360,6 +6375,11 @@ mod configured_model_client_tests {
     fn alternate_declared_model_freezes_wire_limits_and_price() {
         let _env = crate::test_support::lock_test_env();
         let mut config = config();
+        let mut initial = config.custom_models.as_ref().unwrap()[0].clone();
+        initial.id = "initial-model".into();
+        initial.tool_call = Some(true);
+        config.custom_models.as_mut().unwrap()[0].tool_call = Some(false);
+        config.custom_models.as_mut().unwrap().push(initial);
         let client = CodewhaleClient::from_parts(
             "https://api.deepseek.com".into(),
             "initial-model".into(),
@@ -6386,6 +6406,7 @@ mod configured_model_client_tests {
             .as_mut()
             .unwrap()
             .output = Some(99.0);
+        config.custom_models.as_mut().unwrap()[0].tool_call = Some(true);
 
         assert_eq!(client.effective_max_output_tokens(model), 32);
         let prepared = client
@@ -6397,12 +6418,41 @@ mod configured_model_client_tests {
         assert_eq!(prepared.wire_model, model);
         assert_eq!(prepared.body["model"], model);
         assert_eq!(prepared.body["max_tokens"], 32);
+        let mut tool_request = translation_message_request("hello", model.into(), "English", 4096);
+        tool_request.tools = Some(vec![codewhale_models::Tool {
+            tool_type: None,
+            name: "fixture".into(),
+            description: "read-only fixture".into(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+            allowed_callers: None,
+            defer_loading: Some(false),
+            input_examples: None,
+            strict: Some(true),
+            cache_control: None,
+        }]);
+        assert!(
+            client
+                .prepare_outbound_request(tool_request.clone(), false)
+                .is_err()
+        );
+        let mut initial_request = tool_request.clone();
+        initial_request.model = "initial-model".into();
+        assert!(
+            client
+                .prepare_outbound_request(initial_request, false)
+                .is_ok()
+        );
         let rebound = client
             .rebound_for_model_protocol(Some(&config), model)
             .unwrap()
             .unwrap();
         assert_eq!(rebound.default_model, model);
         assert_eq!(rebound.route_limits.unwrap().output_tokens, Some(32));
+        assert!(
+            rebound
+                .prepare_outbound_request(tool_request, false)
+                .is_err()
+        );
         let envelope = rebound.effective_route_envelope(model, chrono::Utc::now());
         assert_eq!(envelope.model, model);
         let quote = serde_json::to_value(envelope.provider_live_pricing.unwrap()).unwrap();

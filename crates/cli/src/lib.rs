@@ -15,7 +15,6 @@ use std::process::Command;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
-use codewhale_agent::ModelRegistry;
 use codewhale_app_server::RuntimeControlFrontend;
 use codewhale_config::credentials::{
     clear_provider_api_key_from_config, provider_slot, set_provider_api_key,
@@ -5900,7 +5899,6 @@ fn run_model_command(
             // the configured runtime provider remains authoritative. Model
             // text never authorizes switching providers or credential slots.
             let provider = subcommand_provider.unwrap_or(resolved_runtime.provider);
-            let registered = ModelRegistry::default().resolve(queried, Some(provider))?;
             let identity = if provider == ProviderKind::Custom && subcommand_provider.is_none() {
                 store
                     .config
@@ -5925,34 +5923,22 @@ fn run_model_command(
                 identity,
                 &base,
                 queried,
-            );
+            )?;
             println!("requested: {}", queried.unwrap_or_default());
-            println!(
-                "resolved: {}",
-                candidate
-                    .as_ref()
-                    .map_or(registered.resolved.id.as_str(), |route| {
-                        route.wire_model_id().as_str()
-                    })
-            );
+            println!("resolved: {}", candidate.wire_model_id().as_str());
             println!("provider: {identity}");
             println!(
                 "used_fallback: {}",
                 queried.is_none() || queried == Some("auto")
             );
-            match candidate.as_ref() {
-                Ok(route) => {
-                    if let Some(canonical) = route.canonical_model() {
-                        println!("canonical_model: {}", canonical.as_str());
-                    }
-                    println!("limits: {}", serde_json::to_string(&route.limits())?);
-                    println!(
-                        "capabilities: {}",
-                        serde_json::to_string(&route.capabilities())?
-                    );
-                }
-                Err(error) => println!("route_error: {error}"),
+            if let Some(canonical) = candidate.canonical_model() {
+                println!("canonical_model: {}", canonical.as_str());
             }
+            println!("limits: {}", serde_json::to_string(&candidate.limits())?);
+            println!(
+                "capabilities: {}",
+                serde_json::to_string(&candidate.capabilities())?
+            );
             println!(
                 "provider_source: {}",
                 if subcommand_provider.is_some() {

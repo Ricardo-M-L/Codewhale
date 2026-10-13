@@ -1633,12 +1633,6 @@ fn review_usage_metadata(
     metadata
 }
 
-fn add_optional_usage(total: &mut Option<u32>, next: Option<u32>) {
-    if let Some(next) = next {
-        *total = Some(total.unwrap_or(0).saturating_add(next));
-    }
-}
-
 /// Describe a failed review request with its whole error chain.
 ///
 /// The client wraps the retry loop's `LlmError` in one outer context (the
@@ -1657,36 +1651,7 @@ pub(crate) fn request_failure_message(
 }
 
 pub(crate) fn add_review_usage(total: &mut Usage, next: &Usage) {
-    total.input_tokens = total.input_tokens.saturating_add(next.input_tokens);
-    total.output_tokens = total.output_tokens.saturating_add(next.output_tokens);
-    add_optional_usage(
-        &mut total.prompt_cache_hit_tokens,
-        next.prompt_cache_hit_tokens,
-    );
-    add_optional_usage(
-        &mut total.prompt_cache_miss_tokens,
-        next.prompt_cache_miss_tokens,
-    );
-    add_optional_usage(
-        &mut total.prompt_cache_write_tokens,
-        next.prompt_cache_write_tokens,
-    );
-    add_optional_usage(&mut total.reasoning_tokens, next.reasoning_tokens);
-    add_optional_usage(
-        &mut total.reasoning_replay_tokens,
-        next.reasoning_replay_tokens,
-    );
-    if let Some(next_tools) = &next.server_tool_use {
-        let tools = total.server_tool_use.get_or_insert_with(Default::default);
-        add_optional_usage(
-            &mut tools.code_execution_requests,
-            next_tools.code_execution_requests,
-        );
-        add_optional_usage(
-            &mut tools.tool_search_requests,
-            next_tools.tool_search_requests,
-        );
-    }
+    crate::core::turn::add_usage_to(total, next);
 }
 
 enum ReviewSource {
@@ -2681,6 +2646,8 @@ mod tests {
             output_tokens: 3,
             prompt_cache_hit_tokens: Some(2),
             reasoning_tokens: Some(4),
+            input_audio_tokens: Some(3),
+            output_audio_tokens: Some(1),
             ..Default::default()
         };
         first.server_tool_use = Some(codewhale_models::ServerToolUsage {
@@ -2692,6 +2659,8 @@ mod tests {
             output_tokens: 5,
             prompt_cache_hit_tokens: Some(7),
             reasoning_tokens: Some(6),
+            input_audio_tokens: Some(4),
+            output_audio_tokens: Some(1),
             server_tool_use: Some(codewhale_models::ServerToolUsage {
                 code_execution_requests: Some(2),
                 tool_search_requests: Some(3),
@@ -2704,6 +2673,9 @@ mod tests {
         assert_eq!(total.output_tokens, 8);
         assert_eq!(total.prompt_cache_hit_tokens, Some(9));
         assert_eq!(total.reasoning_tokens, Some(10));
+        assert_eq!(total.input_audio_tokens, Some(7));
+        assert_eq!(total.output_audio_tokens, Some(2));
+        assert_eq!(total.request_usages, vec![first, second]);
         assert_eq!(
             total.server_tool_use.unwrap().code_execution_requests,
             Some(3)
@@ -2771,6 +2743,11 @@ mod tests {
         let metadata = result.metadata.unwrap();
         assert_eq!(metadata["input_tokens"], 24);
         assert_eq!(metadata["output_tokens"], 4);
+        assert_eq!(
+            crate::cost_status::child_usage_from_metadata(&metadata),
+            Some(usage.clone())
+        );
+        assert_eq!(usage.request_usages.len(), 2);
         assert!(metadata.get("review_coverage").is_none());
 
         let mut drift = PrReviewAccumulator::new(&plan);

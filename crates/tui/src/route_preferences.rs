@@ -336,8 +336,42 @@ pub fn resolve_model(
     config.set_provider_base_url_override(&identity, Some(base_url.into()))?;
     crate::provider_catalog_live::maybe_load_persisted_cache_for_config(&config);
     let route = crate::route_runtime::resolve_runtime_route_for_identity(&config, &identity, model)
-        .map_err(anyhow::Error::msg)?;
-    Ok(route.candidate)
+        .map_err(anyhow::Error::msg);
+    if !route.as_ref().is_ok_and(|route| {
+        (route.identity.provider == ProviderKind::OpenaiCodex
+            && crate::codex_model_cache::model_roster_for(&route.config)
+                .metadata_for(route.candidate.wire_model_id().as_str())
+                .is_some())
+            || crate::provider_lake::configured_catalog_offering_for_route(
+                &route.config,
+                route.identity.provider,
+                route.identity.key.as_str(),
+                &route.candidate.endpoint().base_url,
+                route.candidate.wire_model_id().as_str(),
+            )
+            .is_some()
+    }) {
+        if crate::provider_catalog_live::cached_entry_for_route(
+            identity.provider,
+            identity.key.as_str(),
+            base_url,
+        )?
+        .is_some_and(|entry| entry.fetched_at > 0)
+        {
+            return Err(
+                codewhale_agent::ModelResolutionError::ModelNotAvailableForProvider {
+                    provider: identity.provider,
+                    requested: model.unwrap_or("auto").to_string(),
+                }
+                .into(),
+            );
+        }
+        codewhale_agent::ModelRegistry::default().resolve(
+            model.filter(|model| *model != "auto"),
+            Some(identity.provider),
+        )?;
+    }
+    Ok(route?.candidate)
 }
 
 /// Save one explicit route preference after atomically adopting legacy choices.

@@ -315,7 +315,6 @@ impl ReasoningEffort {
             base_url,
             wire_model,
         )
-        .or_else(|| crate::provider_lake::catalog_offering_for_model(provider, wire_model))
     }
 
     pub fn catalog_default(
