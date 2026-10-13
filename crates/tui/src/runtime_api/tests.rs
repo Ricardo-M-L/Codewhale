@@ -5522,7 +5522,39 @@ async fn steer_and_interrupt_endpoints_work_on_active_turn() -> Result<()> {
         .json()
         .await?;
     assert_eq!(steer_resp["id"], turn_id);
-    assert_eq!(steer_resp["steer_count"], 1);
+    assert!(matches!(steer_resp["steer_count"].as_u64(), Some(0 | 1)));
+
+    tokio::time::timeout(ci_scaled(Duration::from_secs(10)), async {
+        loop {
+            let events = runtime_threads.events_since(&thread_id, None)?;
+            let delivered = events.iter().any(|event| {
+                event.turn_id.as_deref() == Some(turn_id.as_str()) && event.event == "turn.steered"
+            });
+            let completed = events.iter().any(|event| {
+                event.turn_id.as_deref() == Some(turn_id.as_str())
+                    && event.event == "item.completed"
+                    && event.payload["item"]["detail"] == "please steer"
+            });
+            if delivered && completed {
+                return Ok::<_, anyhow::Error>(());
+            }
+            sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .context("steer delivery did not settle before interrupt")??;
+    let detail: serde_json::Value = client
+        .get(format!("http://{addr}/v1/threads/{thread_id}"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let settled_turn = detail["turns"]
+        .as_array()
+        .and_then(|turns| turns.iter().find(|turn| turn["id"] == turn_id))
+        .context("steered turn missing from thread detail")?;
+    assert_eq!(settled_turn["steer_count"], 1);
 
     let interrupt_resp: serde_json::Value = client
         .post(format!(

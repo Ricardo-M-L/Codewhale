@@ -17306,11 +17306,32 @@ async fn steer_turn_on_active_turn_records_item_and_event() -> Result<()> {
             },
         )
         .await?;
-    assert_eq!(steered_turn.steer_count, 1);
+    assert!(matches!(steered_turn.steer_count, 0 | 1));
     let observed_steer = steer_seen_rx
         .await
         .context("driver did not receive steer")?;
     assert_eq!(observed_steer, steer_text);
+
+    tokio::time::timeout(TURN_SETTLEMENT_DEADLOCK_TIMEOUT, async {
+        loop {
+            let events = manager.events_since(&thread.id, None)?;
+            let delivered = events.iter().any(|event| {
+                event.turn_id.as_deref() == Some(turn.id.as_str()) && event.event == "turn.steered"
+            });
+            let completed = events.iter().any(|event| {
+                event.turn_id.as_deref() == Some(turn.id.as_str())
+                    && event.event == "item.completed"
+                    && event.payload["item"]["detail"] == steer_text
+            });
+            if delivered && completed {
+                return Ok::<_, anyhow::Error>(());
+            }
+            sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .context("steer delivery did not settle")??;
+    assert_eq!(manager.store.load_turn(&turn.id)?.steer_count, 1);
 
     let final_turn = wait_for_terminal_turn(&manager, &turn.id).await?;
     assert_eq!(final_turn.status, RuntimeTurnStatus::Completed);
