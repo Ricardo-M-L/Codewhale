@@ -1227,7 +1227,7 @@ while bare `k3` can use an entitled 1M override.
 
 | Provider/model class | Context window | Max output metadata | Thinking support | Cache telemetry | FIM endpoint |
 | --- | --- | --- | --- | --- | --- |
-| DeepSeek V4 (`deepseek-v4-pro`, `deepseek-v4-flash`) | 1,000,000 | 384,000 | yes | yes | DeepSeek beta only |
+| DeepSeek V4 (`deepseek-v4-pro`, `deepseek-v4-flash`) | 1,000,000 | 384,000 | yes | yes | DeepSeek beta only, on Chat Completions routes; not on the default Flash route, which speaks Responses |
 | DeepSeek V4 Flash Vision experimental (`deepseek-v4-flash-vision-exp`) | 1,000,000 inherited from Flash | 384,000 inherited from Flash | yes, inherited | yes, inherited | not claimed; Chat Completions route only |
 | DeepSeek compatibility aliases (`deepseek-chat`, `deepseek-reasoner`) | 1,000,000 | 384,000 | yes | yes | DeepSeek beta only |
 | NVIDIA NIM V4 registry models | 1,000,000 | 384,000 | yes | yes | not documented in code |

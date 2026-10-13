@@ -726,7 +726,7 @@ AtlasCloud 与配置层保持相同的默认模型，并为 Pro 和 Flash 行添
 
 | 提供商/模型类别 | 上下文窗口 | Max output 元数据 | 思考支持 | 缓存遥测 | FIM 端点 |
 | --- | --- | --- | --- | --- | --- |
-| DeepSeek V4（`deepseek-v4-pro`, `deepseek-v4-flash`） | 1,000,000 | 384,000 | 是 | 是 | 仅 DeepSeek beta |
+| DeepSeek V4（`deepseek-v4-pro`, `deepseek-v4-flash`） | 1,000,000 | 384,000 | 是 | 是 | 仅 DeepSeek beta，且仅限 Chat Completions 路由；默认的 Flash 路由使用 Responses，不提供 |
 | DeepSeek V4 Flash Vision 实验版（`deepseek-v4-flash-vision-exp`） | 继承自 Flash，1,000,000 | 继承自 Flash，384,000 | 是，继承 | 是，继承 | 未声明；仅限 Chat Completions 路由 |
 | DeepSeek 兼容别名（`deepseek-chat`, `deepseek-reasoner`） | 1,000,000 | 384,000 | 是 | 是 | 仅 DeepSeek beta |
 | NVIDIA NIM V4 注册表模型 | 1,000,000 | 384,000 | 是 | 是 | 代码中未记录 |

@@ -132,7 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or run commands.
 - `bash` now moves a foreground command to the background after 30 s and
   reports the elapsed time and how long ago it last printed output.
-  `task_shell_start` is removed; use `bash` with `background=true`.
+  `task_shell_start` is removed.
 - Every change of effective permission now writes a `Permissions changed to …`
   line in the transcript, and runtime threads record it as a `status` item and
   a `thread.permissions_changed` event.
@@ -317,6 +317,10 @@ launcher guidance.
 - `file_search` is one of the model's default tools from the first turn
   instead of being loaded through `tool_search`
   ([#6934](https://github.com/codewhale-hq/Codewhale/issues/6934)).
+- `fim_edit` is offered only on routes that can run it: Chat Completions
+  routes other than OpenCode Zen. The default DeepSeek Flash route speaks
+  Responses and no longer lists it
+  ([#6933](https://github.com/codewhale-hq/Codewhale/issues/6933)).
 - Runtime session grants (`"remember": true`) are stored in the Runtime data
   directory instead of memory. After a restart a thread's grants stay
   suspended, and matching calls ask again, until an authenticated client
@@ -332,6 +336,8 @@ launcher guidance.
   holds a raw sub-agent handoff (#6954).
 - A saved session over 8 MiB can be resumed and forked again. Journal entries
   off the current branch are archived instead of refusing the session (#6955).
+  A session whose current branch alone is over 8 MiB is still refused, and the
+  refusal now gives its size.
 - Snapshot restore and `/undo` work with older git, such as the 2.43 that
   Ubuntu 24.04 ships. They failed there with "only one reference expected".
 - Cancelling your own background shell job no longer reports it as finished
@@ -368,8 +374,8 @@ launcher guidance.
   a recorded session message outside the system-prompt layer.
 - The pet shows sub-agents while they run, and a finished one no longer stays
   "working". Half-block pet sprites are drawn crisply instead of blurred.
-- A provider's retry delay is honored when a 429 carries it in the body
-  instead of a `Retry-After` header (#6923).
+- A rate-limit 429 that gives its retry delay in the body instead of a
+  `Retry-After` header is retried after that delay, up to 120 s (Refs #6923).
 - A Codewhale home reached through a symlink or Windows junction keeps saving
   artifacts and compacting (#6947).
 - A workflow gate that blocks its own role is rejected when the plan is
@@ -500,6 +506,11 @@ launcher guidance.
 
 ### Known limits
 
+- A 429 whose body says the current quota is exceeded and points to plan and
+  billing details is treated as exhausted quota and ends the turn, even when it
+  also names a short retry delay. Gemini's free-tier rate-limit responses use
+  that wording, so they are not yet retried
+  ([#6923](https://github.com/codewhale-hq/Codewhale/issues/6923)).
 - Idle CPU has not been measured on FreeBSD or Linux for this release
   ([#6728](https://github.com/codewhale-hq/Codewhale/issues/6728)).
 - Shell commands run by delegated agents appear in `/jobs` and the work dock
