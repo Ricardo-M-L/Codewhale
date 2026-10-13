@@ -639,7 +639,10 @@ impl RouteResolver {
                 .canonical_model
                 .as_ref()
                 .map(|model| model.as_str().rsplit('/').next().unwrap_or_default());
-            if !raw.contains('/') && (wire_tail == raw || canonical_tail == Some(raw)) {
+            if class == ProviderClass::Aggregator
+                && !raw.contains('/')
+                && (wire_tail == raw || canonical_tail == Some(raw))
+            {
                 match suffix_match {
                     None => suffix_match = Some(offering),
                     Some(first) if first.wire_model_id != offering.wire_model_id => {
