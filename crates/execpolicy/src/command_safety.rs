@@ -2092,26 +2092,29 @@ pub fn is_literal_rm_invocation(command: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Whether `words[index]` is the script body a shell was asked to run — the
+/// Extract the script body a shell was asked to run — the
 /// argument after `sh -c`, `bash -lc`, and friends.
 ///
 /// Only that position is a nested command line. An ordinary quoted argument
 /// that merely contains an operator (`echo 'x & rm -rf /etc'`) is data, and
 /// re-parsing it invents commands the shell never runs.
-fn is_shell_script_argument(words: &[String], index: usize) -> bool {
-    words[..index].iter().enumerate().any(|(start, word)| {
+fn nested_shell_script(words: &[String], index: usize) -> Option<String> {
+    words[..index].iter().enumerate().find_map(|(start, word)| {
         let name = command_word(word);
         if SHELL_WRAPPERS.contains(&name.as_str()) {
             return shell_command_payload(&words[start + 1..])
-                .is_some_and(|payload| std::ptr::eq(payload, &words[index]));
+                .filter(|payload| std::ptr::eq(*payload, &words[index]))
+                .cloned();
         }
         let flag = words[index - 1].to_ascii_lowercase();
         match name.as_str() {
-            "cmd" => matches!(flag.as_str(), "/c" | "/k"),
-            "powershell" | "pwsh" => {
-                flag == "-c" || flag == "-command" || flag == "-commandwithargs"
+            "cmd" if matches!(flag.as_str(), "/c" | "/k") => Some(words[index].replace('\'', "")),
+            "powershell" | "pwsh"
+                if flag == "-c" || flag == "-command" || flag == "-commandwithargs" =>
+            {
+                Some(words[index].clone())
             }
-            _ => false,
+            _ => None,
         }
     })
 }
@@ -2143,9 +2146,9 @@ pub fn command_invocations(command: &str) -> Option<Vec<Vec<String>>> {
                 // is an argument — `echo 'x & rm -rf /etc'` names no `rm`, and
                 // re-parsing it both invented one and failed readable commands
                 // closed once a `&` made the word reproduce itself.
-                if is_shell_script_argument(&words, index)
-                    && word.contains(|ch: char| ch.is_whitespace() || matches!(ch, ';' | '&' | '|'))
-                    && !collect(word, depth + 1, out)
+                if word.contains(|ch: char| ch.is_whitespace() || matches!(ch, ';' | '&' | '|'))
+                    && let Some(script) = nested_shell_script(&words, index)
+                    && !collect(&script, depth + 1, out)
                 {
                     return false;
                 }
@@ -2984,6 +2987,7 @@ mod tests {
             "bash -c -e 'rm -rf /etc'",
             "sh -c 'true&rm -rf /etc'",
             "cmd /C \"echo x&rm -rf /etc\"",
+            "cmd /C \"echo 'x & rm -rf /etc & echo '\"",
             "powershell -Command 'echo x; rm -rf /etc'",
             "\\rm -rf /etc",
             "/usr/bin/rm -rf /etc",
