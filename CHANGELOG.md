@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.2] - 2026-10-13
 
+- Shell classification accepts PowerShell’s call operator, quoted ampersands
+  and combined output redirection without losing destructive commands in
+  nested shell payloads or after command separators. Thanks @SparkofSpike
+  for the diagnosis and fix in #6929, and @jayanthvee for the detailed
+  Windows report in #6963.
 - Windows commands that cannot be classified use the normal approval path
   with a direct explanation. Ask can request approval and Auto-Review can
   consult its reviewer; an unclassified command is no longer reported as an
