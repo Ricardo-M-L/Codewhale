@@ -1100,7 +1100,7 @@ mod tests {
     #[tokio::test]
     async fn configured_local_same_origin_redirect_and_connection_reuse_work() {
         let _env = crate::test_support::lock_test_env();
-        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "127.0.0.1");
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/mcp", listener.local_addr().unwrap());
         let server = tokio::spawn(async move {
@@ -1277,7 +1277,7 @@ mod tests {
     #[tokio::test]
     async fn event_stream_shares_the_client_and_other_bodies_keep_the_read_deadline() {
         let _env = crate::test_support::lock_test_env();
-        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "127.0.0.1");
         crate::tls::ensure_rustls_crypto_provider();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/mcp", listener.local_addr().unwrap());
