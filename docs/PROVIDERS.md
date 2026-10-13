@@ -1446,6 +1446,9 @@ provider docs work, but they are not native shipped behavior in this checkout:
 
 ## Sign in with Claude
 
+This is an experimental 0.10.2 candidate flow; live sign-in, inference and
+provider authorization are not release-qualified.
+
 Run `codewhale auth claude` (or `/auth claude` in a running session), open the
 printed Claude sign-in URL, and paste the complete `code#state` callback.
 `/provider setup anthropic` also offers API-key and Claude Pro / Max choices.
@@ -1456,7 +1459,9 @@ Codewhale stores the grant in its private credentials directory, commits the
 provider's credential pointer atomically, and refreshes it before requests on a
 worker. Subscription tokens go only to `https://api.anthropic.com`; a custom
 endpoint is rejected. Each request keeps the existing Messages adapter, tool
-protocol, cache prefix, and Codewhale client identity. No Claude Code credential
+protocol, cache prefix, and Codewhale inference-client identity. The login
+registration is a separate fact: this candidate uses Claude Code’s OAuth
+client ID, not a Codewhale-issued registration. No Claude Code credential
 file or keychain entry is read or modified.
 
 `codewhale auth claude-revoke` (or `/auth claude-revoke`) removes the owned local
@@ -1466,5 +1471,13 @@ to use an API key. Login and inference follow Anthropic's provider-side
 availability; local checks do not
 establish that an account is eligible or that live subscription inference works.
 
-The callback and JSON token exchange follow the interoperable flow used by
-[pi's Anthropic OAuth adapter](https://github.com/fivewillow/badlogic-pi-mono/blob/main/packages/ai/src/utils/oauth/anthropic.ts).
+Reference refreshed on 2026-10-13: upstream Pi is now `earendil-works/pi`.
+Its [v1.2.0 OAuth adapter](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/ai/src/auth/oauth/anthropic.ts)
+supports loopback and copy-code flows and uses `platform.claude.com` token and
+copy-code endpoints; this candidate still uses `console.anthropic.com`.
+Pi also uses [Claude Code inference identity](https://github.com/earendil-works/pi/blob/06a466935536f8c9bcacb2d5efc0fc021be1bdff/packages/ai/src/api/anthropic-messages.ts),
+which Codewhale does not adopt. Pi's implementation is a compatibility
+reference, not proof of account eligibility, billing behavior or permission
+to offer the same flow. See Anthropic's current
+[authentication guidance](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use)
+and [Agent SDK plan guidance](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).
