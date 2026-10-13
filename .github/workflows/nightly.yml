@@ -27,7 +27,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     # Native builds use the same finite cold-build allowance as release/CI.
-    timeout-minutes: 165
+    timeout-minutes: 210
     strategy:
       fail-fast: false
       matrix:

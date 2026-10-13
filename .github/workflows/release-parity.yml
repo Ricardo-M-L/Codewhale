@@ -23,7 +23,7 @@ jobs:
     name: Workspace parity
     # Cold check, Clippy, executable and test builds exceeded the old 45m
     # limit before the suite started. Retain the full CI test-job budget.
-    timeout-minutes: 165
+    timeout-minutes: 210
     runs-on: ubuntu-latest
     steps:
       # Every caller's resolve job already proved GITHUB_SHA equals the

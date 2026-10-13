@@ -795,9 +795,9 @@ jobs:
     # (fork PRs #6431, #6417), too close to the old 90-minute limit.
     # On 2026-10-04 a PR leg spent 111 minutes compiling with no cache and
     # was cancelled at 120 with 12,356 tests passed and none failed. The
-    # limit stays a literal (release-workflows.test.js, #5496); 165 bounds
-    # hangs for every leg until the CI speed redesign lands.
-    timeout-minutes: 165
+    # limit stays a literal (release-workflows.test.js, #5496); 210 bounds
+    # cold compilation and the complete suite without disabling test deadlines.
+    timeout-minutes: 210
     # macOS legs go to the self-hosted Mac ONLY when all three hold: the
     # change is heavy, the event is trusted (not a fork PR), and the
     # CW_SELF_HOSTED_MAC repo variable is 'true'. That variable is the kill
@@ -867,12 +867,12 @@ jobs:
         run: ./scripts/installer/installer-path-regression.tests.ps1 -AllowUserPathMutation
       - uses: dtolnay/rust-toolchain@stable
         if: needs.changes.outputs.heavy == 'true' && (matrix.os != 'ubuntu-latest' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request')
-      - name: Omit macOS test debug metadata
+      - name: Omit macOS build debug metadata
         if: needs.changes.outputs.heavy == 'true' && matrix.os == 'macos-latest'
         shell: bash
         # Match the existing full-workspace CNB gate. Keep debug assertions and
-        # every test; only disposable test debug tables change on this lane.
-        run: echo "CARGO_PROFILE_TEST_DEBUG=0" >> "$GITHUB_ENV"
+        # every test; only disposable build debug tables change on this lane.
+        run: printf '%s\n' 'CARGO_PROFILE_DEV_DEBUG=0' 'CARGO_PROFILE_TEST_DEBUG=0' >> "$GITHUB_ENV"
       - uses: mozilla-actions/sccache-action@v0.0.11
         id: sccache
         continue-on-error: true
@@ -1256,7 +1256,7 @@ jobs:
     if: needs.changes.outputs.heavy == 'true' && github.event_name != 'pull_request' && ((github.event_name == 'workflow_dispatch' && inputs.workspace_test_mode == 'shared-process-twice') || !(needs.changes.outputs.trusted == 'true' && vars.CW_SELF_HOSTED_MAC == 'true'))
     # Cold hosted builds consumed 73 minutes before eval could start (F run
     # 37497498829). Match Test's compile allowance; RSS/eval limits stay intact.
-    timeout-minutes: 165
+    timeout-minutes: 210
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
