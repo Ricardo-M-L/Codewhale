@@ -57,6 +57,51 @@ CODEWHALE_PROVIDER=vllm VLLM_BASE_URL=http://127.0.0.1:8000/v1 VLLM_MODEL=<id> \
 超过挂起阈值——上报 `System sleep detected; connection lost — retrying request`，
 并重新发起请求，而不是让回合失败（#2990）。
 
+## Windows 支持与发布验收
+
+原生 x64 CLI/TUI 的兼容性目标是 Windows 10 1607（内部版本 14393）及以上，
+在传统 Windows 控制台中运行。静态导入检查通过，不等于最终发布文件已经在这台
+旧系统上启动或完成安装；必需的 Visual C++ 运行库 DLL 也必须存在。
+
+| 使用场景 | 目标或平台前提 | 验收边界 |
+| --- | --- | --- |
+| 原生 x64 CLI/TUI | Windows 10 x64 1607，内部版本 14393 | 最终发布文件仍需真实旧系统启动回执 |
+| ConPTY API | Windows 10 1809，内部版本 17763；Windows Server 2019 | 这是微软的 API 前提；Codewhale 终端会话接口仍仅限 Unix，Windows 返回 501 |
+| 当前 Windows Terminal | Windows 10 2004，内部版本 19041，或更高版本 | 它的前提比 ConPTY API 更新；x64 旧系统兼容性目标使用传统控制台 |
+| 原生 ARM64 CLI/TUI | 目标是 Windows 11 ARM64 | 候选版本在内部版本 26300 上有验证；不能由此推断最低 Windows 11 版本或 Windows 10 ARM64 支持 |
+| NSIS 安装器 | x86 安装程序和插件在 WOW64 下运行，安装 x64 程序 | ARM64 使用原生压缩包/npm；生成的 Uninstall.exe 与实际安装行为需独立验收 |
+
+[ConPTY API 前提](https://learn.microsoft.com/en-us/windows/console/createpseudoconsole)
+和[当前 Windows Terminal 前提](https://github.com/microsoft/terminal/blob/main/README.md)
+应分别说明。Windows 11 ARM64 上的 x64 模拟运行不能验证原生 x64 或 Windows 10 1607。
+
+[`发布导入基线`](../../scripts/release/windows-import-floor.json)按 PE 架构分别记录。
+未知导入、未列入基线的序号导入和延迟加载依赖会阻止发布门槛通过。PASS 只表示已
+核对的静态导入契约，不认证整个运行时、安装依赖或最低 OS 版本。Native 扩展宿主
+仍需要对应的运行时能力 API 和隔离检查；缺少 DeriveCapabilitySidsFromName 时明确
+返回 Unsupported，不会降低沙箱隔离。此限制与 CLI 启动兼容性不同。
+
+2026-10-13 的候选源代码为
+[`cf7199b52e`](https://github.com/codewhale-hq/Codewhale/commit/cf7199b52ecb9147e4670ae7874924ffc30a6a67)。
+在 Windows 11 ARM64 内部版本 26300 上，默认功能 debug 程序的 SHA256 为
+`ca51f91562a0569ee43855715856e1cfee74e8a834bd6206183a3175373fdb2d`；原生 ARM64
+进程只从系统目录查询 DLL，453 个导入全部解析成功。普通用户环境中 89 个命令分类
+测试和 1 个崩溃恢复测试通过，并完成了限定范围的编辑器滚轮、拼音与撤销检查。
+它不是 dist 发布程序或安装验收，也不能据此指定 Windows 11 的最低内部版本。
+
+x64 基线来自 @LmeSzinc 在
+[#6953](https://github.com/codewhale-hq/Codewhale/issues/6953)中对 14393.447 的调查：
+v0.10.0 的 411 个导入全部成功，v0.10.1 的 454 个中有 453 个成功。缺失的
+DeriveCapabilitySidsFromName 不在允许列表中；两次调查的保守并集为 456 对导入。
+x86 NSIS 基线有 189 个微软文档标明早于 1607 的命名 API，以及明确核对的
+COMCTL32 #17（InitCommonControls）：x86 SDK 10.0.26100.0 导入库与系统 SysWOW64
+DLL 的身份一致，[该 API 的文档前提是 Vista](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-initcommoncontrols)。
+基线文件包含对应的官方 URL、文件哈希、数量与序号身份；这不等于在 1607 上安装成功。
+
+此快照中，最终发布文件在真实 1607 上启动/安装及候选程序生成的卸载器仍未验收。
+最终冻结源码、发布导入记录、各安装途径、打包/原生应用崩溃恢复和最低 OS 回执应
+进入发布验收记录，见[英文发布检查单](../RELEASE_CHECKLIST.md)。
+
 ## Windows PowerShell 执行策略
 
 shell 工具以 `-ExecutionPolicy Bypass` 运行 PowerShell。它只设置所启动子进程

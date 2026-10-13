@@ -991,6 +991,9 @@ winget 方式的已知限制：
 
 #### Windows NSIS 安装器
 
+OS、终端兼容性目标与当前验收记录见
+[Windows 支持与发布验收](ENVIRONMENTS.md#windows-支持与发布验收)。
+
 从 v0.8.50 起，为喜欢传统双击安装的 Windows 用户提供了独立的、基于 NSIS 的安装器（无需 npm、Scoop 或 Cargo）。
 
 NSIS 安装器目前包含 Windows x64 二进制。Windows ARM64 用户应通过在原生 ARM64 Node.js 下运行的 npm 安装，或从同一个发布下载 `codewhale-windows-arm64.zip`；这两条路径使用的都是原生 ARM64 二进制。

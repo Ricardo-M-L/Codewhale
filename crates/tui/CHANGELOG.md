@@ -395,8 +395,16 @@ launcher guidance.
   a recorded session message outside the system-prompt layer.
 - The pet shows sub-agents while they run, and a finished one no longer stays
   "working". Half-block pet sprites are drawn crisply instead of blurred.
-- A rate-limit 429 that gives its retry delay in the body instead of a
-  `Retry-After` header is retried after that delay, up to 120 s (Refs #6923).
+- A rate-limit 429 with a body retry delay of up to 120 s retries the interrupted
+  model request. This includes ambiguous current-quota wording with billing
+  guidance when the body supplies a bounded delay; explicit exhausted account,
+  billing and subscription limits remain terminal (Refs #6923, thanks @Statter).
+- Claude sign-in keeps its PKCE verifier out of the sign-in URL and gives its
+  pasted authorization code one terminal input reader. Failed input restores
+  the TUI; live subscription sign-in remains experimental (Refs #6932).
+- Oversized-session refusals preserve compaction errors and no longer assume
+  that the active conversation alone caused the remaining size limit
+  (Refs #6955, thanks @7jrxt42BxFZo4iAnN4CX).
 - A Codewhale home reached through a symlink or Windows junction keeps saving
   artifacts and compacting (#6947).
 - A workflow gate that blocks its own role is rejected when the plan is
@@ -527,10 +535,11 @@ launcher guidance.
 
 ### Known limits
 
-- A 429 whose body says the current quota is exceeded and points to plan and
-  billing details is treated as exhausted quota and ends the turn, even when it
-  also names a short retry delay. Gemini's free-tier rate-limit responses use
-  that wording, so they are not yet retried
+- Ambiguous current-quota 429s without a body retry delay of at most 120 s
+  still end the turn; a header alone does not change that classification.
+  Explicit exhausted account, billing and subscription limits remain terminal
+  regardless of a retry hint. Gemini limits without an accepted body delay are
+  not automatically retried
   ([#6923](https://github.com/codewhale-hq/Codewhale/issues/6923)).
 - Idle CPU has not been measured on FreeBSD or Linux for this release
   ([#6728](https://github.com/codewhale-hq/Codewhale/issues/6728)).

@@ -215,6 +215,16 @@ short-lived GitHub Actions artifact only.
 Retain required asset/evidence copies before artifact expiry; record cross-build,
 install and real-device/provider results separately in the existing packet.
 
+Windows import evidence uses independent profiles for the native x64
+compatibility target, observed ARM64 environment and x86 NSIS/WOW64 contracts;
+see [ENVIRONMENTS.md](ENVIRONMENTS.md#windows-support-and-release-qualification).
+Keep every staged Windows executable and the actual embedded NSIS PE plugin
+dumps, hashes and failures. The generated Uninstall.exe needs its own scoped
+installation receipt. Static import qualification does not prove final release
+startup on Windows 10 1607, installed runtime dependencies or native ARM64
+package/desktop behavior. Preserve these runtime receipts separately before
+claiming the release is ready.
+
 This candidate workflow does not create a tag or GitHub Release, publish a
 crate or npm package, push a container, update Homebrew, deploy anything, or
 write repository contents. Its green result is evidence, not publication

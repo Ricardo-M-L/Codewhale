@@ -1301,6 +1301,9 @@ Known limits of the winget route:
 
 #### Windows NSIS Installer
 
+For the OS/terminal compatibility targets and current evidence, see
+[Windows support and release qualification](ENVIRONMENTS.md#windows-support-and-release-qualification).
+
 A standalone NSIS-based installer is available starting with v0.8.50 for
 Windows users who prefer a traditional double-click setup (no npm, no Scoop, no
 Cargo required).

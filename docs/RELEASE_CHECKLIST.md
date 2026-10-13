@@ -154,6 +154,15 @@ known limitations and publication approval. These proofs are separate.
       against those assets and runs its delegated entrypoints. Keep run URLs and
       required evidence before the Actions artifacts expire; these are not a
       public release.
+- [ ] Windows static import receipts cover x64/ARM64 CLI, shim and compatibility
+      assets, any optional host, and the NSIS setup plus its actual embedded PE
+      plugins. Verify the selected architecture profile and its conservative
+      limits in [ENVIRONMENTS.md](ENVIRONMENTS.md#windows-support-and-release-qualification).
+      Preserve the generated candidate Uninstall.exe import/SHA receipt. Static
+      import/profile PASS does not replace final release startup/install on the
+      promised oldest x64 OS, native ARM64 package acceptance, or packaged/native
+      app owner-crash recovery. Record or explicitly resolve these remaining
+      runtime gates before tagging.
 - [ ] Complete the version-specific acceptance packet. Cross-building Android
       does not prove a real Termux/device session. Local install, actual provider
       calls and customer acceptance need separate receipts; provider spend still
@@ -247,8 +256,9 @@ known limitations and publication approval. These proofs are separate.
       workflows can overwrite notes and accidentally remove contributor credit.
 - [ ] Note any deferred items in the next release's tracking issue.
 - [ ] Close any issues that this release fixed.
-- [ ] Update existing tracking with evidence; agents do not post GitHub
-      issue/PR comments. Handle the existing `sync-release-record` workflow's
+- [ ] Update existing tracking with evidence and follow the current contributor
+      communication rules in [AGENTS.md](../AGENTS.md). Handle the existing
+      `sync-release-record` workflow's
       metadata proposal after publication: it currently opens a bot PR, not a
       required preparation branch. A source record does not prove deployment.
 - [ ] Report canonical path, branch, SHA, upstream state and dirty/stranded

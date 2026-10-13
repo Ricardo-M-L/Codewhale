@@ -48,6 +48,7 @@ The direct schemas deliberately stay small:
 | `read` | `path`, optional `offset`, optional `limit` | Read a bounded file window with explicit continuation or truncation notices. |
 | `write` | `path`, `content` | Create or replace a file. |
 | `edit` | `path`, `edits` | Apply one or more unambiguous text replacements against one original snapshot. |
+| `file_search` | `query`, optional `path`, `limit`, `extensions`, `exclude` | Find files by name, path fragment or glob and return bounded, ranked matches. Respects ignore files; `exclude` replaces default exclusions. |
 | `bash` | `command`, optional `timeout`, optional `description` | Run one cancellable foreground shell command and return a bounded tail. The optional description is display-only. |
 | `agent` | delegated task and optional scope/context controls | Start or inspect focused child work. |
 | `workflow` | plan/script/source_path plus run controls | Coordinate multi-agent phases with dependencies and completion checks. |
@@ -55,6 +56,7 @@ The direct schemas deliberately stay small:
 | `create_goal` | objective plus optional budget | Start the session goal the turn works toward. |
 | `get_goal` | none | Read the active goal and its progress. |
 | `update_goal` | terminal status | Mark the goal complete or blocked. |
+| `load_skill` | optional `name`, `query` | Load a named skill's `SKILL.md` body and companion-file list; omit `name` or use `name="list"` to list eligible skills, or use `query` to search names and descriptions. |
 | `tool_search` | `query`, optional matching controls | Discover policy-allowed deferred tools and add selected schemas to this conversation's toolbox. |
 
 Mode is an authority decision, not a synonym system. Plan, Work, and Operate

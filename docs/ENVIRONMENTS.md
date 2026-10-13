@@ -62,6 +62,66 @@ diverging from monotonic elapsed by more than the suspend threshold — reports
 `System sleep detected; connection lost — retrying request`, and re-issues the
 request instead of failing the turn (#2990).
 
+## Windows support and release qualification
+
+Windows compatibility depends on the runtime architecture and terminal. The
+native x64 CLI/TUI compatibility target is Windows 10 1607 (build 14393) or
+later in the legacy Windows console. A release's actual executable and installer
+must still pass startup and installation on that target; an import-table pass
+alone does not prove it. Required Visual C++ runtime DLLs must also be present.
+
+| Surface | Compatibility target or platform requirement | Qualification boundary |
+| --- | --- | --- |
+| Native x64 CLI/TUI | Windows 10 x64 1607, build 14393 | Final release bytes need an actual oldest-OS startup receipt |
+| ConPTY API | Windows 10 1809, build 17763; Windows Server 2019 | This is Microsoft's API minimum; Codewhale's terminal-session routes remain Unix-only and return 501 on Windows |
+| Current Windows Terminal | Windows 10 2004, build 19041, or later | This terminal has a newer prerequisite than the ConPTY API; use the legacy console for the x64 compatibility target |
+| Native ARM64 CLI/TUI | Windows 11 ARM64 is the target | Candidate evidence exists on build 26300; no minimum Windows 11 build or Windows 10 ARM64 support is inferred from that run |
+| NSIS installer | x86 setup/plugins under WOW64, installing x64 runtime bytes | Native ARM64 installation uses its archive/npm assets; generated Uninstall.exe and actual install behavior need separate receipts |
+
+[Microsoft's ConPTY requirements](https://learn.microsoft.com/en-us/windows/console/createpseudoconsole)
+and [current Terminal requirements](https://github.com/microsoft/terminal/blob/main/README.md)
+are separate. Windows 11 supports x64 emulation on ARM64; an emulated x64 run
+does not qualify native x64 execution or Windows 10 1607.
+
+The release import guard uses separate per-machine profiles in
+[`windows-import-floor.json`](../scripts/release/windows-import-floor.json).
+Unknown import pairs, unlisted ordinals and delay-loaded dependencies stop the
+gate. Its PASS covers the reviewed static import contract; it does not certify
+all runtime features, the installed dependency closure or a minimum OS build.
+The Native extension host still requires its runtime capability APIs and
+isolation probes; where DeriveCapabilitySidsFromName is absent it reports
+Unsupported rather than weakening its sandbox. This feature limit is distinct
+from CLI startup compatibility.
+
+### Recorded 0.10.2 candidate evidence
+
+The 2026-10-13 qualification snapshot is source
+[`cf7199b52e`](https://github.com/codewhale-hq/Codewhale/commit/cf7199b52ecb9147e4670ae7874924ffc30a6a67).
+A default-feature debug ARM64 build on Windows 11 build 26300 produced executable
+SHA256 `ca51f91562a0569ee43855715856e1cfee74e8a834bd6206183a3175373fdb2d`.
+All 453 imported symbols resolved in a native ARM64 process using system-only
+DLL lookup. The ordinary-user candidate checks passed 89 classifier tests and
+one owner-crash recovery test, plus scoped editor wheel, Pinyin and undo checks.
+This is neither a dist-profile release artifact nor installer acceptance, and
+it establishes no oldest supported Windows 11 build.
+
+The x64 profile comes from @LmeSzinc's
+[#6953 export investigation](https://github.com/codewhale-hq/Codewhale/issues/6953)
+on build 14393.447: all 411 v0.10.0 imports and 453 of 454 v0.10.1 imports resolved.
+The missing DeriveCapabilitySidsFromName pair is excluded; the conservative
+allowed union has 456 pairs. The x86 NSIS profile has 189 named Microsoft API
+contracts predating 1607 and one explicitly identified ordinal: COMCTL32 #17 is
+InitCommonControls in the x86 Windows SDK 10.0.26100.0 import library and stock
+SysWOW64 DLL. Its [documented minimum is Vista](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-initcommoncontrols).
+The manifest retains official source URLs, image hashes, counts and the ordinal
+identity; these qualify static contracts without claiming a 1607 installer run.
+
+At this snapshot, startup/installation of the final release bytes on an actual
+1607 machine and the candidate's generated uninstaller were still unqualified.
+The final frozen source, release import dumps, archive/native/npm installation,
+packaged/native-app owner recovery and oldest-OS receipts belong in the release
+acceptance packet. See [the release checklist](RELEASE_CHECKLIST.md).
+
 ## Windows PowerShell execution policy
 
 The shell tool runs PowerShell with `-ExecutionPolicy Bypass`. That sets only

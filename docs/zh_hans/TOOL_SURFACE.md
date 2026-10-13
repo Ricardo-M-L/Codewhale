@@ -49,6 +49,7 @@
 | `read` | `path`、可选的 `offset`、可选的 `limit` | 读取一个有界的文件窗口，并给出明确的续读或截断提示。 |
 | `write` | `path`、`content` | 创建或替换文件。 |
 | `edit` | `path`、`edits` | 针对同一份原始快照应用一处或多处无歧义的文本替换。 |
+| `file_search` | `query`，以及可选的 `path`、`limit`、`extensions`、`exclude` | 按文件名、路径片段或 glob 查找文件，返回有界的排序结果。遵循忽略文件；`exclude` 会替换默认排除规则。 |
 | `bash` | `command`、可选的 `timeout` | 运行一条可取消的前台 shell 命令，并返回有界的尾部输出。 |
 | `agent` | 被委派的任务以及可选的作用域/上下文控制项 | 启动或查看专注的子智能体任务。 |
 | `workflow` | plan/script/source_path 加上运行控制项 | 用依赖关系和完成检查来协调多智能体阶段。 |
@@ -56,6 +57,7 @@
 | `create_goal` | 目标文本以及可选预算 | 启动本回合所追求的会话目标（goal）。 |
 | `get_goal` | 无 | 读取当前生效的目标及其进度。 |
 | `update_goal` | 终态状态 | 把目标标记为完成或受阻。 |
+| `load_skill` | 可选的 `name`、`query` | 加载命名技能的 `SKILL.md` 正文及配套文件列表；省略 `name` 或使用 `name="list"` 列出可调用技能，也可用 `query` 搜索名称与描述。 |
 | `tool_search` | `query`、可选的匹配控制项 | 发现策略允许的延迟工具，并把选中的 schema 加入本次对话的工具箱。 |
 
 模式是一项权威决定，而不是同义词体系。Plan、Work 和 Operate 使用同一套原语身份。
