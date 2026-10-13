@@ -7893,10 +7893,7 @@ fn ctrl_t_skips_catalog_rungs_that_resolve_to_an_offered_tier() {
             wire_model_id: model.to_string(),
             endpoint_key: "chat".to_string(),
             reasoning_options: vec![serde_json::json!({ "type": "effort", "values": values })],
-            source: codewhale_config::catalog::CatalogSource::Live {
-                base_url_fingerprint: "models-dev-capabilities".to_string(),
-                fetched_at,
-            },
+            source: codewhale_config::catalog::CatalogSource::ModelsDevLive { fetched_at },
             ..Default::default()
         }
     };
