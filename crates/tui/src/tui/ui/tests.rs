@@ -7336,6 +7336,17 @@ fn paste_burst_does_not_leak_into_composer_while_a_modal_owns_keys() {
         "composer must not gain leaked burst text under a modal: {:?}",
         app.input
     );
+    app.start_history_search();
+    let query = app.history_search_query().unwrap().to_owned();
+    handle_bracketed_paste(&mut app, "中文输入");
+    assert_eq!(app.history_search_query(), Some(query.as_str()));
+    let before = app.input.clone();
+    route_key_to_view_stack(
+        &mut app,
+        KeyEvent::new(KeyCode::Char('中'), KeyModifiers::NONE),
+        Instant::now(),
+    );
+    assert_eq!(app.input, before);
 }
 
 #[test]

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.2] - 2026-10-13
 
+- Windows commands that cannot be classified use the normal approval path
+  with a direct explanation. Ask can request approval and Auto-Review can
+  consult its reviewer; an unclassified command is no longer reported as an
+  npm-launcher kill. Actual unbounded `node.exe` image kills keep their hold
+  in reviewing modes; Full Access continues to bypass that floor. Thanks
+  @jayanthvee for separating these cases in #6963.
+- Pasting while a modal is open no longer changes a history-search query
+  hidden underneath it. Existing modal key ownership and hidden-caret guards
+  remain in place. Windows Terminal IME preedit is still controlled by the
+  terminal; native IME retesting remains open (#2323).
+
 - Model lists, resolution, picker controls and Runtime facts use the same
   endpoint-scoped catalog facts. Cost estimates preserve complete price tiers,
   calculate exact decimal amounts per request, and freeze rates at dispatch.
