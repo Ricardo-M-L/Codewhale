@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "2e0161dd38e297e2c844c67313a13ecf154cda5562cbb50411fb462562baae2b"
+    "sha256": "253d29b798ab2194172144bb0254fd0572105ebcac4a772e3da07c063c20fc69"
   },
   "features": [
     {
@@ -322,7 +322,7 @@
     {
       "id": "providers",
       "name": "Providers",
-      "summary": "First-class provider routes plus bundled OpenAI-compatible host descriptors.",
+      "summary": "Provider routes with endpoint-scoped model facts, explicit limits and sourced price estimates.",
       "status": "stable",
       "surfaces": {
         "tui": "stable",

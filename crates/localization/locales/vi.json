@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "đơn giá không hợp lệ",
   "CostReasonCurrencyMissing": "thiếu giá cho loại tiền",
   "CostReasonUsageConflict": "số token không nhất quán",
+  "CostReasonUsageBreakdown": "không có chi tiết sử dụng token",
   "CostChipUnknown": "chi phí: chưa rõ ({reasons})",
   "CostChipSubtotal": "tạm tính {amount} + chưa rõ ({reasons})",
   "CostChipSavedSubtotal": "tạm tính đã lưu {amount} + chưa rõ ({reasons})",

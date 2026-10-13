@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "некорректный тариф",
   "CostReasonCurrencyMissing": "тариф в этой валюте недоступен",
   "CostReasonUsageConflict": "противоречивые счётчики токенов",
+  "CostReasonUsageBreakdown": "разбивка токенов недоступна",
   "CostChipUnknown": "стоимость: неизвестна ({reasons})",
   "CostChipSubtotal": "подытог {amount} + неизвестно ({reasons})",
   "CostChipSavedSubtotal": "сохранённый подытог {amount} + неизвестно ({reasons})",

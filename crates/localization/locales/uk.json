@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "некоректний тариф",
   "CostReasonCurrencyMissing": "тариф у цій валюті недоступний",
   "CostReasonUsageConflict": "суперечливі лічильники токенів",
+  "CostReasonUsageBreakdown": "деталізація токенів недоступна",
   "CostChipUnknown": "вартість: невідома ({reasons})",
   "CostChipSubtotal": "проміжний підсумок {amount} + невідомо ({reasons})",
   "CostChipSavedSubtotal": "збережений проміжний підсумок {amount} + невідомо ({reasons})",

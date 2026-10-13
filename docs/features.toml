@@ -286,7 +286,7 @@ owner = "crates/tui/src/sandbox"
 [[feature]]
 id = "providers"
 name = "Providers"
-summary = "First-class provider routes plus bundled OpenAI-compatible host descriptors."
+summary = "Provider routes with endpoint-scoped model facts, explicit limits and sourced price estimates."
 status = "stable"
 surfaces = { tui = "stable", api = "stable" }
 docs = "docs/PROVIDERS.md"

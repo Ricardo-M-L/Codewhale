@@ -1028,7 +1028,6 @@ mod tests {
         ] {
             for model in [
                 "deepseek-v4.1-flash-expires-on-0910",
-                "deepseek-v4.1-flash",
                 "deepseek-v4-flash-vendor",
             ] {
                 assert_eq!(provider_capability(provider, model).max_output, None);
@@ -1042,6 +1041,11 @@ mod tests {
                 );
             }
         }
+
+        assert_eq!(
+            output_ceiling_source(ProviderKind::Deepseek, "deepseek-v4.1-flash"),
+            OutputCeilingSource::Documented(384_000)
+        );
 
         // Exact route output facts supply a ceiling only for that request.
         let limits = RouteLimits {

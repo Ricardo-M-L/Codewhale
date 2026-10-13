@@ -111,6 +111,25 @@ pub(crate) fn parse_usage(usage: Option<&Value>) -> Usage {
         reasoning_tokens,
         reasoning_replay_tokens: None,
         server_tool_use,
+
+        input_audio_tokens: usage
+            .and_then(|usage| {
+                usage
+                    .pointer("/prompt_tokens_details/audio_tokens")
+                    .or_else(|| usage.pointer("/input_tokens_details/audio_tokens"))
+            })
+            .and_then(Value::as_u64)
+            .map(saturating_u32),
+        output_audio_tokens: usage
+            .and_then(|usage| {
+                usage
+                    .pointer("/completion_tokens_details/audio_tokens")
+                    .or_else(|| usage.pointer("/output_tokens_details/audio_tokens"))
+            })
+            .and_then(Value::as_u64)
+            .map(saturating_u32),
+
+        request_usages: Vec::new(),
     }
 }
 

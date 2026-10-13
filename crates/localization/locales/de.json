@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "ungültiger Tarif",
   "CostReasonCurrencyMissing": "Tarif in dieser Währung fehlt",
   "CostReasonUsageConflict": "widersprüchliche Tokenzahlen",
+  "CostReasonUsageBreakdown": "Aufschlüsselung der Token-Nutzung nicht verfügbar",
   "CostChipUnknown": "Kosten: unbekannt ({reasons})",
   "CostChipSubtotal": "Zwischensumme {amount} + unbekannt ({reasons})",
   "CostChipSavedSubtotal": "gespeicherte Zwischensumme {amount} + unbekannt ({reasons})",

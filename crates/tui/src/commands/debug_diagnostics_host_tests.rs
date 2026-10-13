@@ -1506,6 +1506,8 @@ mod cost_breakdown_tests {
             live_pricing_defect: None,
             usd_priced: true,
             cny_priced: estimate.cny > 0.0,
+            exact_usd: None,
+            exact_cny: None,
         }
     }
 

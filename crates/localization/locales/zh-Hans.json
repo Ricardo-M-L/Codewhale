@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "费率无效",
   "CostReasonCurrencyMissing": "缺少该币种费率",
   "CostReasonUsageConflict": "token 计数冲突",
+  "CostReasonUsageBreakdown": "token 用量明细不可用",
   "CostChipUnknown": "费用：未知（{reasons}）",
   "CostChipSubtotal": "小计 {amount} + 未知（{reasons}）",
   "CostChipSavedSubtotal": "已保存小计 {amount} + 未知（{reasons}）",

@@ -15,7 +15,6 @@ use std::process::Command;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
-use codewhale_agent::ModelRegistry;
 use codewhale_app_server::RuntimeControlFrontend;
 use codewhale_config::credentials::{
     clear_provider_api_key_from_config, provider_slot, set_provider_api_key,
@@ -5793,7 +5792,6 @@ fn run_model_command(
             Ok(())
         }
         ModelCommand::Resolve { model, provider } => {
-            let registry = ModelRegistry::default();
             // Only `model resolve --provider X` is a hypothetical. The
             // top-level `--provider` is the route this process is actually on,
             // and it is already folded into `resolved_runtime` — treating it as
@@ -5837,7 +5835,48 @@ fn run_model_command(
                     "requested: {}",
                     if source.is_explicit() { model } else { "" }
                 );
-                println!("resolved: {model}");
+                let kind = ProviderKind::parse(provider).unwrap_or(ProviderKind::Custom);
+                let identity = if kind == ProviderKind::Custom {
+                    store.config.named_custom_provider_id().unwrap_or(provider)
+                } else {
+                    provider
+                };
+                let base = if kind == resolved_runtime.provider {
+                    resolved_runtime.base_url.clone()
+                } else {
+                    store
+                        .config
+                        .providers
+                        .for_provider(kind)
+                        .base_url
+                        .clone()
+                        .unwrap_or_else(|| kind.provider().default_base_url().into())
+                };
+                let candidate = codewhale_tui::route_preferences::resolve_model(
+                    store.path(),
+                    identity,
+                    &base,
+                    Some(model),
+                );
+                println!(
+                    "resolved: {}",
+                    candidate
+                        .as_ref()
+                        .map_or(model, |route| route.wire_model_id().as_str())
+                );
+                match candidate.as_ref() {
+                    Ok(route) => {
+                        if let Some(canonical) = route.canonical_model() {
+                            println!("canonical_model: {}", canonical.as_str());
+                        }
+                        println!("limits: {}", serde_json::to_string(&route.limits())?);
+                        println!(
+                            "capabilities: {}",
+                            serde_json::to_string(&route.capabilities())?
+                        );
+                    }
+                    Err(error) => println!("route_error: {error}"),
+                }
                 println!("provider: {provider}");
                 println!("used_fallback: {}", !source.is_explicit());
                 println!(
@@ -5859,12 +5898,47 @@ fn run_model_command(
             // inside a named route. The subcommand provider wins; otherwise
             // the configured runtime provider remains authoritative. Model
             // text never authorizes switching providers or credential slots.
-            let provider_hint = subcommand_provider.or(Some(resolved_runtime.provider));
-            let resolved = registry.resolve(queried, provider_hint)?;
-            println!("requested: {}", resolved.requested.unwrap_or_default());
-            println!("resolved: {}", resolved.resolved.id);
-            println!("provider: {}", resolved.resolved.provider.as_str());
-            println!("used_fallback: {}", resolved.used_fallback);
+            let provider = subcommand_provider.unwrap_or(resolved_runtime.provider);
+            let identity = if provider == ProviderKind::Custom && subcommand_provider.is_none() {
+                store
+                    .config
+                    .named_custom_provider_id()
+                    .unwrap_or(provider.as_str())
+            } else {
+                provider.as_str()
+            };
+            let base = if provider == resolved_runtime.provider {
+                resolved_runtime.base_url.clone()
+            } else {
+                store
+                    .config
+                    .providers
+                    .for_provider(provider)
+                    .base_url
+                    .clone()
+                    .unwrap_or_else(|| provider.provider().default_base_url().into())
+            };
+            let resolved = codewhale_tui::route_preferences::resolve_model(
+                store.path(),
+                identity,
+                &base,
+                queried,
+            )?;
+            println!("requested: {}", queried.unwrap_or_default());
+            println!("resolved: {}", resolved.wire_model_id().as_str());
+            println!("provider: {identity}");
+            println!(
+                "used_fallback: {}",
+                queried.is_none() || queried == Some("auto")
+            );
+            if let Some(canonical) = resolved.canonical_model() {
+                println!("canonical_model: {}", canonical.as_str());
+            }
+            println!("limits: {}", serde_json::to_string(&resolved.limits())?);
+            println!(
+                "capabilities: {}",
+                serde_json::to_string(&resolved.capabilities())?
+            );
             println!(
                 "provider_source: {}",
                 if subcommand_provider.is_some() {

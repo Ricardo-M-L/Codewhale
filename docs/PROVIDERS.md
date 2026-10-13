@@ -84,10 +84,11 @@ Sources to keep in sync:
 - `crates/config/assets/catalog_corrections.json` `reviewed` - intrinsic facts,
   scoped selector aliases, completion references and pure transport metadata.
   The existing seed renderer embeds this reviewed supplement in Models.dev.
-- `crates/agent/src/lib.rs` - compatibility projection of those shared selector
-  rows, used by `codewhale model resolve` (and the `[model]` config surface).
-  `codewhale model list` reads the resolved provider lake instead, so a single
-  list shows bundled, live and configured rows together.
+- `crates/tui/src/provider_lake.rs` and `route_runtime.rs` - resolve current
+  model facts for both CLI model commands, the picker and Runtime API. Public
+  catalog facts, provider/account rosters and explicit configuration retain
+  their separate ownership. `crates/agent/src/lib.rs` keeps the legacy selector
+  compatibility projection; it does not decide the CLI's current route.
 - `config.example.toml` and `docs/CONFIGURATION.md` - user-facing config
   examples and environment variable reference.
 - `scripts/check-provider-registry.py` - drift check for canonical provider
@@ -1119,16 +1120,26 @@ price. Flash ships the published $0.15/$0.50 list. A live call can still
 
 ## Static Model Registry
 
-This table describes the static registry, which `codewhale model resolve` (and
-the `[model]` config surface) still use to resolve selector aliases.
+This table records legacy selector compatibility. Current `codewhale model
+resolve`, `codewhale model list`, the picker and Runtime API use the shared
+provider lake and route resolver. `models --update` refreshes the existing
+catalog cache; later routes see new metadata, while dispatched requests retain
+their admitted limits and price receipt.
 
-`codewhale model resolve` projects the reviewed `selections` in
-`crates/config/assets/catalog_corrections.json` through
-`crates/agent/src/lib.rs`. There is no independent Rust model roster. These
-ordered aliases and flags are compatibility metadata, not account availability
-or executable route permission. This differs from live `/models` discovery.
-Use `/models` or `codewhale models` to fetch model IDs from the active API
-endpoint when the endpoint supports model listing.
+The reviewed `selections` in `crates/config/assets/catalog_corrections.json`
+remain compatibility metadata for legacy callers. They do not establish account
+availability or executable route permission. Public discovery can contain
+metadata-only models; an authenticated provider roster establishes a different
+fact. A same-named custom endpoint keeps its own declared limits and prices.
+
+`codewhale model resolve MODEL --provider PROVIDER` reports the exact wire ID,
+canonical ID when declared, limits and implemented capabilities. Runtime
+`GET /v1/providers/PROVIDER/models` adds source, fetch/expiry metadata, published
+price structure, reasoning options, configured effective limits and the price
+status. `account_access: unverified` means these facts have not established the
+selected account's access. Context responses distinguish an active engine
+window from the static route's resolution source, including any fallback.
+See [Catalog refresh](CATALOG_REFRESH.md) for freshness and estimate boundaries.
 
 | Provider | Static registry entries | Tool calls | Registry reasoning flag |
 | --- | --- | --- | --- |

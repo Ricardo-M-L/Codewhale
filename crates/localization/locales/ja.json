@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "無効な料金",
   "CostReasonCurrencyMissing": "通貨の料金情報なし",
   "CostReasonUsageConflict": "トークン数が不整合",
+  "CostReasonUsageBreakdown": "トークン使用量の内訳が不明",
   "CostChipUnknown": "費用: 不明（{reasons}）",
   "CostChipSubtotal": "小計 {amount} + 不明（{reasons}）",
   "CostChipSavedSubtotal": "保存済み小計 {amount} + 不明（{reasons}）",

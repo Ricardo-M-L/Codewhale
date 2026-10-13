@@ -1643,7 +1643,9 @@ pub(crate) fn open_runtime_threads_for_host(
     // Publish the same exact endpoint-scoped catalog as interactive startup
     // before the server admits turns. A cached model list alone does not make
     // its capabilities available to route resolution.
+    crate::models_dev_live::maybe_load_persisted_cache();
     crate::provider_catalog_live::maybe_load_persisted_cache_for_config(config);
+    crate::models_dev_live::spawn_background_refresh();
     Ok((manager, workshop_activation))
 }
 
@@ -10348,6 +10350,8 @@ struct ProviderModelEntry {
     reasoning_effort: codewhale_config::route::CapabilityState,
     reasoning_effort_levels: Vec<String>,
     reasoning_effort_source: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    facts: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -10631,7 +10635,43 @@ fn provider_model_entry_for_api(
         reasoning_effort: CapabilityState::Unknown,
         reasoning_effort_levels: Vec::new(),
         reasoning_effort_source: None,
+        facts: None,
     };
+    let base = config.base_url_for_route(identity);
+    let offering = crate::provider_lake::configured_catalog_offering_for_route(
+        config,
+        provider,
+        identity.key.as_str(),
+        &base,
+        &entry.id,
+    );
+    let resolved =
+        crate::route_runtime::resolve_runtime_route_for_identity(config, identity, Some(&entry.id))
+            .ok();
+    if let Some(offering) = offering.as_ref() {
+        let pricing = codewhale_config::pricing::OfferingPricing::from_catalog_offering(&offering);
+        entry.facts = Some(serde_json::json!({
+            "wire_model_id": offering.wire_model_id,
+            "canonical_model_id": offering.canonical_model,
+            "name": offering.name,
+            "family": offering.family,
+            "status": offering.status,
+            "advertised_limits": offering.limit,
+            "effective_limits": resolved.as_ref().map(|route| route.candidate.limits()),
+            "effective_context": resolved.as_ref().map(|route| route.context_window),
+            "capabilities": resolved.as_ref().map(|route| route.candidate.capabilities()),
+            "reasoning": offering.reasoning,
+            "reasoning_options": offering.reasoning_options,
+            "modalities": offering.modalities,
+            "temperature": offering.temperature,
+            "source": offering.source,
+            "fact_sources": offering.fact_sources,
+            "pricing_status": pricing.as_ref().map(|pricing| pricing.status_label_at(codewhale_config::catalog::now_unix())),
+            "pricing": pricing,
+            "upstream_last_updated": offering.last_updated,
+            "account_access": "unverified",
+        }));
+    }
     // A provider kind and a familiar model name do not establish the
     // capabilities of a different endpoint or named compatible route.
     if provider == ProviderKind::Custom || config.provider_uses_custom_endpoint(identity) {
@@ -10665,10 +10705,13 @@ fn provider_model_entry_for_api(
         if metadata.reasoning == Some(false) {
             entry.reasoning_effort = CapabilityState::Unsupported;
         }
-    } else if let Some(efforts) = ReasoningEffort::catalog_effort_values(provider, &entry.id) {
+    } else if let Some(efforts) = offering
+        .as_ref()
+        .and_then(ReasoningEffort::catalog_effort_values_for_offering)
+    {
         entry.reasoning_effort_levels = efforts
             .into_iter()
-            .filter(|effort| *effort != ReasoningEffort::Off)
+            .filter(|effort| !matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto))
             .map(|effort| effort.as_setting().to_string())
             .collect();
         entry.reasoning_effort_source = Some("catalog");

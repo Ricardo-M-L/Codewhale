@@ -1198,6 +1198,17 @@ fn parse_responses_usage(val: &Value) -> Usage {
         reasoning_tokens,
         reasoning_replay_tokens: None,
         server_tool_use: None,
+
+        input_audio_tokens: val
+            .pointer("/input_tokens_details/audio_tokens")
+            .and_then(Value::as_u64)
+            .map(super::saturating_u32),
+        output_audio_tokens: val
+            .pointer("/output_tokens_details/audio_tokens")
+            .and_then(Value::as_u64)
+            .map(super::saturating_u32),
+
+        request_usages: Vec::new(),
     }
 }
 

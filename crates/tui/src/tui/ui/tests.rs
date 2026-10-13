@@ -22853,6 +22853,11 @@ fn child_usage_metadata_carries_cache_write_and_reasoning_end_to_end() {
             code_execution_requests: Some(2),
             tool_search_requests: Some(1),
         }),
+
+        input_audio_tokens: None,
+        output_audio_tokens: None,
+
+        request_usages: Vec::new(),
     };
 
     // The shared producer emits every class.

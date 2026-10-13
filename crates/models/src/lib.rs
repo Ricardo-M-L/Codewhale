@@ -176,6 +176,12 @@ pub struct Usage {
     pub prompt_cache_write_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_audio_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_audio_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub request_usages: Vec<Usage>,
     /// Approximate input tokens spent re-sending prior `reasoning_content`
     /// across user-message boundaries in DeepSeek V4 thinking-mode tool-calling
     /// turns (V4 §5.1.1 "Interleaved Thinking"). Estimated client-side at

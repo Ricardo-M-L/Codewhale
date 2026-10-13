@@ -1321,9 +1321,16 @@ pub(crate) fn configured_catalog_offering_for_route(
     base_url: &str,
     model: &str,
 ) -> Option<CatalogOffering> {
+    let lower = catalog_offering_for_route(provider, identity, base_url, model);
     configured_model_for_route(config, provider, identity, base_url, model)
-        .map(|row| row.to_catalog_offering())
-        .or_else(|| catalog_offering_for_route(provider, identity, base_url, model))
+        .map(|row| {
+            let mut offering = row.to_catalog_offering();
+            if let Some(lower) = lower.as_ref() {
+                offering.complete_from(lower, Some(base_url));
+            }
+            offering
+        })
+        .or(lower)
 }
 
 pub(crate) fn configured_catalog_models_for_route(

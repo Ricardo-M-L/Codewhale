@@ -413,6 +413,11 @@ mod tests {
             reasoning_tokens: None,
             reasoning_replay_tokens: None,
             server_tool_use: None,
+
+            input_audio_tokens: None,
+            output_audio_tokens: None,
+
+            request_usages: Vec::new(),
         };
         usage.add(&api_usage);
         assert!(usage.cache_creation_input_tokens.is_none());
@@ -431,6 +436,11 @@ mod tests {
             reasoning_tokens: None,
             reasoning_replay_tokens: None,
             server_tool_use: None,
+
+            input_audio_tokens: None,
+            output_audio_tokens: None,
+
+            request_usages: Vec::new(),
         };
         usage.add(&api_usage);
         assert_eq!(usage.cache_read_input_tokens, Some(30));
@@ -452,6 +462,11 @@ mod tests {
             reasoning_tokens: None,
             reasoning_replay_tokens: None,
             server_tool_use: None,
+
+            input_audio_tokens: None,
+            output_audio_tokens: None,
+
+            request_usages: Vec::new(),
         };
         usage.add(&api_usage);
         // 0 is a valid observed value, must NOT be converted to None

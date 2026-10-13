@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "invalid rate",
   "CostReasonCurrencyMissing": "currency rate unavailable",
   "CostReasonUsageConflict": "conflicting token counts",
+  "CostReasonUsageBreakdown": "token usage breakdown unavailable",
   "CostChipUnknown": "cost: unknown ({reasons})",
   "CostChipSubtotal": "subtotal {amount} + unknown ({reasons})",
   "CostChipSavedSubtotal": "saved subtotal {amount} + unknown ({reasons})",

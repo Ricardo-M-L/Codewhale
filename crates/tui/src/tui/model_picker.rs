@@ -33,9 +33,7 @@ use crate::model_profile::{
     resolved_capability_profile_with_overrides,
 };
 use crate::models_dev_live::{self, ModelsDevFreshness};
-use crate::provider_lake::{
-    catalog_offering_for_model, catalog_offering_for_model_identity, configured_providers,
-};
+use crate::provider_lake::{catalog_offering_for_model_identity, configured_providers};
 use crate::reasoning_preference::ReasoningEffort;
 use crate::settings::PinnedModel;
 use crate::tui::app::{App, StatusToastLevel};
@@ -3548,7 +3546,10 @@ fn effective_picker_metadata_with_codex(
         .as_ref()
         .expect("provider metadata admission checked");
     let identity = admitted.key.as_str();
-    let context_override = config.context_window_for_provider_config(admitted);
+    let context_override = config
+        .model_context_windows_for(admitted)
+        .and_then(|windows| windows.get(id).copied())
+        .or_else(|| config.context_window_for_provider_config(admitted));
     let base_url = config.base_url_for_route(admitted);
     if let Some(declared) =
         crate::provider_lake::configured_model_for_route(config, provider, identity, &base_url, id)
@@ -3715,7 +3716,15 @@ fn effective_picker_metadata_with_codex(
         vision,
         pricing,
         display_name: codex_metadata.and_then(|model| model.display_name.clone()),
-        reasoning_unknown: false,
+        reasoning_unknown: if provider == ProviderKind::OpenaiCodex {
+            codex_metadata.is_none_or(|metadata| metadata.reasoning.is_none())
+        } else {
+            offering
+                .as_ref()
+                .map_or(profile.reasoning == SupportState::Unknown, |offering| {
+                    offering.reasoning.is_none()
+                })
+        },
         declared_input_price: None,
         source: card.map(|card| card.source),
     }
@@ -4590,7 +4599,9 @@ fn route_picker_efforts(
         // effort tiers. Keep the existing wire-compatible route ladder.
         return CODEX_PICKER_EFFORTS.to_vec();
     }
-    if let Some(catalog_efforts) = catalog_picker_efforts(provider, wire_model) {
+    if let Some(offering) = ReasoningEffort::offering_for_reasoning(provider, base_url, wire_model)
+        && let Some(catalog_efforts) = catalog_picker_efforts(&offering)
+    {
         return catalog_efforts;
     }
     if matches!(provider, crate::config::ProviderKind::Deepseek) {
@@ -4608,10 +4619,8 @@ fn route_picker_efforts(
 /// skipped. Returns `None` when the catalog has no usable effort list so the
 /// caller can keep the provider default rather than inventing tiers.
 fn catalog_picker_efforts(
-    provider: ProviderKind,
-    wire_model: &str,
+    offering: &codewhale_config::catalog::CatalogOffering,
 ) -> Option<Vec<ReasoningEffort>> {
-    let offering = catalog_offering_for_model(provider, wire_model)?;
     let mut efforts = Vec::new();
     let mut saw_effort_list = false;
     let mut has_toggle = false;
@@ -4625,8 +4634,6 @@ fn catalog_picker_efforts(
             has_toggle = true;
             continue;
         }
-        // Prefer explicit effort lists; also accept thinking-mode lists whose
-        // values map onto our tiers (adaptive→auto, disabled→off, always_on→max).
         if option_type != "effort" && option_type != "thinking" {
             continue;
         }
@@ -4648,14 +4655,9 @@ fn catalog_picker_efforts(
     if !saw_effort_list || efforts.is_empty() {
         return None;
     }
-    // A Models.dev `toggle` beside the ladder means reasoning can also be
-    // switched off (#6396).
     if has_toggle && !efforts.contains(&ReasoningEffort::Off) {
         efforts.insert(0, ReasoningEffort::Off);
     }
-    // Always offer Auto when the catalog published discrete tiers so the
-    // operator can still leave the choice to the route default. Do not invent
-    // Off unless the catalog said so — some models are always-on.
     if !efforts.contains(&ReasoningEffort::Auto) {
         efforts.insert(0, ReasoningEffort::Auto);
     }
@@ -4665,7 +4667,7 @@ fn catalog_picker_efforts(
 fn catalog_effort_value(raw: &str) -> Option<ReasoningEffort> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "off" | "disabled" | "false" => Some(ReasoningEffort::Off),
-        "none" => Some(ReasoningEffort::Off), // Muse "none" maps to Off in our enum but display as "none"
+        "none" => Some(ReasoningEffort::Off),
         "minimal" | "minimum" => Some(ReasoningEffort::Minimal),
         "low" | "light" => Some(ReasoningEffort::Low),
         "medium" | "mid" => Some(ReasoningEffort::Medium),
@@ -5754,8 +5756,11 @@ mod tests {
         );
 
         // A real catalog/readiness refresh replaces cached presentation facts.
-        let mut offering =
-            catalog_offering_for_model(ProviderKind::Deepseek, "deepseek-v4-pro").unwrap();
+        let mut offering = crate::provider_lake::catalog_offering_for_model(
+            ProviderKind::Deepseek,
+            "deepseek-v4-pro",
+        )
+        .unwrap();
         offering.limit.as_mut().unwrap().context = Some(777_000);
         crate::provider_lake::set_live_snapshot(
             codewhale_config::catalog::CatalogSnapshot {

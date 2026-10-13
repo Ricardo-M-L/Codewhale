@@ -912,6 +912,11 @@ pub fn child_usage_from_metadata(metadata: &serde_json::Value) -> Option<Usage> 
             .get("child_server_tool_use")
             .cloned()
             .and_then(|value| serde_json::from_value(value).ok()),
+
+        input_audio_tokens: None,
+        output_audio_tokens: None,
+
+        request_usages: Vec::new(),
     })
 }
 

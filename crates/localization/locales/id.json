@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "tarif tidak valid",
   "CostReasonCurrencyMissing": "tarif mata uang tidak tersedia",
   "CostReasonUsageConflict": "jumlah token bertentangan",
+  "CostReasonUsageBreakdown": "rincian penggunaan token tidak tersedia",
   "CostChipUnknown": "biaya: belum diketahui ({reasons})",
   "CostChipSubtotal": "subtotal {amount} + belum diketahui ({reasons})",
   "CostChipSavedSubtotal": "subtotal tersimpan {amount} + belum diketahui ({reasons})",

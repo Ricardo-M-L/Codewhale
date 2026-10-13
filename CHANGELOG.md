@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.2] - 2026-10-10
 
+- Model lists, resolution, picker controls and Runtime facts use the same
+  endpoint-scoped catalog facts. Cost estimates preserve complete price tiers,
+  calculate exact decimal amounts per request, and freeze rates at dispatch.
+  Missing rates or required usage breakdowns stay unpriced; public prices do
+  not establish account access. The offline seed records its source snapshot
+  and keeps absent default wire IDs as dated compatibility fallbacks. Refs #6396.
+
 - Desktop and HTTP app-server turns feed an existing shared pet companion when
   its followed session has no live producer. Automatic selection is checked
   atomically by the owner; a live TUI keeps its source. The Runtime producer
@@ -444,12 +451,6 @@ launcher guidance.
 
 - Idle CPU has not been measured on FreeBSD or Linux for this release
   ([#6728](https://github.com/codewhale-hq/Codewhale/issues/6728)).
-- Models.dev prices with context tiers are not applied. A turn at or above a
-  model's first context tier reads as unpriced ("pricing tier unavailable")
-  and is counted as missing from the cost total, instead of being priced at
-  its base rate. The bundled catalog has no tiered rows, so this appears only
-  after a live models.dev refresh
-  ([#6396](https://github.com/codewhale-hq/Codewhale/issues/6396)).
 - Shell commands run by delegated agents appear in `/jobs` and the work dock
   with their owner, not in the agent's own detail view; named terminal
   sessions live in the terminal dock

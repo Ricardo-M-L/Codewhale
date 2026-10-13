@@ -244,6 +244,19 @@ impl TurnContext {
 }
 
 pub(crate) fn add_usage_to(total: &mut Usage, delta: &Usage) {
+    if total.request_usages.is_empty() && (total.input_tokens > 0 || total.output_tokens > 0) {
+        total.request_usages.push(total.clone());
+    }
+    if total.request_usages.len() <= 1024 {
+        if delta.request_usages.is_empty() {
+            total.request_usages.push(delta.clone());
+        } else {
+            let remaining = 1025 - total.request_usages.len();
+            total
+                .request_usages
+                .extend(delta.request_usages.iter().take(remaining).cloned());
+        }
+    }
     total.input_tokens = total.input_tokens.saturating_add(delta.input_tokens);
     total.output_tokens = total.output_tokens.saturating_add(delta.output_tokens);
     total.prompt_cache_hit_tokens =
@@ -257,6 +270,10 @@ pub(crate) fn add_usage_to(total: &mut Usage, delta: &Usage) {
         delta.prompt_cache_write_tokens,
     );
     total.reasoning_tokens = add_optional_usage(total.reasoning_tokens, delta.reasoning_tokens);
+    total.input_audio_tokens =
+        add_optional_usage(total.input_audio_tokens, delta.input_audio_tokens);
+    total.output_audio_tokens =
+        add_optional_usage(total.output_audio_tokens, delta.output_audio_tokens);
     total.reasoning_replay_tokens =
         add_optional_usage(total.reasoning_replay_tokens, delta.reasoning_replay_tokens);
     if let Some(delta) = delta.server_tool_use.as_ref() {

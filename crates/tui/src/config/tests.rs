@@ -16920,6 +16920,7 @@ mod released_provider_serde {
                 currency: Currency::Usd,
                 provenance: PricingProvenance::UserOverride,
                 cloud_facts: None,
+                pricing_schedule: None,
                 input_per_million: input,
                 output_per_million: output,
                 cache_read_per_million: None,

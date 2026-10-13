@@ -1324,8 +1324,11 @@ mod tests {
 
         let card = Scorecard::from_turns(&turns);
 
+        // 1M total input crosses the 272K context tier, so every input class
+        // (miss, cache read, cache write) bills at the tier input rate of
+        // $60/M on this documented no-cache-discount route: 1M * 60 = $60.
         assert!(!card.per_turn[0].cost_unpriced);
-        assert!((card.per_turn[0].cost_usd - 30.0).abs() < f64::EPSILON);
+        assert!((card.per_turn[0].cost_usd - 60.0).abs() < f64::EPSILON);
         assert!(card.per_turn[1].cost_unpriced);
         assert!(!card.metrics.cost_complete);
     }

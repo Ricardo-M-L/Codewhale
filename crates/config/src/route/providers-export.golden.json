@@ -27,13 +27,15 @@
           "id": "claude-fable-5"
         },
         {
-          "id": "claude-haiku-4-5"
+          "id": "claude-haiku-4-5",
+          "canonical": "anthropic/claude-haiku-4-5"
         },
         {
           "id": "claude-opus-4-8"
         },
         {
-          "id": "claude-opus-5"
+          "id": "claude-opus-5",
+          "canonical": "anthropic/claude-opus-5"
         },
         {
           "id": "claude-sonnet-4-6",
@@ -64,6 +66,7 @@
       "models": [
         {
           "id": "trinity-large-thinking",
+          "canonical": "arcee-ai/trinity-large-thinking",
           "default": true
         },
         {
@@ -198,20 +201,28 @@
       "models": [
         {
           "id": "deepseek-flash",
-          "canonical": "deepseek-flash",
+          "canonical": "deepseek/deepseek-v4.1-flash",
           "default": true
         },
         {
           "id": "deepseek-v4-flash",
-          "canonical": "deepseek-v4-flash"
+          "canonical": "deepseek/deepseek-v4.1-flash"
         },
         {
           "id": "deepseek-v4-flash-vision-exp",
-          "canonical": "deepseek-v4-flash"
+          "canonical": "deepseek/deepseek-v4.1-flash"
         },
         {
           "id": "deepseek-v4-pro",
-          "canonical": "deepseek-v4-pro"
+          "canonical": "deepseek/deepseek-v4-pro-0813"
+        },
+        {
+          "id": "deepseek-v4-pro-0813",
+          "canonical": "deepseek/deepseek-v4-pro-0813"
+        },
+        {
+          "id": "deepseek-v4.1-flash",
+          "canonical": "deepseek/deepseek-v4.1-flash"
         }
       ],
       "transport": "model-aware"
@@ -352,14 +363,17 @@
       ],
       "models": [
         {
-          "id": "muse-spark-1.1"
+          "id": "muse-spark-1.1",
+          "canonical": "meta/muse-spark-1.1"
         },
         {
           "id": "muse-spark-1.2",
+          "canonical": "meta/muse-spark-1.2",
           "default": true
         },
         {
-          "id": "muse-spark-1.2-contributor"
+          "id": "muse-spark-1.2-contributor",
+          "canonical": "meta/muse-spark-1.2"
         }
       ],
       "transport": "chat-completions"
@@ -479,29 +493,29 @@
       ],
       "models": [
         {
-          "id": "deepseek-v4-flash-0731"
+          "id": "deepseek-v4-flash-0731",
+          "canonical": "deepseek/deepseek-v4-flash-0731"
         },
         {
-          "id": "deepseek-v4-pro"
+          "id": "deepseek-v4-pro",
+          "canonical": "deepseek/deepseek-v4-pro"
         },
         {
-          "id": "glm-5.2"
+          "id": "glm-5.2",
+          "canonical": "zhipuai/glm-5.2"
         },
         {
-          "id": "qwen3.6-flash"
-        },
-        {
-          "id": "qwen3.7-max"
-        },
-        {
-          "id": "qwen3.7-plus"
+          "id": "qwen3.7-plus",
+          "canonical": "alibaba/qwen3.7-plus"
         },
         {
           "id": "qwen3.8-max",
+          "canonical": "alibaba/qwen3.8-max",
           "default": true
         },
         {
-          "id": "qwen3.8-max-preview"
+          "id": "qwen3.8-max-preview",
+          "canonical": "alibaba/qwen3.8-max-preview"
         }
       ],
       "transport": "chat-completions"
@@ -525,29 +539,29 @@
       ],
       "models": [
         {
-          "id": "deepseek-v4-flash-0731"
+          "id": "deepseek-v4-flash-0731",
+          "canonical": "deepseek/deepseek-v4-flash-0731"
         },
         {
-          "id": "deepseek-v4-pro"
+          "id": "deepseek-v4-pro",
+          "canonical": "deepseek/deepseek-v4-pro"
         },
         {
-          "id": "glm-5.2"
+          "id": "glm-5.2",
+          "canonical": "zhipuai/glm-5.2"
         },
         {
-          "id": "qwen3.6-flash"
-        },
-        {
-          "id": "qwen3.7-max"
-        },
-        {
-          "id": "qwen3.7-plus"
+          "id": "qwen3.7-plus",
+          "canonical": "alibaba/qwen3.7-plus"
         },
         {
           "id": "qwen3.8-max",
+          "canonical": "alibaba/qwen3.8-max",
           "default": true
         },
         {
-          "id": "qwen3.8-max-preview"
+          "id": "qwen3.8-max-preview",
+          "canonical": "alibaba/qwen3.8-max-preview"
         }
       ],
       "transport": "anthropic-messages"
@@ -571,29 +585,37 @@
       ],
       "models": [
         {
-          "id": "deepseek-v4-flash-0731"
+          "id": "deepseek-v4-flash-0731",
+          "canonical": "deepseek/deepseek-v4-flash-0731"
         },
         {
-          "id": "deepseek-v4-pro"
+          "id": "deepseek-v4-pro",
+          "canonical": "deepseek/deepseek-v4-pro"
         },
         {
-          "id": "glm-5.2"
+          "id": "glm-5.2",
+          "canonical": "zhipuai/glm-5.2"
         },
         {
-          "id": "qwen3.6-flash"
+          "id": "qwen3.6-flash",
+          "canonical": "alibaba/qwen3.6-flash"
         },
         {
-          "id": "qwen3.7-max"
+          "id": "qwen3.7-max",
+          "canonical": "alibaba/qwen3.7-max"
         },
         {
-          "id": "qwen3.7-plus"
+          "id": "qwen3.7-plus",
+          "canonical": "alibaba/qwen3.7-plus"
         },
         {
           "id": "qwen3.8-max",
+          "canonical": "alibaba/qwen3.8-max",
           "default": true
         },
         {
-          "id": "qwen3.8-max-preview"
+          "id": "qwen3.8-max-preview",
+          "canonical": "alibaba/qwen3.8-max-preview"
         }
       ],
       "transport": "chat-completions"
@@ -617,29 +639,37 @@
       ],
       "models": [
         {
-          "id": "deepseek-v4-flash-0731"
+          "id": "deepseek-v4-flash-0731",
+          "canonical": "deepseek/deepseek-v4-flash-0731"
         },
         {
-          "id": "deepseek-v4-pro"
+          "id": "deepseek-v4-pro",
+          "canonical": "deepseek/deepseek-v4-pro"
         },
         {
-          "id": "glm-5.2"
+          "id": "glm-5.2",
+          "canonical": "zhipuai/glm-5.2"
         },
         {
-          "id": "qwen3.6-flash"
+          "id": "qwen3.6-flash",
+          "canonical": "alibaba/qwen3.6-flash"
         },
         {
-          "id": "qwen3.7-max"
+          "id": "qwen3.7-max",
+          "canonical": "alibaba/qwen3.7-max"
         },
         {
-          "id": "qwen3.7-plus"
+          "id": "qwen3.7-plus",
+          "canonical": "alibaba/qwen3.7-plus"
         },
         {
           "id": "qwen3.8-max",
+          "canonical": "alibaba/qwen3.8-max",
           "default": true
         },
         {
-          "id": "qwen3.8-max-preview"
+          "id": "qwen3.8-max-preview",
+          "canonical": "alibaba/qwen3.8-max-preview"
         }
       ],
       "transport": "anthropic-messages"
@@ -667,13 +697,16 @@
         },
         {
           "id": "kimi-k2.7-code",
+          "canonical": "moonshotai/kimi-k2.7-code",
           "default": true
         },
         {
-          "id": "kimi-k2.7-code-highspeed"
+          "id": "kimi-k2.7-code-highspeed",
+          "canonical": "moonshotai/kimi-k2.7-code"
         },
         {
-          "id": "kimi-k3"
+          "id": "kimi-k3",
+          "canonical": "moonshotai/kimi-k3"
         }
       ],
       "transport": "chat-completions"
@@ -696,12 +729,8 @@
       ],
       "models": [
         {
-          "id": "deepseek/deepseek-v4-flash",
-          "canonical": "deepseek-v4-flash"
-        },
-        {
           "id": "deepseek/deepseek-v4-pro",
-          "canonical": "deepseek-v4-pro",
+          "canonical": "deepseek/deepseek-v4-pro",
           "default": true
         }
       ],
@@ -791,16 +820,20 @@
         },
         {
           "id": "gpt-5.6",
+          "canonical": "openai/gpt-5.6-sol",
           "default": true
         },
         {
-          "id": "gpt-5.6-luna"
+          "id": "gpt-5.6-luna",
+          "canonical": "openai/gpt-5.6-luna"
         },
         {
-          "id": "gpt-5.6-sol"
+          "id": "gpt-5.6-sol",
+          "canonical": "openai/gpt-5.6-sol"
         },
         {
-          "id": "gpt-5.6-terra"
+          "id": "gpt-5.6-terra",
+          "canonical": "openai/gpt-5.6-terra"
         }
       ],
       "transport": "chat-completions"
@@ -898,42 +931,51 @@
       "models": [
         {
           "id": "deepseek/deepseek-v4-flash",
-          "canonical": "deepseek-v4-flash"
+          "canonical": "deepseek/deepseek-v4-flash"
         },
         {
           "id": "deepseek/deepseek-v4-pro",
-          "canonical": "deepseek-v4-pro",
+          "canonical": "deepseek/deepseek-v4-pro",
           "default": true
         },
         {
           "id": "dots-studio/dots-3-note-preview:free"
         },
         {
-          "id": "minimax/minimax-m3"
+          "id": "minimax/minimax-m3",
+          "canonical": "minimax/MiniMax-M3"
         },
         {
-          "id": "qwen/qwen3.6-35b-a3b"
+          "id": "qwen/qwen3.6-35b-a3b",
+          "canonical": "alibaba/qwen3.6-35b-a3b"
         },
         {
-          "id": "qwen/qwen3.6-flash"
+          "id": "qwen/qwen3.6-flash",
+          "canonical": "alibaba/qwen3.6-flash"
         },
         {
-          "id": "qwen/qwen3.6-plus"
+          "id": "qwen/qwen3.6-plus",
+          "canonical": "alibaba/qwen3.6-plus"
         },
         {
-          "id": "qwen/qwen3.7-plus"
+          "id": "qwen/qwen3.7-plus",
+          "canonical": "alibaba/qwen3.7-plus"
         },
         {
-          "id": "qwen/qwen3.8-flash"
+          "id": "qwen/qwen3.8-flash",
+          "canonical": "alibaba/qwen3.8-flash"
         },
         {
-          "id": "z-ai/glm-5.2"
+          "id": "z-ai/glm-5.2",
+          "canonical": "zhipuai/glm-5.2"
         },
         {
-          "id": "z-ai/glm-5.3"
+          "id": "z-ai/glm-5.3",
+          "canonical": "zhipuai/glm-5.3"
         },
         {
-          "id": "z-ai/glm-5.3-flash"
+          "id": "z-ai/glm-5.3-flash",
+          "canonical": "zhipuai/glm-5.3-flash"
         }
       ],
       "transport": "chat-completions"
@@ -1035,11 +1077,11 @@
       "models": [
         {
           "id": "deepseek-ai/DeepSeek-V4-Flash",
-          "canonical": "deepseek-v4-flash"
+          "canonical": "deepseek/deepseek-v4-flash"
         },
         {
           "id": "deepseek-ai/DeepSeek-V4-Pro",
-          "canonical": "deepseek-v4-pro",
+          "canonical": "deepseek/deepseek-v4-pro",
           "default": true
         }
       ],
@@ -1089,10 +1131,12 @@
         },
         {
           "id": "step-3.7-flash",
+          "canonical": "stepfun/step-3.7-flash",
           "default": true
         },
         {
-          "id": "step-5-preview"
+          "id": "step-5-preview",
+          "canonical": "stepfun/step-5-preview"
         }
       ],
       "transport": "chat-completions"
@@ -1227,14 +1271,17 @@
           "id": "grok-4.3"
         },
         {
-          "id": "grok-4.5"
+          "id": "grok-4.5",
+          "canonical": "xai/grok-4.5"
         },
         {
           "id": "grok-4.6",
+          "canonical": "xai/grok-4.6",
           "default": true
         },
         {
-          "id": "grok-4.7"
+          "id": "grok-4.7",
+          "canonical": "xai/grok-4.7"
         }
       ],
       "transport": "chat-completions"
@@ -1300,17 +1347,21 @@
           "id": "GLM-5-Turbo"
         },
         {
-          "id": "GLM-5.2"
+          "id": "GLM-5.2",
+          "canonical": "zhipuai/glm-5.2"
         },
         {
           "id": "GLM-5.3",
+          "canonical": "zhipuai/glm-5.3",
           "default": true
         },
         {
-          "id": "GLM-5.3-Flash"
+          "id": "GLM-5.3-Flash",
+          "canonical": "zhipuai/glm-5.3-flash"
         },
         {
-          "id": "glm-5.1"
+          "id": "glm-5.1",
+          "canonical": "zhipuai/glm-5.1"
         }
       ],
       "transport": "chat-completions"

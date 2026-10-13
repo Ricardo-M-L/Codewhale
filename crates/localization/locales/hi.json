@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "अमान्य दर",
   "CostReasonCurrencyMissing": "इस मुद्रा की दर उपलब्ध नहीं",
   "CostReasonUsageConflict": "टोकन गणनाओं में विरोध",
+  "CostReasonUsageBreakdown": "टोकन उपयोग का विवरण उपलब्ध नहीं",
   "CostChipUnknown": "लागत: अज्ञात ({reasons})",
   "CostChipSubtotal": "उप-योग {amount} + अज्ञात ({reasons})",
   "CostChipSavedSubtotal": "सहेजा गया उप-योग {amount} + अज्ञात ({reasons})",

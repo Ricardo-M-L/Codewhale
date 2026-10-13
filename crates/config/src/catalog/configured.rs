@@ -53,6 +53,7 @@ impl ConfiguredModel {
             provider: self.provider.clone(),
             wire_model_id: self.id.clone(),
             endpoint_key: "chat".into(),
+            provider_api: Some(self.base_url.clone()),
             limit: self.limit.clone(),
             cost: self.cost.clone(),
             modalities: self.modalities.clone(),
@@ -187,7 +188,20 @@ fn deserialize_limit<'de, D: Deserializer<'de>>(d: D) -> Result<Option<ModelsDev
     deserialize_known(d, &["context", "input", "output"])
 }
 fn deserialize_cost<'de, D: Deserializer<'de>>(d: D) -> Result<Option<ModelsDevCost>, D::Error> {
-    deserialize_known(d, &["input", "output", "cache_read", "cache_write"])
+    deserialize_known(
+        d,
+        &[
+            "input",
+            "output",
+            "cache_read",
+            "cache_write",
+            "reasoning",
+            "input_audio",
+            "output_audio",
+            "tiers",
+            "context_over_200k",
+        ],
+    )
 }
 fn deserialize_modalities<'de, D: Deserializer<'de>>(
     d: D,

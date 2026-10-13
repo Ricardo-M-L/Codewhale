@@ -105,6 +105,11 @@ impl CommandDebugDiagnosticsContext for DebugDiagnosticsAdapter<'_> {
                     reasoning_tokens: rec.reasoning_tokens,
                     reasoning_replay_tokens: rec.reasoning_replay_tokens,
                     server_tool_use: None,
+
+                    input_audio_tokens: None,
+                    output_audio_tokens: None,
+
+                    request_usages: Vec::new(),
                 });
                 DebugCacheTurn {
                     provider: rec.provider.map(|provider| provider.as_str().to_string()),

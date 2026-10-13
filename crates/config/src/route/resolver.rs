@@ -610,6 +610,8 @@ impl RouteResolver {
             && matches!(provider_kind, ProviderKind::Deepseek | ProviderKind::Zai);
         let mut casefold_match = None;
         let mut casefold_ambiguous = false;
+        let mut suffix_match = None;
+        let mut suffix_ambiguous = false;
         for offering in &self.offerings {
             if offering.provider != *provider_id {
                 continue;
@@ -622,6 +624,30 @@ impl RouteResolver {
             if matches_canonical || matches_wire {
                 return Ok(ResolvedOffering::from_offering(offering));
             }
+            // Aggregator wire ids carry an org namespace (`deepseek/<id>`)
+            // while saved selectors and canonical joins use the bare logical
+            // id. A bare selector that uniquely names the last segment of
+            // one wire id owned by THIS provider resolves to that offering;
+            // ambiguity stays unmatched rather than guessing.
+            let wire_tail = offering
+                .wire_model_id
+                .as_str()
+                .rsplit('/')
+                .next()
+                .unwrap_or_default();
+            let canonical_tail = offering
+                .canonical_model
+                .as_ref()
+                .map(|model| model.as_str().rsplit('/').next().unwrap_or_default());
+            if !raw.contains('/') && (wire_tail == raw || canonical_tail == Some(raw)) {
+                match suffix_match {
+                    None => suffix_match = Some(offering),
+                    Some(first) if first.wire_model_id != offering.wire_model_id => {
+                        suffix_ambiguous = true;
+                    }
+                    Some(_) => {}
+                }
+            }
             if allow_casefold_wire_match
                 && offering.wire_model_id.as_str().eq_ignore_ascii_case(raw)
             {
@@ -631,6 +657,9 @@ impl RouteResolver {
                     casefold_match = Some(offering);
                 }
             }
+        }
+        if !suffix_ambiguous && let Some(offering) = suffix_match {
+            return Ok(ResolvedOffering::from_offering(offering));
         }
         if !casefold_ambiguous && let Some(offering) = casefold_match {
             return Ok(ResolvedOffering::from_offering(offering));

@@ -2412,6 +2412,7 @@
   "CostReasonInvalidRate": "tarifa invàlida",
   "CostReasonCurrencyMissing": "tarifa en aquesta moneda no disponible",
   "CostReasonUsageConflict": "recomptes de tokens contradictoris",
+  "CostReasonUsageBreakdown": "desglossament de tokens no disponible",
   "CostChipUnknown": "cost: desconegut ({reasons})",
   "CostChipSubtotal": "subtotal {amount} + desconegut ({reasons})",
   "CostChipSavedSubtotal": "subtotal desat {amount} + desconegut ({reasons})",

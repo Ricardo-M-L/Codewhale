@@ -1218,7 +1218,8 @@ impl CatalogCompiler {
             .chain(self.overrides)
         {
             if let Some(lower) = merged.get(&row.merge_key()) {
-                row.complete_from(lower, None);
+                let base_url = row.provider_api.clone();
+                row.complete_from(lower, base_url.as_deref());
             }
             merged.insert(row.merge_key(), row);
         }

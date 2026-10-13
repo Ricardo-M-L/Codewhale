@@ -130,7 +130,12 @@ impl CodewhaleClient {
         // gateways (#4978, e.g. Sensenova) only accept the documented
         // enabled/disabled/auto thinking types, so non-native routes get the
         // portable `{"type":"enabled","budget_tokens":N}` shape instead.
-        let thinking_capable = codewhale_models::model_supports_reasoning(&model);
+        let thinking_capable = self
+            .route_facts
+            .as_ref()
+            .filter(|facts| facts.wire_model_id == request.model)
+            .and_then(|facts| facts.reasoning)
+            .unwrap_or_else(|| codewhale_models::model_supports_reasoning(&model));
         let is_minimax_provider = self.api_provider == ProviderKind::MinimaxAnthropic;
         let is_minimax = crate::config::is_exact_minimax_anthropic_m3_route(
             self.api_provider,
@@ -190,9 +195,36 @@ impl CodewhaleClient {
                 body["thinking"] = json!({ "type": "adaptive" });
             }
             _ if thinking_capable => {
-                if let Some(budget) = compat_thinking_budget(effort.as_deref(), request.max_tokens)
+                if let Some(mut budget) =
+                    compat_thinking_budget(effort.as_deref(), request.max_tokens)
                 {
-                    body["thinking"] = json!({ "type": "enabled", "budget_tokens": budget });
+                    let mut minimum = u64::from(MIN_THINKING_BUDGET_TOKENS);
+                    if let Some(facts) = self
+                        .route_facts
+                        .as_ref()
+                        .filter(|facts| facts.wire_model_id == request.model)
+                    {
+                        if let Some(option) = facts.reasoning_options.iter().find(|option| {
+                            matches!(
+                                option.get("type").and_then(Value::as_str),
+                                Some("budget" | "budget_tokens")
+                            )
+                        }) {
+                            minimum = option.get("min").and_then(Value::as_u64).unwrap_or(minimum);
+                            let maximum = option
+                                .get("max")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(u64::from(request.max_tokens.saturating_sub(1)));
+                            budget = budget.min(u32::try_from(maximum).unwrap_or(u32::MAX));
+                        }
+                    }
+                    if u64::from(budget) >= minimum {
+                        body["thinking"] = json!({ "type": "enabled", "budget_tokens": budget });
+                    } else {
+                        tracing::warn!(
+                            "The output allowance cannot represent the offering's minimum reasoning budget; thinking was omitted"
+                        );
+                    }
                 }
             }
             _ => {}
@@ -1007,6 +1039,11 @@ fn parse_anthropic_usage(usage: &Value) -> Usage {
         reasoning_tokens: None,
         reasoning_replay_tokens: None,
         server_tool_use: None,
+
+        input_audio_tokens: None,
+        output_audio_tokens: None,
+
+        request_usages: Vec::new(),
     }
 }
 

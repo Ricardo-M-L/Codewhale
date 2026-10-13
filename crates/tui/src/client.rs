@@ -332,6 +332,7 @@ pub struct CodewhaleClient {
     /// they must not reconstruct output caps with `None` and discard a custom
     /// route's context window.
     route_limits: Option<RouteLimits>,
+    route_facts: Option<Arc<codewhale_config::catalog::CatalogOffering>>,
     /// Verified ChatGPT subject captured with Codewhale's own selected grant.
     pub(super) codex_account_id: Option<String>,
     /// Opaque reasoning is bound to this verified grant identity, stable across
@@ -668,6 +669,7 @@ impl Clone for CodewhaleClient {
             billing_mode: self.billing_mode,
             configured_models: Arc::clone(&self.configured_models),
             route_limits: self.route_limits,
+            route_facts: self.route_facts.clone(),
             codex_account_id: self.codex_account_id.clone(),
             chatgpt_reasoning_api: self.chatgpt_reasoning_api.clone(),
             wire_format: self.wire_format,
@@ -1889,6 +1891,14 @@ impl CodewhaleClient {
         }
         .build()?;
 
+        let route_facts = crate::provider_lake::configured_catalog_offering_for_route(
+            config,
+            api_provider,
+            admitted_identity.key.as_str(),
+            &base_url,
+            &default_model,
+        )
+        .map(Arc::new);
         let catalog_error_secret_values = Arc::new(catalog_error_secret_values(
             &api_key,
             &http_headers,
@@ -1916,6 +1926,7 @@ impl CodewhaleClient {
             billing_mode,
             configured_models: Arc::new(config.custom_models.clone().unwrap_or_default()),
             route_limits,
+            route_facts,
             codex_account_id,
             chatgpt_reasoning_api,
             wire_format,
@@ -2907,6 +2918,98 @@ impl CodewhaleClient {
         let (request, request_route_limits) =
             self.bind_request_to_protocol(self.prepare_model_bound_request(request))?;
         let mut request = clamp_output_cap(request, request_route_limits);
+        let facts = if request.model == self.default_model {
+            self.route_facts.clone()
+        } else {
+            crate::provider_lake::catalog_offering_for_route(
+                self.api_provider,
+                self.admitted_identity.key.as_str(),
+                &self.base_url,
+                &request.model,
+            )
+            .map(Arc::new)
+        };
+        if let Some(facts) = facts.as_deref() {
+            if facts.temperature == Some(false) {
+                request.temperature = None;
+                request.top_p = None;
+            }
+            if facts.tool_call == Some(false)
+                && request
+                    .tools
+                    .as_ref()
+                    .is_some_and(|tools| !tools.is_empty())
+            {
+                anyhow::bail!("The selected provider offering does not support tool calls");
+            }
+            if codewhale_config::models_dev::image_input_support(facts.modalities.as_ref())
+                == codewhale_config::route::CapabilityState::Unsupported
+                && request
+                    .messages
+                    .iter()
+                    .flat_map(|message| &message.content)
+                    .any(|block| matches!(block, ContentBlock::ImageUrl { .. }))
+            {
+                anyhow::bail!("The selected provider offering does not support image input");
+            }
+            if facts.reasoning == Some(false) {
+                request.reasoning_effort = None;
+                request.thinking = None;
+            } else {
+                for option in &facts.reasoning_options {
+                    if option.get("type").and_then(Value::as_str) != Some("effort") {
+                        continue;
+                    }
+                    if request
+                        .reasoning_effort
+                        .as_deref()
+                        .is_some_and(|effort| matches!(effort, "auto" | "default"))
+                    {
+                        request.reasoning_effort = option
+                            .get("default")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                    }
+                    let wire_effort = if matches!(self.wire_format, WireFormat::ChatCompletions) {
+                        request.reasoning_effort.as_deref().and_then(|effort| {
+                            let provider = self.chat_shape_provider(&request.model);
+                            let model = crate::config::wire_model_for_provider_route(
+                                provider,
+                                &self.base_url,
+                                &request.model,
+                            );
+                            let mut body = json!({ "model": model });
+                            chat::apply_route_reasoning_controls(
+                                &mut body,
+                                provider,
+                                &self.base_url,
+                                &model,
+                                Some(effort),
+                            );
+                            body.get("reasoning_effort")
+                                .or_else(|| body.pointer("/reasoning/effort"))
+                                .and_then(Value::as_str)
+                                .map(str::to_string)
+                        })
+                    } else {
+                        request.reasoning_effort.clone()
+                    };
+                    if let Some(effort) = wire_effort.as_deref()
+                        && let Some(values) = option.get("values").and_then(Value::as_array)
+                        && !values.iter().any(|value| value.as_str() == Some(effort))
+                        && !(matches!(effort, "off" | "disabled" | "false")
+                            && (values.iter().any(|value| value.as_str() == Some("none"))
+                                || facts.reasoning_options.iter().any(|option| {
+                                    option.get("type").and_then(Value::as_str) == Some("toggle")
+                                })))
+                    {
+                        anyhow::bail!(
+                            "The selected provider offering does not support the configured reasoning effort; inspect model details and choose a published value"
+                        );
+                    }
+                }
+            }
+        }
         let declared_wire_model = self.declared_wire_model(&request.model).map(str::to_string);
         if self.is_local_ds4_model(&request.model)
             && let Some(tools) = request.tools.as_mut()
