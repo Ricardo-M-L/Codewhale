@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "253d29b798ab2194172144bb0254fd0572105ebcac4a772e3da07c063c20fc69"
+    "sha256": "f743040315781deb470abe1e6911d69cdfe2513a56eec1b01699e9e2813c49c4"
   },
   "features": [
     {
@@ -758,7 +758,7 @@
       "surfaces": {
         "tui": "preview"
       },
-      "since": "unreleased",
+      "since": "0.10.2",
       "flag": null,
       "docs": null,
       "registryLine": 577
@@ -890,7 +890,7 @@
         "api": "partial",
         "web": "none"
       },
-      "since": "unreleased",
+      "since": "0.10.1",
       "flag": null,
       "docs": "docs/PROVIDERS.md#sign-in-with-chatgpt",
       "registryLine": 663
@@ -905,7 +905,7 @@
         "api": "partial",
         "web": "none"
       },
-      "since": "unreleased",
+      "since": "0.10.2",
       "flag": null,
       "docs": "docs/PROVIDERS.md#sign-in-with-claude",
       "registryLine": 673
@@ -920,7 +920,7 @@
         "api": "partial",
         "web": "none"
       },
-      "since": "unreleased",
+      "since": "0.10.1",
       "flag": null,
       "docs": "docs/PLUGIN_PROVIDERS.md",
       "registryLine": 683
@@ -935,7 +935,7 @@
         "api": "none",
         "web": "none"
       },
-      "since": "unreleased",
+      "since": "0.10.1",
       "flag": null,
       "docs": "docs/PROVIDERS.md",
       "registryLine": 693
@@ -964,7 +964,7 @@
         "tui": "preview",
         "api": "preview"
       },
-      "since": "unreleased",
+      "since": "0.10.1",
       "flag": null,
       "docs": "docs/RUNTIME_API.md#profile-constitution",
       "registryLine": 714
@@ -977,7 +977,7 @@
       "surfaces": {
         "tui": "preview"
       },
-      "since": "unreleased",
+      "since": "0.10.2",
       "flag": null,
       "docs": "docs/PLUGINS.md",
       "registryLine": 724

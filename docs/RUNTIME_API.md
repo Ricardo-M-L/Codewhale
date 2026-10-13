@@ -1403,8 +1403,11 @@ emits `approval.grant_added` with `{ "grant": { "grant_id", "tool_name",
 revokes one (emitting `approval.grant_revoked`); the next matching call
 prompts again. Archiving or deleting the thread ends all of its grants
 (archiving emits `approval.grant_revoked` for each; unarchiving does not
-restore them). Grants live in memory for the Runtime process: a restart
-forgets them, and a forced (non-bypassable) prompt is never answered by one.
+restore them). Grants are stored in the Runtime data directory
+(`approval_grants.json`). After a Runtime restart a thread's grants stay
+suspended, and matching calls prompt again, until an authenticated client
+resumes the thread. A grant store that cannot be read holds no grants, so every
+call prompts. A forced (non-bypassable) prompt is never answered by a grant.
 
 **User input**
 - `POST /v1/user-input/{thread_id}/{input_id}` with body

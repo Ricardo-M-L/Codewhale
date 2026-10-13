@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.10.2] - 2026-10-10
+## [0.10.2] - 2026-10-13
 
 - Model lists, resolution, picker controls and Runtime facts use the same
   endpoint-scoped catalog facts. Cost estimates preserve complete price tiers,
@@ -227,6 +227,25 @@ launcher guidance.
   `CODEWHALE_TELEMETRY_SURFACE`, including `vscode-extension`. This changes the
   session label while preserving collection settings and opt-outs
   ([#6916](https://github.com/codewhale-hq/Codewhale/pull/6916)).
+- `codewhale account computers files` saves a Computer's workspace file (up to
+  16 MiB) to account storage, lists its versions, and restores (up to 4 MiB)
+  or downloads one. Restoring over an existing file needs its current
+  `--expected-revision`; a download verifies size and SHA-256 and never
+  overwrites a local file. `codewhale account computers delete` now asks for
+  `--discard-files`. This is experimental.
+- Runtime API: `GET /v1/goals` lists goal records across threads, newest
+  update first, with `status` and cursor paging. Goals whose thread no longer
+  exists are left out, and a cursor issued under a different `status` is `400`.
+- Runtime API: `GET /v1/approvals` rows add a redacted `target` (a URL's host
+  or a workspace path) and a one-line `summary`, plus `standing_rule` (`allow`
+  or `deny`) when a remembered rule or grant answered instead of a person. A
+  shell command keeps only its program name and plain arguments. Rows recorded
+  earlier omit these fields.
+- Runtime API: automations carry a `revision`. `PATCH`, `run`, `pause` and
+  `resume` accept `expected_revision` and answer `409` `revision_conflict` on a
+  mismatch. Create and those four accept an `Idempotency-Key`; a retry replays
+  the first success instead of creating or running twice. `DELETE` honors
+  neither. Clients check `capabilities.automation_mutation_preconditions`.
 
 ### Changed
 
@@ -291,6 +310,18 @@ launcher guidance.
   this package" now lists the skipped rows, each with its package and reason,
   and the Native composition refusal names the unresolved rows. Both name at
   most five rows and count the rest.
+- Full Access runs the calls it grants. The built-in Auto-Review floor
+  (publish-like commands, destructive background or headless work, and the
+  Windows npm-launcher hold) applies only in Ask, Auto-Review and Never, and no
+  longer blocks a call under Full Access, including a detached agent's.
+- `file_search` is one of the model's default tools from the first turn
+  instead of being loaded through `tool_search`
+  ([#6934](https://github.com/codewhale-hq/Codewhale/issues/6934)).
+- Runtime session grants (`"remember": true`) are stored in the Runtime data
+  directory instead of memory. After a restart a thread's grants stay
+  suspended, and matching calls ask again, until an authenticated client
+  resumes the thread. A grant store that cannot be read holds no grants, so
+  every call asks.
 
 ### Fixed
 
@@ -446,6 +477,26 @@ launcher guidance.
   a reused process ID, or a publication from another user, store or config
   is still refused
   ([#6915](https://github.com/codewhale-hq/Codewhale/issues/6915)).
+- `/network allow <host>` and `/network deny <host>` take effect on the next
+  tool call without a restart
+  ([#6928](https://github.com/codewhale-hq/Codewhale/pull/6928)). Under a
+  managed `[network]` overlay or a Fleet `network_access = false`, editing your
+  own `[network]` table cannot widen the policy: a denial from either layer
+  stands, a deny-by-default authority keeps its own allow list, proxy and
+  fake-IP exceptions, a prompt-by-default authority adds your hosts to its own,
+  and audit logging stays on if either layer asks for it.
+- A workflow's final receipt is no longer dropped when its completion inbox is
+  full, and each agent's queue of messages to its parent holds at most 64; a
+  send past that returns an error instead of growing without bound
+  ([#6560](https://github.com/codewhale-hq/Codewhale/issues/6560)).
+- `cargo +<toolchain> build`, `scripts/dev-test.sh` and `scripts/dev-cargo.sh`,
+  also through a wrapper, count as heavy commands for resource admission
+  ([#6560](https://github.com/codewhale-hq/Codewhale/issues/6560)).
+- Sub-agent state is written atomically, with the file and its directory
+  flushed before the rename
+  ([#6555](https://github.com/codewhale-hq/Codewhale/issues/6555)), and image
+  search reads its seed and result bodies through the size cap
+  ([#6554](https://github.com/codewhale-hq/Codewhale/issues/6554)).
 
 ### Known limits
 
@@ -459,6 +510,13 @@ launcher guidance.
   be changed inside the `F5` inspector. The browser studio and the macOS
   window are not views in the cycle, and `Ctrl+]` cannot open the work bar
   while the pet main view is showing.
+- Computer Use is a preview. Its observation diffs, fresh element targets and
+  named action batches were checked against a macOS fixture app only;
+  packaged installs, installed-model use and sharing the desktop with a person
+  working at the same time have not been qualified.
+- The `GET /v1/approvals` `target` and `summary` redaction is heuristic: a
+  secret passed as a plain word argument is not recognized, so treat approval
+  history as sensitive.
 
 ### Maintenance
 
