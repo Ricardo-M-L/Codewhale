@@ -2327,6 +2327,27 @@ pub(crate) async fn run_event_loop(
         // #1830/#2317: service any already-arrived terminal keys before a
         // potentially long engine batch so composer/modal input stays live.
         collect_pending_terminal_events(&terminal_input, &mut pending_terminal_events)?;
+        if !event_broker.is_paused()
+            && let Some(from_picker) = app.pending_claude_login.take()
+        {
+            let switched = run_claude_login_from_tui(
+                terminal,
+                app,
+                &mut engine_handle,
+                config,
+                &terminal_input,
+                &mut pending_terminal_events,
+            )
+            .await?;
+            if from_picker {
+                complete_provider_picker_onboarding_if_switched(
+                    app,
+                    ProviderKind::Anthropic,
+                    switched,
+                );
+            }
+            force_terminal_repaint = true;
+        }
         app.maybe_poll_plugin_catalog_idle();
 
         if drain_remote_control_events(app, config, &engine_handle).await? {
@@ -7517,21 +7538,34 @@ pub(crate) async fn run_claude_login_from_tui(
     app: &mut App,
     engine_handle: &mut EngineHandle,
     config: &mut Config,
+    terminal_input: &TerminalInputPump,
+    pending_terminal_events: &mut VecDeque<ObservedTerminalEvent>,
 ) -> Result<bool> {
-    pause_terminal(
+    terminal_input.pause_for_child_terminal().await?;
+    let handoff = prepare_terminal_input_handoff(terminal_input, pending_terminal_events);
+    if !matches!(handoff, Ok(true)) {
+        terminal_input.resume_after_child_terminal();
+        return handoff.map(|_| false).map_err(Into::into);
+    }
+    let result = match pause_terminal(
         terminal,
         app.use_alt_screen(),
         app.use_mouse_capture,
         app.use_bracketed_paste,
-    )?;
-    let result = crate::oauth::login(crate::oauth::OAuthProvider::Claude).await;
-    resume_terminal(
+    ) {
+        Ok(()) => crate::oauth::login(crate::oauth::OAuthProvider::Claude).await,
+        Err(error) => Err(error),
+    };
+    let restored = resume_terminal(
         terminal,
         app.use_alt_screen(),
         app.use_mouse_capture,
         app.use_bracketed_paste,
         app.synchronized_output_enabled,
-    )?;
+    );
+    terminal_input.resume_after_child_terminal();
+    app.needs_redraw = true;
+    restored?;
     let switched = match result {
         Ok(pending) => {
             apply_codewhale_owned_login(

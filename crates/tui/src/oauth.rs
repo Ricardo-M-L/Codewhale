@@ -1428,13 +1428,14 @@ async fn claude_login() -> Result<PendingOAuthLogin> {
     tokio::task::spawn_blocking(move || {
         let params = &CLAUDE_OAUTH_PARAMS;
         let pkce = generate_pkce();
+        let expected_state = generate_state();
         let redirect = "https://console.anthropic.com/oauth/code/callback";
         let mut url = reqwest::Url::parse("https://claude.ai/oauth/authorize")?;
         url.query_pairs_mut().extend_pairs([
             ("code", "true"), ("client_id", params.default_client_id),
             ("response_type", "code"), ("redirect_uri", redirect),
             ("scope", params.default_scopes), ("code_challenge", pkce.challenge.as_str()),
-            ("code_challenge_method", "S256"), ("state", pkce.verifier.as_str()),
+            ("code_challenge_method", "S256"), ("state", expected_state.as_str()),
         ]);
         writeln!(output, "Open this URL to sign in with Claude:\n{url}\nPaste the authorization code (code#state):")?;
         output.flush()?;
@@ -1446,7 +1447,7 @@ async fn claude_login() -> Result<PendingOAuthLogin> {
         anyhow::ensure!(input.len() <= 8192, "Claude authorization code is too long");
         let (code, state) = input.trim().split_once('#').context("Expected Claude authorization code#state")?;
         anyhow::ensure!(!code.is_empty() && !code.chars().any(char::is_control)
-            && codewhale_core::secret_eq::constant_time_eq(state.as_bytes(), pkce.verifier.as_bytes()),
+            && codewhale_core::secret_eq::constant_time_eq(state.as_bytes(), expected_state.as_bytes()),
             "Claude authorization state did not match the pending login");
         let (status, body) = ReqwestOAuthFormClient.post_form(
             &form_token_url(params, params.default_issuer), &[

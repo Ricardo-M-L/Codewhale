@@ -2477,7 +2477,7 @@ async fn apply_command_result_inner(
                     run_xai_device_login_from_tui(terminal, app, engine_handle, config).await?;
             }
             AppAction::StartClaudeLogin => {
-                let _ = run_claude_login_from_tui(terminal, app, engine_handle, config).await?;
+                app.pending_claude_login = Some(false);
             }
             AppAction::StartClaudeRevoke => {
                 let path = app.config_path.clone();
