@@ -47,6 +47,7 @@ exclude = [
   "assets/mark-*.png",
   "assets/skills-catalog-matrix.json",
   "extension-host/test/**",
+  "extension-host/node_modules/**",
   "extension-host/build.mjs",
   "extension-host/compile-host.mjs",
   "extension-host/package-lock.json",
