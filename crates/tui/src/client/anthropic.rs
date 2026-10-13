@@ -203,20 +203,19 @@ impl CodewhaleClient {
                         .route_facts
                         .as_ref()
                         .filter(|facts| facts.wire_model_id == request.model)
-                    {
-                        if let Some(option) = facts.reasoning_options.iter().find(|option| {
+                        && let Some(option) = facts.reasoning_options.iter().find(|option| {
                             matches!(
                                 option.get("type").and_then(Value::as_str),
                                 Some("budget" | "budget_tokens")
                             )
-                        }) {
-                            minimum = option.get("min").and_then(Value::as_u64).unwrap_or(minimum);
-                            let maximum = option
-                                .get("max")
-                                .and_then(Value::as_u64)
-                                .unwrap_or(u64::from(request.max_tokens.saturating_sub(1)));
-                            budget = budget.min(u32::try_from(maximum).unwrap_or(u32::MAX));
-                        }
+                        })
+                    {
+                        minimum = option.get("min").and_then(Value::as_u64).unwrap_or(minimum);
+                        let maximum = option
+                            .get("max")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(u64::from(request.max_tokens.saturating_sub(1)));
+                        budget = budget.min(u32::try_from(maximum).unwrap_or(u32::MAX));
                     }
                     if u64::from(budget) >= minimum {
                         body["thinking"] = json!({ "type": "enabled", "budget_tokens": budget });

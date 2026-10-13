@@ -10649,7 +10649,7 @@ fn provider_model_entry_for_api(
         crate::route_runtime::resolve_runtime_route_for_identity(config, identity, Some(&entry.id))
             .ok();
     if let Some(offering) = offering.as_ref() {
-        let pricing = codewhale_config::pricing::OfferingPricing::from_catalog_offering(&offering);
+        let pricing = codewhale_config::pricing::OfferingPricing::from_catalog_offering(offering);
         entry.facts = Some(serde_json::json!({
             "wire_model_id": offering.wire_model_id,
             "canonical_model_id": offering.canonical_model,
