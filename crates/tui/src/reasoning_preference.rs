@@ -286,6 +286,12 @@ impl ReasoningEffort {
         if let Some(offering) = Self::offering_for_reasoning(provider, base_url, wire_model)
             && let Some(values) = Self::catalog_effort_values_for_offering(&offering)
         {
+            if normalized == Self::Off
+                && provider != ProviderKind::Custom
+                && !codewhale_config::provider_base_url_is_official(provider, base_url)
+            {
+                return Self::Off;
+            }
             return Self::clamp_to_catalog_efforts(
                 normalized,
                 Self::catalog_default_for_offering(&offering),
