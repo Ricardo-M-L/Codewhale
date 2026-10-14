@@ -6312,7 +6312,7 @@ async fn legacy_sse_closed_stream_reports_unknown_outcome_and_reconnects_without
     // tests do, so this server is always reached directly.
     let _env = crate::test_support::lock_test_env();
     let _lock = lock_mcp_loopback_tests().await;
-    let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+    let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let active_sse = Arc::new(Mutex::new(None::<mpsc::UnboundedSender<Option<String>>>));
@@ -6512,7 +6512,7 @@ async fn fallback_sse_stream_closed_while_idle_reconnects_before_dispatch() {
 
     let _env = crate::test_support::lock_test_env();
     let _lock = lock_mcp_loopback_tests().await;
-    let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+    let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let active_sse = Arc::new(Mutex::new(None::<mpsc::UnboundedSender<Option<String>>>));
@@ -6743,7 +6743,7 @@ async fn custom_headers_applied_to_get_preflight() {
     // The fixture client honors an operator-configured proxy; pin loopback
     // out of any ambient proxy so a concurrent proxy-configuring test can
     // never route this GET away from the fixture server.
-    let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+    let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     // The test signals success by writing to this flag — the GET handler

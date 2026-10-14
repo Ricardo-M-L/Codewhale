@@ -4286,7 +4286,7 @@ async fn turn_operation_lookup_is_authenticated_read_only_and_survives_restart()
     let workspace = dir.path().join("workspace");
     let token = "turn-lookup-local-fixture";
     let _backend = EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
-    let _proxy = EnvVarGuard::set("NO_PROXY", "*");
+    let _proxy = EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
     let (addr, manager, server) = spawn_test_server_with_root_token_mobile_workspace(
         root.clone(),
         sessions.clone(),
@@ -19482,7 +19482,7 @@ async fn native_notification_replay_rechecks_requests_settled_during_the_read() 
     let temp = tempfile::tempdir()?;
     let _home = EnvVarGuard::set("CODEWHALE_HOME", temp.path().join("home"));
     let _backend = EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
-    let _proxy = EnvVarGuard::set("NO_PROXY", "*");
+    let _proxy = EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
     let path = temp.path().join("config.toml");
     fs::write(
         &path,

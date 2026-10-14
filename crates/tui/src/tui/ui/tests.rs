@@ -3176,7 +3176,7 @@ async fn mcp_login_stalled_discovery_is_cancellable_and_repeat_clicks_keep_one_o
     let temp = tempfile::tempdir().unwrap();
     let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", temp.path());
     let _backend = crate::test_support::EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "file");
-    let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+    let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let mut app = create_test_app();
     app.workspace = temp.path().to_path_buf();
@@ -20241,7 +20241,7 @@ async fn redaction_confirmation_restores_history_before_first_local_provider_req
     let _lock = lock_test_env();
     let temp = tempfile::tempdir().unwrap();
     let _home = EnvVarGuard::set("CODEWHALE_HOME", temp.path());
-    let _proxy = EnvVarGuard::set("NO_PROXY", "*");
+    let _proxy = EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
     let server = MockServer::builder()
         .body_print_limit(wiremock::BodyPrintLimit::Limited(0))
         .start()

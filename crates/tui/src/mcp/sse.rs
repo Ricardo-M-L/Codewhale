@@ -404,7 +404,7 @@ mod endpoint_tests {
     async fn event_stream_outlives_the_request_read_timeout() {
         use crate::mcp::McpTransport as _;
         let _env = crate::test_support::lock_test_env();
-        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         // A quiet stream for longer than read_timeout is healthy, not dead.
         let url = serve_sse_stream(
             vec![(
@@ -427,7 +427,7 @@ mod endpoint_tests {
     async fn closed_event_stream_reads_as_dead() {
         use crate::mcp::McpTransport as _;
         let _env = crate::test_support::lock_test_env();
-        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         let url = serve_sse_stream(Vec::new(), true).await;
         let transport = connect_with_read_timeout(url, Duration::from_secs(5)).await;
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);

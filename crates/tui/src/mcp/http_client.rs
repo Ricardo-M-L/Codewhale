@@ -836,7 +836,7 @@ mod tests {
     #[tokio::test]
     async fn loopback_mcp_credentials_keep_live_auth_and_protocol_framing() {
         let _env = crate::test_support::lock_test_env();
-        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         crate::tls::ensure_rustls_crypto_provider();
         let _token =
             crate::test_support::EnvVarGuard::set("CODEWHALE_TEST_MCP_TLS_BEARER", "fixture-token");
@@ -880,7 +880,7 @@ mod tests {
     #[tokio::test]
     async fn oauth_form_credentials_refuse_http_redirect_before_destination_resolution() {
         let _env = crate::test_support::lock_test_env();
-        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         crate::tls::ensure_rustls_crypto_provider();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/token", listener.local_addr().unwrap());
@@ -950,7 +950,7 @@ mod tests {
     #[tokio::test]
     async fn shared_guard_rechecks_same_origin_redirect_before_any_second_write() {
         let _env = crate::test_support::lock_test_env();
-        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/mcp", listener.local_addr().unwrap());
         let server = tokio::spawn(async move {
@@ -1037,7 +1037,7 @@ mod tests {
     #[tokio::test]
     async fn operator_origin_remains_usable_but_does_not_authorize_private_redirects() {
         let _env = crate::test_support::lock_test_env();
-        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         let destination = TcpListener::bind("127.0.0.1:0").await.unwrap();
         for status in [301, 302, 303, 307, 308] {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1070,7 +1070,7 @@ mod tests {
     #[tokio::test]
     async fn redirect_stop_returns_response_without_following_even_same_origin() {
         let _env = crate::test_support::lock_test_env();
-        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let url = format!("http://{addr}/token");
@@ -1409,7 +1409,7 @@ mod tests {
     #[tokio::test]
     async fn raw_oauth_execute_does_not_inherit_bound_mcp_credentials() {
         let _env = crate::test_support::lock_test_env();
-        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*");
+        let _no_proxy = crate::test_support::EnvVarGuard::set("NO_PROXY", "*,127.0.0.1");
         crate::tls::ensure_rustls_crypto_provider();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
