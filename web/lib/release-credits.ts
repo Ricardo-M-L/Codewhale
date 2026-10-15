@@ -36,6 +36,7 @@ export const RELEASE_CONTRIBUTORS: string[] = [
  */
 export const UNRELEASED_CONTRIBUTORS: string[] = [
   "@aboimpinto",
+  "@printf033",
 ];
 
 /**
