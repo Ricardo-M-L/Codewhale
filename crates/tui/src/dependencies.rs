@@ -350,10 +350,10 @@ pub fn resolve_pandoc() -> Option<String> {
 
 /// Whether an optional tool whose backend lives on this host (an interpreter,
 /// a converter, an OCR engine) is available: `probe` decides, except that a
-/// conformance replay answers with the recorded host's set so goldens do not
+/// test fixture answers with the recorded host's set so results do not
 /// depend on what the machine running them has installed (test builds only).
 pub(crate) fn host_tool_available(tool: &str, probe: impl FnOnce() -> bool) -> bool {
-    #[cfg(all(test, unix))]
+    #[cfg(test)]
     if let Some(available) = RECORDED_HOST_TOOLS.with(|cell| {
         cell.borrow()
             .as_ref()
@@ -361,13 +361,13 @@ pub(crate) fn host_tool_available(tool: &str, probe: impl FnOnce() -> bool) -> b
     }) {
         return available;
     }
-    // Only a conformance replay reads the name.
-    #[cfg(not(all(test, unix)))]
+    // Only test fixtures read the name.
+    #[cfg(not(test))]
     let _ = tool;
     probe()
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 thread_local! {
     static RECORDED_HOST_TOOLS: std::cell::RefCell<Option<Vec<String>>> =
         const { std::cell::RefCell::new(None) };
@@ -375,16 +375,16 @@ thread_local! {
 
 /// Pin [`host_tool_available`] on this thread to a recorded host's tools until
 /// the guard drops.
-#[cfg(all(test, unix))]
+#[cfg(test)]
 pub(crate) fn pin_recorded_host_tools(tools: Vec<String>) -> RecordedHostToolsGuard {
     RECORDED_HOST_TOOLS.with(|cell| *cell.borrow_mut() = Some(tools));
     RecordedHostToolsGuard
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 pub(crate) struct RecordedHostToolsGuard;
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 impl Drop for RecordedHostToolsGuard {
     fn drop(&mut self) {
         RECORDED_HOST_TOOLS.with(|cell| *cell.borrow_mut() = None);

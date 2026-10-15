@@ -451,17 +451,18 @@ async fn measure_production_mode_tool_catalogs() -> serde_json::Value {
     let _userprofile = EnvVarGuard::set("USERPROFILE", &home);
     let _codewhale_home = EnvVarGuard::set("CODEWHALE_HOME", home.join(".codewhale"));
     // Interpreter-backed advanced tools are intentionally excluded from this
-    // cross-platform built-in profile. The production planner still owns that
-    // decision; a deliberately nonexistent PATH root makes its real dependency
-    // probes return absent without inheriting the developer or CI host.
+    // cross-platform built-in profile. Pin host capabilities because Windows
+    // system-directory lookup can find interpreters outside PATH. Keep the
+    // nonexistent PATH root for the canonical shell spelling below.
+    let _host_tools = crate::dependencies::pin_recorded_host_tools(Vec::new());
     let _path = EnvVarGuard::set("PATH", tmp.path().join("no-host-interpreters"));
     // Shell syntax is part of the tool schema. A bare name plus the empty
     // PATH resolves to the same `bash` spelling on Unix and Windows without
     // executing or requiring that interpreter. Do not inherit the host shell.
     let _shell = EnvVarGuard::set("SHELL", "bash");
-    // The macOS Vision OCR probe is a framework check that ignores PATH, so
-    // the profile neutralizes it explicitly: every host presents no local OCR
-    // capability here, matching the no-host-interpreters PATH pin above.
+    // Keep the explicit OCR-unavailable environment for framework probes that
+    // ignore PATH; the host capability pin above also excludes local OCR from
+    // this profile.
     let _ocr = EnvVarGuard::set("CODEWHALE_LOCAL_OCR_UNAVAILABLE", "1");
 
     let api_config = Config {
