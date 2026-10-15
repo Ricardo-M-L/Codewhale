@@ -28,19 +28,14 @@ changelog or release notes, and this contributor record.
 ## Contributors by time
 
 <details open>
-<summary><strong>Unreleased</strong></summary>
-
-**Merged or adapted contributions**
-
-- **[printf033](https://github.com/printf033)** — confined-file I/O on Android/Termux: SELinux-denied `open("/", O_RDONLY|O_DIRECTORY)` anchor replaced with an `O_PATH` walk (Linux-cfg-gated) plus a re-materialized final parent, restoring journal, compaction and artifact writes in search-only SELinux domains ([#6983](https://github.com/codewhale-hq/Codewhale/pull/6983)), with the diagnosis and on-device reproducer in [#6980](https://github.com/codewhale-hq/Codewhale/issues/6980).
-
-</details>
-
-<details open>
 <summary><strong>v0.10.2 — terminal, recovery and reliability</strong></summary>
 
 **Contributions**
 
+- **[shenjackyuanjie](https://github.com/shenjackyuanjie)** — diagnosed and fixed the Windows OpenHarmony CMake generator and CLI hashing-module build failures ([#6988](https://github.com/codewhale-hq/Codewhale/issues/6988), [#6989](https://github.com/codewhale-hq/Codewhale/pull/6989)).
+- **[printf033](https://github.com/printf033)** — confined-file I/O on Android/Termux: SELinux-denied `open("/", O_RDONLY|O_DIRECTORY)` anchor replaced with an `O_PATH` walk (Linux-cfg-gated) plus a re-materialized final parent, restoring journal, compaction and artifact writes in search-only SELinux domains ([#6983](https://github.com/codewhale-hq/Codewhale/pull/6983)), with the diagnosis and on-device reproducer in [#6980](https://github.com/codewhale-hq/Codewhale/issues/6980). Source change; compiled Android and device acceptance remain unqualified.
+- **[Paulo Aboim Pinto / aboimpinto](https://github.com/aboimpinto)** — moved config-command parsing and replies onto portable contracts while the host retains effects ([#6973](https://github.com/codewhale-hq/Codewhale/pull/6973)).
+- **[Henrik Bakke Dukefoss / henrikdukefoss](https://github.com/henrikdukefoss)** — added the Standard Compute compatible-host descriptor, with live model discovery and its billing basis kept Unknown ([#6985](https://github.com/codewhale-hq/Codewhale/pull/6985)).
 - **[Sh1Zuku / SparkofSpike](https://github.com/SparkofSpike)** — live network-policy updates and goal milestone hand-back ([#6928](https://github.com/codewhale-hq/Codewhale/pull/6928), [#6930](https://github.com/codewhale-hq/Codewhale/pull/6930)), and a Codewhale home reached through a symlink or junction ([#6947](https://github.com/codewhale-hq/Codewhale/issues/6947)).
 - **[dajiaohuang](https://github.com/dajiaohuang)** — cache-write token accounting, with missing and explicit-zero usage preserved ([#6913](https://github.com/codewhale-hq/Codewhale/pull/6913)).
 - **[gaord](https://github.com/gaord)** — embedder-declared telemetry surface support without changing collection policy ([#6916](https://github.com/codewhale-hq/Codewhale/pull/6916)).

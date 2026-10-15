@@ -4,6 +4,7 @@ mod cloud;
 mod config_bundles;
 mod credential_handoff;
 mod dispatch;
+mod hashing;
 mod metrics;
 #[cfg(not(target_env = "ohos"))]
 mod update;

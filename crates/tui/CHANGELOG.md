@@ -7,11 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Contributors
-
-- **[@printf033](https://github.com/printf033)** — replaced the SELinux-denied root-directory anchor of confined-file I/O with an `O_PATH` walk (Linux-cfg-gated) and a re-materialized final parent, restoring workflow journal, compaction checkpoint and artifact writes on Android/Termux ([#6983](https://github.com/codewhale-hq/Codewhale/pull/6983)); reported the Android confined-I/O failure with strace evidence and an on-device reproducer ([#6980](https://github.com/codewhale-hq/Codewhale/issues/6980)).
-
 ## [0.10.2] - 2026-10-13
+
+- OpenHarmony builds on Windows select Ninja, with an SDK-bundled fallback and
+  a clear error when it is unavailable. The CLI keeps its download and Work
+  context integrity checks available on OHOS by sharing an ungated SHA-256
+  helper (thanks @shenjackyuanjie, #6989; reported in #6988).
 
 - Windows mouse-wheel scrolling is restored after returning from the external
   editor. The handoff now releases both Windows console mouse capture and
@@ -177,6 +178,9 @@ launcher guidance.
 
 ### Added
 
+- Standard Compute is available as a bundled compatible provider, with the
+  `standardcompute` router default and authenticated model discovery. Its
+  billing basis remains Unknown (#6985).
 - Sub-agents retain permitted code-mode tool composition. Nested calls keep
   the child's approvals, write scope, tool timeout and work deadline; approval
   waits do not consume that tool timeout. Refused nested calls still do not
@@ -358,9 +362,13 @@ launcher guidance.
 
 ### Fixed
 
-- Windows 10 1607 starts again. 0.10.1 stopped at load with 0xC0000139
-  because `DeriveCapabilitySidsFromName` is missing there; it is now resolved
-  at runtime (#6953).
+- Runtime child completions retain their original parent turn after the parent
+  becomes idle or starts a newer turn; terminal receipts remain durable and
+  deduplicated (CW-7414).
+- Windows Native extension hosts resolve `DeriveCapabilitySidsFromName`
+  at runtime and return an unsupported error during LPAC setup when the
+  export is unavailable (#6953). Windows 10 1607 startup and Native-host
+  acceptance remain unverified.
 - `codewhale resume` no longer refuses a session whose saved history still
   holds a raw sub-agent handoff (#6954).
 - A saved session over 8 MiB can be resumed and forked again. Journal entries
@@ -585,6 +593,10 @@ launcher guidance.
 
 ### Contributors
 
+- **[@shenjackyuanjie](https://github.com/shenjackyuanjie)** — diagnosed and fixed the Windows OpenHarmony CMake generator and CLI hashing-module build failures ([#6988](https://github.com/codewhale-hq/Codewhale/issues/6988), [#6989](https://github.com/codewhale-hq/Codewhale/pull/6989)).
+- **[@printf033](https://github.com/printf033)** — replaced the SELinux-denied root-directory anchor of confined-file I/O with an `O_PATH` walk (Linux-cfg-gated) and a re-materialized final parent, restoring workflow journal, compaction checkpoint and artifact writes on Android/Termux ([#6983](https://github.com/codewhale-hq/Codewhale/pull/6983)); reported the Android confined-I/O failure with strace evidence and an on-device reproducer ([#6980](https://github.com/codewhale-hq/Codewhale/issues/6980)). Source change; compiled Android and device acceptance remain unqualified.
+- **[@aboimpinto](https://github.com/aboimpinto)** — moved config-command parsing and replies onto portable contracts while the host retains effects ([#6973](https://github.com/codewhale-hq/Codewhale/pull/6973)).
+- **[@henrikdukefoss](https://github.com/henrikdukefoss)** — added the Standard Compute compatible-host descriptor, with live model discovery and its billing basis kept Unknown ([#6985](https://github.com/codewhale-hq/Codewhale/pull/6985)).
 - **[@LIghtJUNction](https://github.com/LIghtJUNction)** — plugin shell install and in-TUI plugin OAuth sign-in ([#6950](https://github.com/codewhale-hq/Codewhale/pull/6950)).
 - **[@SparkofSpike](https://github.com/SparkofSpike)** — live network-policy updates and goal milestone hand-back ([#6928](https://github.com/codewhale-hq/Codewhale/pull/6928), [#6930](https://github.com/codewhale-hq/Codewhale/pull/6930)), Windows ampersand classification ([#6929](https://github.com/codewhale-hq/Codewhale/pull/6929)), and a relocated Codewhale home including sub-agent state ([#6947](https://github.com/codewhale-hq/Codewhale/issues/6947), [#6949](https://github.com/codewhale-hq/Codewhale/pull/6949)).
 - **[@dajiaohuang](https://github.com/dajiaohuang)** — cache-write token accounting ([#6913](https://github.com/codewhale-hq/Codewhale/pull/6913)).

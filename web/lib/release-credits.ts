@@ -20,6 +20,10 @@
 
 /** Contributors whose PRs were merged or harvested into this release. */
 export const RELEASE_CONTRIBUTORS: string[] = [
+  "@shenjackyuanjie",
+  "@aboimpinto",
+  "@printf033",
+  "@henrikdukefoss",
   "@SparkofSpike",
   "@dajiaohuang",
   "@gaord",
@@ -35,8 +39,6 @@ export const RELEASE_CONTRIBUTORS: string[] = [
  * cut moves them into RELEASE_CONTRIBUTORS with that release's changelog block.
  */
 export const UNRELEASED_CONTRIBUTORS: string[] = [
-  "@aboimpinto",
-  "@printf033",
 ];
 
 /**

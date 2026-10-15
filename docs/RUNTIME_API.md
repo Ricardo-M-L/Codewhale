@@ -1371,12 +1371,16 @@ ID that has already been settled all return `404` and reach no engine. A `404`
 means the capability is not pending — it is not evidence about how the approval
 was resolved; read `approval.decided` for that.
 
-The raw provider call ID travels separately as `tool_call_id` on
+The Engine tool-execution ID travels separately as `tool_call_id` on
 `pending_approvals[]` and on the approval events. It is a correlator for
 attaching a prompt to the tool row it gates, and never accepted as a decision.
 Each thread-detail `pending_approvals[]` entry is
-`{ "id", "turn_id", "tool_name", "description", "intent_summary"?, "tool_call_id"?, "summary"? }`,
-where `id` is the capability above. `summary` (also on `approval.required`) is
+`{ "id", "turn_id", "tool_name", "input"?, "description", "intent_summary"?, "tool_call_id"?, "summary"? }`,
+where `id` is the capability above. `input` holds the captured tool input. An
+omitted `input` means no captured value is available; an explicit JSON `null`
+remains a captured value. On the authenticated canonical thread surface,
+`approval.required` carries the same captured input.
+`summary` (also on `approval.required`) is
 a one-line description of the gated call built from the tool name and its
 arguments only, never from model text ("Search the web for 'espresso'",
 "Write notes/espresso.md"); paths inside the workspace are workspace-relative.
@@ -2654,7 +2658,7 @@ clients and does not grant or persist permissions.
 distinct identifiers. `approval_id` is the Runtime-minted, single-use capability
 described under **Approvals** — the only value `POST /v1/approvals/{id}` accepts
 — and `approval.required` also repeats it in the legacy `id` field for older
-clients. `tool_call_id` is the provider's raw tool-call ID, present for
+clients. `tool_call_id` is the Engine tool-execution ID, present for
 correlation only. Automatically resolved prompts (thread `auto_approve`, and the
 Auto-Review posture, which never opens a modal) mint an `approval_id` as well, so
 the field has one meaning on every path; those IDs register no waiter and are

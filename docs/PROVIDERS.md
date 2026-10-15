@@ -49,6 +49,7 @@ against the vendor's own docs before trusting any value here:
 | Tsubasa | `https://api.tsubasa.sh/v1` | `tsubasa-pro`, `tsubasa-fast` (32,768-token context) | `TSUBASA_API_KEY` |
 | Cheaper Inference | `https://api.cheaperinference.com/v1` | `gpt-5.4-mini`, `claude-sonnet-5`, `gemini-3.1-pro` | `CHEAPER_INFERENCE_API_KEY` |
 | Yolo-Auto | `https://yolo-auto.com/v1` | `qwen3.8-flash`; `yolo` / `yolo-small` | `YOLO_AUTO_API_KEY` |
+| Standard Compute | `https://api.stdcmpt.com/v1` | `standardcompute` (router); `deepseek/deepseek-v4-pro`, `anthropic/claude-sonnet-5.5` | `STANDARDCOMPUTE_API_KEY` |
 
 AICraft's roster spans DeepSeek, Anthropic Claude, Google Gemini, Qwen, GLM,
 MiniMax and Doubao ids on its OpenAI-compatible endpoint. The authority is
@@ -64,6 +65,15 @@ several labs. Model ids are bare, such as `gpt-5.4-mini` or `claude-sonnet-5`.
 Pricing varies by model and route; consult the provider’s current catalog.
 The authority is `GET https://api.cheaperinference.com/v1/models` with your key.
 Docs: <https://cheaperinference.com/docs>.
+
+Standard Compute offers flat monthly plans with a compute budget. By default,
+requests return HTTP 402 when it is used; eligible plans can enable Pay as you go
+to continue with additional prepaid charges. See its
+[budget policy](https://docs.standardcompute.com/budgets-and-limits).
+The `standardcompute` model id routes each request across models and providers;
+vendor-prefixed ids such as `deepseek/deepseek-v4-pro` pin one model. The
+authority is `GET https://api.stdcmpt.com/v1/models`.
+Docs: <https://docs.standardcompute.com/quickstart>.
 
 OpenCode Zen and OpenCode Go are first-class provider routes, configured like
 any other provider below; they are not part of this table. In `/provider`,

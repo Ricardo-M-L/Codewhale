@@ -1178,12 +1178,15 @@ Runtime 会移除它。客户端回显它所得到的值，不得自行构造、
 意味着该能力当前并非待决——它不是关于该审批如何被解决的证据；
 那要看 `approval.decided`。
 
-提供商的原始调用 ID 另行以 `tool_call_id` 出现在
+Engine 的工具执行 ID 另行以 `tool_call_id` 出现在
 `pending_approvals[]` 与审批事件上。它是用于把提示词
 挂到它所门控的工具行上的关联符，绝不会被当作决策接受。
 每个线程详情中的 `pending_approvals[]` 条目是
-`{ "id", "turn_id", "tool_name", "description", "intent_summary"?, "tool_call_id"?, "summary"? }`，
-其中 `id` 就是上文那个能力。`summary`（也出现在 `approval.required` 上）是
+`{ "id", "turn_id", "tool_name", "input"?, "description", "intent_summary"?, "tool_call_id"?, "summary"? }`，
+其中 `id` 就是上文那个能力。`input` 保存已捕获的工具输入。缺少 `input`
+表示没有可用的已捕获值；显式的 JSON `null` 则保留为已捕获的值。
+在经过身份验证的规范线程接口上，`approval.required` 事件携带同一份已捕获输入。
+`summary`（也出现在 `approval.required` 上）是
 对该受门控调用的一行描述，只由工具名与其参数构建，
 绝不来自模型文本（“Search the web for 'espresso'”、
 “Write notes/espresso.md”）；工作区内的路径为工作区相对路径。
@@ -2319,7 +2322,7 @@ Fleet 流（`/v1/fleet/runs/{run_id}/events`）保留自己的结束帧，
 不同的标识符。`approval_id` 是 **审批** 一节所述、由 Runtime 铸造的一次性能力
 ——也是 `POST /v1/approvals/{id}` 唯一接受的値
 ——而 `approval.required` 还会把它重复在旧式的 `id` 字段中，供较旧
-客户端使用。`tool_call_id` 是提供商的原始工具调用 ID，仅为
+客户端使用。`tool_call_id` 是 Engine 的工具执行 ID，仅为
 关联而存在。自动解决的提示（线程 `auto_approve`，以及从不
 打开模态的 Auto-Review 姿态）也会铸造一个 `approval_id`，因此
 该字段在每条路径上只有一种含义；那些 ID 不注册等待者，对

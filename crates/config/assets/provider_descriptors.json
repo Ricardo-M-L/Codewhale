@@ -2228,6 +2228,21 @@
       ]
     },
     {
+      "id": "standardcompute",
+      "label": "Standard Compute",
+      "wire": "openai-compatible",
+      "base_url": "https://api.stdcmpt.com/v1",
+      "api_key_env": "STANDARDCOMPUTE_API_KEY",
+      "default_model": "standardcompute",
+      "discovery": "models_endpoint",
+      "docs_url": "https://docs.standardcompute.com/quickstart",
+      "credential_url": "https://standardcompute.com/dashboard/api-keys",
+      "guidance": "OpenAI-compatible host (Chat Completions + GET /v1/models). The standardcompute model id routes each request across models and providers; vendor-prefixed ids such as deepseek/deepseek-v4-pro pin one model. Live /v1/models is the model authority. Store STANDARDCOMPUTE_API_KEY, not a raw key.",
+      "aliases": [
+        "standard-compute"
+      ]
+    },
+    {
       "id": "tsubasa",
       "label": "Tsubasa",
       "wire": "openai-compatible",
