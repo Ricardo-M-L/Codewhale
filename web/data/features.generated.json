@@ -2,7 +2,7 @@
   "format": "codewhale.features.v1",
   "source": {
     "path": "docs/features.toml",
-    "sha256": "f743040315781deb470abe1e6911d69cdfe2513a56eec1b01699e9e2813c49c4"
+    "sha256": "ad6e3212d40391da4312f661ba87a72dc675f494419055665ade18b105289f88"
   },
   "features": [
     {
@@ -594,7 +594,7 @@
     {
       "id": "runtime-api",
       "name": "Runtime API",
-      "summary": "Local HTTP API for threads, events and approvals, with scoped watch/drive device tokens and account-bound model turns.",
+      "summary": "Local API: threads, events, approvals, project trust, workspace leases, Unix store sockets and scoped device tokens.",
       "status": "stable",
       "surfaces": {
         "api": "stable"

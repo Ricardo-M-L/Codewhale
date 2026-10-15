@@ -23986,18 +23986,35 @@ async fn refuse_worktree_spawn_and_expect_cleanup(repo: &tempfile::TempDir, bran
 
     // The removal runs on the blocking pool, off the async worker.
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    let worktrees = loop {
-        let worktrees = git_stdout(repo.path(), &["worktree", "list", "--porcelain"]);
-        let count = worktrees
-            .lines()
-            .filter(|line| line.starts_with("worktree "))
-            .count();
-        let branch_gone = git_stdout(repo.path(), &["branch", "--list", branch]).is_empty();
-        if (count == 1 && branch_gone) || std::time::Instant::now() >= deadline {
-            break worktrees;
+    let stdout_if_ok = |args: &[&str]| {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo.path())
+            .output()
+            .expect("git command should run");
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+    };
+    loop {
+        let only_main_left =
+            stdout_if_ok(&["worktree", "list", "--porcelain"]).is_some_and(|worktrees| {
+                worktrees
+                    .lines()
+                    .filter(|line| line.starts_with("worktree "))
+                    .count()
+                    == 1
+            });
+        let branch_gone = stdout_if_ok(&["branch", "--list", branch])
+            .as_deref()
+            .is_some_and(str::is_empty);
+        if (only_main_left && branch_gone) || std::time::Instant::now() >= deadline {
+            break;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
-    };
+    }
+    let worktrees = git_stdout(repo.path(), &["worktree", "list", "--porcelain"]);
     assert_eq!(
         worktrees
             .lines()

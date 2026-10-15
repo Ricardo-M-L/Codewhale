@@ -96,6 +96,8 @@ pub(super) struct WorkspaceStatusResponse {
     pub(super) untracked: usize,
     pub(super) ahead: Option<u32>,
     pub(super) behind: Option<u32>,
+    /// Whether the user has trusted this workspace in user-owned config.
+    pub(super) workspace_trusted: bool,
 }
 
 #[derive(Debug, Default)]
@@ -121,6 +123,71 @@ pub(super) async fn workspace_status(
         .map_err(|_| ApiError::internal("workspace status failed"))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct WorkspaceTrustRequest {
+    trusted: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct WorkspaceTrustResponse {
+    workspace: PathBuf,
+    /// The verdict as it stands *after* the write, read back through the same
+    /// gate ([`crate::config::is_workspace_trusted`]) the engine consults.
+    /// Echoing the request would report an intention; this reports the fact a
+    /// client would see on its next read, so a write that landed somewhere the
+    /// read path does not look is a `false` here rather than a lie.
+    workspace_trusted: bool,
+    /// The user-global config document the decision was written to, so a
+    /// client can name the file without ever reading or editing it.
+    config_path: PathBuf,
+    message: String,
+}
+
+/// Record — or revoke — this workspace's trust in the user-global config.
+///
+/// This route is the only writer a GUI has. A client never edits `config.toml`
+/// itself: that decision lives with the engine, which owns the same file the
+/// read path ([`crate::config::is_workspace_trusted`]) consults. The write goes
+/// through [`crate::config::set_workspace_trust`] — the very function behind the
+/// TUI's `/trust on --save` — so both front ends and the gate agree on one
+/// document, and neither can drift into a second source of truth.
+///
+/// The workspace is the server's own (`state.workspace`), never a
+/// caller-supplied path: a client may trust the project it is attached to and
+/// nothing else.
+pub(super) async fn update_workspace_trust(
+    State(state): State<RuntimeApiState>,
+    Json(request): Json<WorkspaceTrustRequest>,
+) -> Result<Json<WorkspaceTrustResponse>, ApiError> {
+    let workspace = state.workspace.clone();
+    let trusted = request.trusted;
+    let target = workspace.clone();
+    let (config_path, recorded) = tokio::task::spawn_blocking(move || {
+        let config_path = crate::config::set_workspace_trust(&target, trusted)?;
+        // Read back through the engine's own gate rather than trusting the
+        // write: the two are only ever allowed to agree.
+        Ok::<_, anyhow::Error>((config_path, crate::config::is_workspace_trusted(&target)))
+    })
+    .await
+    .map_err(|_| ApiError::internal("workspace trust update failed"))?
+    .map_err(|error| ApiError::internal(format!("Failed to update workspace trust: {error}")))?;
+    Ok(Json(WorkspaceTrustResponse {
+        workspace,
+        workspace_trusted: recorded,
+        config_path,
+        message: if recorded {
+            "Workspace trust saved in user config. Project skills and commands use it on subsequent turns; project hooks also require separate approval. Restart the engine to rebuild project MCP connections. Thread Full Access and existing project instructions are unchanged."
+        } else {
+            // Worded as the state, not as the action: this arm is reached both by
+            // a revoke and by a grant the gate did not accept, and "revoked"
+            // would be the wrong sentence for the second.
+            "Workspace trust is not recorded in user config. Project skills, commands, hooks and MCP loading use this decision; existing project instructions and MCP connections are not removed. Thread Full Access is unchanged."
+        }
+        .to_string(),
+    }))
+}
+
 pub(super) fn collect_workspace_status(workspace: &FsPath) -> WorkspaceStatusResponse {
     let mut status = WorkspaceStatusResponse {
         workspace: workspace.to_path_buf(),
@@ -133,6 +200,10 @@ pub(super) fn collect_workspace_status(workspace: &FsPath) -> WorkspaceStatusRes
         untracked: 0,
         ahead: None,
         behind: None,
+        // Computed before the early returns below: whether the workspace is a
+        // git repository has nothing to do with whether the user trusted it,
+        // and a non-repo project still has skills and hooks to skip.
+        workspace_trusted: crate::config::is_workspace_trusted(workspace),
     };
 
     let Some(repo_check) = run_git(workspace, &["rev-parse", "--is-inside-work-tree"]) else {

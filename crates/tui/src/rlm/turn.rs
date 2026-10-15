@@ -660,23 +660,37 @@ mod tests {
             let (tx, mut rx) = mpsc::channel(32);
             let usage = RlmUsageAccumulator::new();
             // Admission reads configuration and constructs the captured route.
-            // It is fixture setup, before this invocation's one-second budget.
+            // It is fixture setup, before this invocation's five-second budget.
             let caller =
                 crate::core::engine::tests::rlm_host::caller_for(client.clone(), "root-model");
 
-            let result = tokio::time::timeout(
-                Duration::from_secs(5),
-                caller.dispatch(crate::core::engine::rlm_host::RlmInvocation {
-                    prompt: "long context".to_string(),
-                    mode: crate::core::engine::rlm_host::RlmMode::Recursive { depth_remaining: 0 },
-                    max_tokens: None,
-                    task_instructions: None,
-                    deadline: tokio::time::Instant::now() + Duration::from_secs(1),
-                    gate: Some(crate::tools::codemode::NestedCallGate::admitting_for_test()),
-                    events: Some(tx),
-                    usage: usage.clone(),
-                }),
-            )
+            let call = caller.dispatch(crate::core::engine::rlm_host::RlmInvocation {
+                prompt: "long context".to_string(),
+                mode: crate::core::engine::rlm_host::RlmMode::Recursive { depth_remaining: 0 },
+                max_tokens: None,
+                task_instructions: None,
+                deadline: tokio::time::Instant::now() + Duration::from_secs(5),
+                gate: Some(crate::tools::codemode::NestedCallGate::admitting_for_test()),
+                events: Some(tx),
+                usage: usage.clone(),
+            });
+            tokio::pin!(call);
+            let result = tokio::time::timeout(Duration::from_secs(15), async {
+                if pending_model {
+                    tokio::select! {
+                        biased;
+                        () = client.2.notified() => {},
+                        result = &mut call => panic!(
+                            "pending model request was not reached: error={:?}, iterations={}, calls={}, trace={:?}",
+                            result.error,
+                            result.iterations,
+                            client.0.call_count(),
+                            result.trace
+                        ),
+                    }
+                }
+                call.await
+            })
             .await
             .expect("the turn deadline must interrupt in-flight work");
 
@@ -690,7 +704,14 @@ mod tests {
                 client.0.call_count(),
                 result.trace
             );
-            assert_eq!(result.iterations, if pending_model { 2 } else { 1 });
+            assert_eq!(
+                result.iterations,
+                if pending_model { 2 } else { 1 },
+                "error={:?}, calls={}, trace={:?}",
+                result.error,
+                client.0.call_count(),
+                result.trace
+            );
             assert!(
                 result
                     .error

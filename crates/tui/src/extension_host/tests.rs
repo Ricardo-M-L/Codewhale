@@ -4499,7 +4499,7 @@ async fn a_slow_command_is_cancelled_and_a_killed_host_fails_it_as_down() {
     let fixture = FixturePlugins::new(&["ext-commands"]).await;
     let manager = Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
         runtime: NODE,
-        node_override: Some(node),
+        node_override: Some(node.clone()),
         bun_override: None,
         root: Some(fixture.root.clone()),
         supervision: super::SupervisionOptions {
@@ -4509,7 +4509,7 @@ async fn a_slow_command_is_cancelled_and_a_killed_host_fails_it_as_down() {
     }));
     let engine = manager.attach(fixture.registry());
     engine.sync().await.unwrap();
-    let reference = |name: &str| {
+    let reference = |manager: &ExtensionHostManager, engine: &HostAttachment, name: &str| {
         manager
             .commands_for_plugins(engine.plugin_view().as_ref())
             .into_iter()
@@ -4518,7 +4518,7 @@ async fn a_slow_command_is_cancelled_and_a_killed_host_fails_it_as_down() {
             .reference()
     };
     let pid = manager.host_pid();
-    let slow = reference("ext-slow");
+    let slow = reference(&manager, &engine, "ext-slow");
     let started = Instant::now();
     let error = tokio::time::timeout(
         Duration::from_secs(5),
@@ -4530,7 +4530,7 @@ async fn a_slow_command_is_cancelled_and_a_killed_host_fails_it_as_down() {
     assert!(error.contains("timed out"), "{error}");
     assert!(started.elapsed() < Duration::from_secs(2));
     // The same host takes the next command.
-    let echo = reference("ext-echo");
+    let echo = reference(&manager, &engine, "ext-echo");
     assert_eq!(
         super::command::run(&manager.shared, &echo, "again", None).await,
         Ok(super::command::CommandOutcome::Show {
@@ -4538,10 +4538,16 @@ async fn a_slow_command_is_cancelled_and_a_killed_host_fails_it_as_down() {
         })
     );
     assert_eq!(manager.host_pid(), pid);
+    manager.shutdown().await;
 
     // Kill the host under a running command with a longer deadline.
+    let manager = supervised_manager(&fixture, node);
+    let engine = manager.attach(fixture.registry());
+    engine.sync().await.unwrap();
+    let pid = manager.host_pid();
+    let slow = reference(&manager, &engine, "ext-slow");
+    let echo = reference(&manager, &engine, "ext-echo");
     let manager2 = Arc::clone(&manager);
-    // The kill lands well inside the 300 ms deadline.
     let running = {
         let slow = slow.clone();
         tokio::spawn(
@@ -4579,7 +4585,7 @@ async fn a_slow_command_is_cancelled_and_a_killed_host_fails_it_as_down() {
         .await
         .unwrap_err();
     assert!(error.contains("no longer registered"), "{error}");
-    let fresh = reference("ext-echo");
+    let fresh = reference(&manager, &engine, "ext-echo");
     assert_ne!(fresh.generation, echo.generation);
     assert_eq!(
         super::command::run(&manager.shared, &fresh, "new", None).await,

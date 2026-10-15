@@ -626,6 +626,15 @@ impl PrivateDirectory {
                     )),
                 };
             }
+            let identity = windows_file_identity(&file)?;
+            drop(file);
+            let file = self
+                .open_windows_file(name, true, true)?
+                .context("new xAI OAuth lifecycle lock disappeared after securing")?;
+            anyhow::ensure!(
+                windows_file_identity(&file)? == identity,
+                "new xAI OAuth lifecycle lock identity changed after securing"
+            );
             return Ok(file);
         }
         bail!("xAI OAuth lifecycle lock changed repeatedly while opening")

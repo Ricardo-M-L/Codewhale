@@ -517,6 +517,9 @@
     "path_canonicalize": 1,
     "std_fs": 1
   },
+  "crates/tui/src/workspace_lease.rs": {
+    "path_canonicalize": 1
+  },
   "crates/tui/src/workspace_trust.rs": {
     "path_canonicalize": 1,
     "std_fs": 2

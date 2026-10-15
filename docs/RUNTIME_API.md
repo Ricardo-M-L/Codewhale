@@ -1772,6 +1772,16 @@ human gate. Auto-merge is `scripts/check-auto-merge.py --repo … --pr …
 --agent …` from codewhale-ops `origin/main` (exit 0), then
 `scripts/auto-merge-pr.py`. Do not invent a second checker.
 
+**Workspace trust** (the persisted project decision)
+- `GET /v1/workspace/status` reports `workspace_trusted`: whether the server’s workspace is trusted in the discovered user config. Project skills, commands and MCP configuration consult this decision. Project hooks require both workspace trust and separate approval of the exact hooks file.
+- `POST /v1/workspace/trust` with `{"trusted": true|false}` records that decision and answers `{workspace, workspace_trusted, config_path, message}`.
+
+The handler reuses `config::set_workspace_trust`, the writer behind `/trust on|off --save`, and reads the decision back through `is_workspace_trusted`. The request accepts no path; it applies only to the server’s admitted workspace. `config_path` identifies the document written. Both read and write use default config discovery, including configured environment overrides; a runtime’s explicit `--config` argument does not select this trust document.
+
+Project skills and commands consult trust at their existing load or turn boundaries. Project hooks also need their separate digest approval and recheck authority before execution. Restart the engine to rebuild project MCP connections; this request does not disconnect an existing pool or interrupt a running turn. Project instruction files such as `AGENTS.md` and project rules are loaded by the existing context loader independently of this flag, so revoking workspace trust does not remove those instructions or their persisted history.
+
+This persisted project decision is separate from a thread’s `trust_mode` / Full Access and from `/trust add <path>` external-path grants. `/trust on|off --save` changes session file-tool trust and the persisted project record. This HTTP route changes only the persisted project record. Its POST requires the same Runtime write authority as other state-changing routes; watch device tokens can read status but cannot write trust.
+
 **Introspection**
 - `GET /v1/workspace/status`
 - `GET /v1/workspace/files/search?query=<partial>&limit=<1-100>` (see workspace file suggestions above)
