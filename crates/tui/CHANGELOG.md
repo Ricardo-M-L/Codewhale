@@ -177,6 +177,10 @@ launcher guidance.
 
 ### Added
 
+- Sub-agents retain permitted code-mode tool composition. Nested calls keep
+  the child's approvals, write scope, tool timeout and work deadline; approval
+  waits do not consume that tool timeout. Refused nested calls still do not
+  count toward Fleet's denial-loop guard. Refs #6841 (CW-7033).
 - `/connect [<provider>]` signs in to a model provider that a plugin adds,
   inside the TUI, and `/disconnect <provider>` removes that sign-in.
   `/login` and `/logout` are for your Codewhale account only. Plugins that
