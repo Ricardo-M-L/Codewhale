@@ -647,6 +647,7 @@
   "CmdLoginDescription": "登入 Codewhale 或儲存供應商金鑰",
   "CmdQueueDescription": "檢視或編輯已排隊的訊息",
   "CmdQueueUsage": "用法: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "已還原 {count} 則排隊訊息；它們會在你送出下一則訊息後發出。/queue clear 可將其捨棄。",
   "CmdQueueDraftHeader": "正在編輯已排隊的訊息:",
   "CmdQueueNoMessages": "沒有已排隊的訊息",
   "CmdQueueListHeader": "已排隊的訊息 ({count}):",

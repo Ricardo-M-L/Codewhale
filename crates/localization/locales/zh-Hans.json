@@ -649,6 +649,7 @@
   "CmdLoginDescription": "登录 Codewhale 或保存提供商密钥",
   "CmdQueueDescription": "查看或编辑已排队的消息",
   "CmdQueueUsage": "用法: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "已恢复 {count} 条排队消息；它们会在你发送下一条消息后发出。/queue clear 可将其丢弃。",
   "CmdQueueDraftHeader": "正在编辑已排队的消息:",
   "CmdQueueNoMessages": "没有已排队的消息",
   "CmdQueueListHeader": "已排队的消息 ({count}):",

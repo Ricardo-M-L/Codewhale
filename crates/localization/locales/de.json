@@ -646,6 +646,7 @@
   "CmdLoginDescription": "Bei Codewhale anmelden oder Provider-Schlüssel speichern",
   "CmdQueueDescription": "Nachrichten in der Warteschlange ansehen oder bearbeiten",
   "CmdQueueUsage": "Verwendung: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "{count} Nachricht(en) aus der Warteschlange wiederhergestellt; sie werden nach deiner nächsten Nachricht gesendet. /queue clear verwirft sie.",
   "CmdQueueDraftHeader": "Nachricht aus der Warteschlange bearbeiten:",
   "CmdQueueNoMessages": "Keine Nachrichten in der Warteschlange",
   "CmdQueueListHeader": "Nachrichten in der Warteschlange ({count}):",

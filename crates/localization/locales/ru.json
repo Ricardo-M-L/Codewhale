@@ -646,6 +646,7 @@
   "CmdLoginDescription": "Войти в Codewhale или сохранить ключи провайдера",
   "CmdQueueDescription": "Просмотр и редактирование сообщений в очереди",
   "CmdQueueUsage": "Использование: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "Восстановлено сообщений в очереди: {count}; они отправятся после вашего следующего сообщения. /queue clear удалит их.",
   "CmdQueueDraftHeader": "Редактирование сообщения из очереди:",
   "CmdQueueNoMessages": "Нет сообщений в очереди",
   "CmdQueueListHeader": "Сообщения в очереди ({count}):",

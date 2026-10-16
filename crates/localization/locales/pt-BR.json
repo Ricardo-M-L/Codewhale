@@ -649,6 +649,7 @@
   "CmdLoginDescription": "Entrar no Codewhale ou salvar chaves de provedor",
   "CmdQueueDescription": "Ver ou editar mensagens enfileiradas",
   "CmdQueueUsage": "Uso: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "{count} mensagem(ns) enfileirada(s) restaurada(s); serão enviadas após sua próxima mensagem. /queue clear as descarta.",
   "CmdQueueDraftHeader": "Editando mensagem enfileirada:",
   "CmdQueueNoMessages": "Nenhuma mensagem enfileirada",
   "CmdQueueListHeader": "Mensagens enfileiradas ({count}):",

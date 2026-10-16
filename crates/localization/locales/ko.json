@@ -649,6 +649,7 @@
   "CmdLoginDescription": "Codewhale에 로그인하거나 프로바이더 키를 저장합니다",
   "CmdQueueDescription": "대기 중인 메시지를 확인하거나 편집합니다",
   "CmdQueueUsage": "사용법: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "대기 중인 메시지 {count}개를 복원했습니다. 다음 메시지 후에 전송됩니다. /queue clear로 삭제할 수 있습니다.",
   "CmdQueueDraftHeader": "대기 중인 메시지 편집 중:",
   "CmdQueueNoMessages": "대기 중인 메시지가 없습니다",
   "CmdQueueListHeader": "대기 중인 메시지 ({count}개):",

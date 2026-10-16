@@ -646,6 +646,7 @@
   "CmdLoginDescription": "Inicia sessió a Codewhale o desa claus de proveïdor",
   "CmdQueueDescription": "Mostra o edita els missatges en cua",
   "CmdQueueUsage": "Ús: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "S'han restaurat {count} missatges en cua; s'enviaran després del teu proper missatge. /queue clear els descarta.",
   "CmdQueueDraftHeader": "S'està editant el missatge en cua:",
   "CmdQueueNoMessages": "No hi ha missatges en cua",
   "CmdQueueListHeader": "Missatges en cua ({count}):",

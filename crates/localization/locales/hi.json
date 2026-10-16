@@ -646,6 +646,7 @@
   "CmdLoginDescription": "Codewhale में साइन इन करें या प्रदाता कुंजी सहेजें",
   "CmdQueueDescription": "कतारबद्ध संदेश देखें या संपादित करें",
   "CmdQueueUsage": "उपयोग: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "कतार के {count} संदेश बहाल किए गए; ये आपके अगले संदेश के बाद भेजे जाएंगे। इन्हें हटाने के लिए /queue clear।",
   "CmdQueueDraftHeader": "कतारबद्ध संदेश संपादित हो रहा है:",
   "CmdQueueNoMessages": "कोई कतारबद्ध संदेश नहीं",
   "CmdQueueListHeader": "कतारबद्ध संदेश ({count}):",

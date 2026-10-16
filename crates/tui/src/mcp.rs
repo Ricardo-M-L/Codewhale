@@ -3211,6 +3211,30 @@ pub struct McpPool {
     /// unconnected on-demand server (`lazy = true` or plugin-contributed) is
     /// one nobody has asked for, not one mid-handshake.
     connecting: HashSet<String>,
+    retired: bool,
+}
+
+pub(crate) struct McpHandoff {
+    workspace: Option<PathBuf>,
+    backend: McpBackend,
+    connections: Vec<(String, McpServerIdentity, McpConnection)>,
+}
+
+type McpServerIdentity = (u64, Option<crate::plugins::types::PluginAuthority>);
+
+fn mcp_server_identity(config: &McpConfig, name: &str) -> Option<McpServerIdentity> {
+    config.servers.get(name).map(|server| {
+        (
+            hash_mcp_config(&McpConfig {
+                timeouts: config.timeouts,
+                servers: HashMap::from([(name.to_string(), server.clone())]),
+            }),
+            server
+                .reviewed_plugin
+                .as_ref()
+                .map(|source| source.authority.clone()),
+        )
+    })
 }
 
 /// One server's cooldown: when to try again, and what to say until then.
@@ -3341,6 +3365,7 @@ impl McpPool {
             dynamic_servers: Arc::new(RwLock::new(HashMap::new())),
             needs_auth_servers: BTreeSet::new(),
             needs_auth_generation: 0,
+            retired: false,
         }
     }
 
@@ -3450,7 +3475,7 @@ impl McpPool {
     }
 
     fn server_allowed(&self, server: &str) -> bool {
-        !Self::server_denied_by(&self.disallowed_tools, server)
+        !self.retired && !Self::server_denied_by(&self.disallowed_tools, server)
     }
 
     pub(crate) fn tool_allowed(&self, name: &str) -> bool {
@@ -3458,6 +3483,10 @@ impl McpPool {
     }
 
     fn require_server(&self, server: &str) -> Result<()> {
+        anyhow::ensure!(
+            !self.retired,
+            "MCP server {server} belongs to a newer conversation; this conversation's MCP connections are closed"
+        );
         anyhow::ensure!(
             self.server_allowed(server),
             "Failed to find MCP server: {server}"
@@ -3618,28 +3647,14 @@ impl McpPool {
         if force {
             self.drop_all_connections("explicit config reload");
         } else {
-            let server_identity = |config: &McpConfig, name: &str| {
-                config.servers.get(name).map(|server| {
-                    (
-                        hash_mcp_config(&McpConfig {
-                            timeouts: config.timeouts,
-                            servers: HashMap::from([(name.to_string(), server.clone())]),
-                        }),
-                        server
-                            .reviewed_plugin
-                            .as_ref()
-                            .map(|source| source.authority.clone()),
-                    )
-                })
-            };
             let changed: HashSet<String> = self
                 .config
                 .servers
                 .keys()
                 .chain(new_config.servers.keys())
                 .filter(|name| {
-                    server_identity(&self.config, name.as_str())
-                        != server_identity(&new_config, name.as_str())
+                    mcp_server_identity(&self.config, name.as_str())
+                        != mcp_server_identity(&new_config, name.as_str())
                 })
                 .cloned()
                 .collect();
@@ -4039,6 +4054,45 @@ impl McpPool {
         }
         self.connections.insert(name, connection);
         Ok(())
+    }
+
+    pub(crate) fn retire_for_handoff(&mut self) -> McpHandoff {
+        self.retired = true;
+        let connections = std::mem::take(&mut self.connections)
+            .into_iter()
+            .filter_map(|(name, connection)| {
+                let identity = mcp_server_identity(&self.config, &name)?;
+                (identity.1.is_none()
+                    && connection.config().url.is_none()
+                    && connection.is_transport_ready())
+                .then_some((name, identity, connection))
+            })
+            .collect();
+        McpHandoff {
+            workspace: self.workspace.clone(),
+            backend: self.backend,
+            connections,
+        }
+    }
+
+    pub(crate) fn adopt_handoff(&mut self, handoff: McpHandoff) -> usize {
+        if self.retired || handoff.workspace != self.workspace || handoff.backend != self.backend {
+            return 0;
+        }
+        let generation = self.current_catalog_generation();
+        let mut adopted = 0;
+        for (name, identity, mut connection) in handoff.connections {
+            if mcp_server_identity(&self.config, &name).as_ref() != Some(&identity)
+                || !connection.is_transport_ready()
+            {
+                continue;
+            }
+            connection.catalog_generation = generation;
+            if self.store_ready_connection(name, connection).is_ok() {
+                adopted += 1;
+            }
+        }
+        adopted
     }
 
     /// Record a connect failure's auth classification. When the failure looks

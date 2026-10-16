@@ -649,6 +649,7 @@
   "CmdLoginDescription": "Iniciar sesión en Codewhale o guardar claves de proveedor",
   "CmdQueueDescription": "Ver o editar mensajes en cola",
   "CmdQueueUsage": "Uso: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "Se restauraron {count} mensajes en cola; se enviarán después de tu próximo mensaje. /queue clear los descarta.",
   "CmdQueueDraftHeader": "Editando mensaje en cola:",
   "CmdQueueNoMessages": "No hay mensajes en cola",
   "CmdQueueListHeader": "Mensajes en cola ({count}):",

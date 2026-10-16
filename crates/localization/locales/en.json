@@ -649,6 +649,7 @@
   "CmdLoginDescription": "Sign in to Codewhale or store provider keys",
   "CmdQueueDescription": "See or edit queued messages",
   "CmdQueueUsage": "Usage: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "Restored {count} queued message(s); they send after your next message. /queue clear discards them.",
   "CmdQueueDraftHeader": "Editing queued message:",
   "CmdQueueNoMessages": "No queued messages",
   "CmdQueueListHeader": "Queued messages ({count}):",

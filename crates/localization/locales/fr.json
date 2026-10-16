@@ -646,6 +646,7 @@
   "CmdLoginDescription": "Se connecter à Codewhale ou enregistrer des clés fournisseur",
   "CmdQueueDescription": "Voir ou modifier les messages en file",
   "CmdQueueUsage": "Usage : /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "{count} message(s) en file restauré(s) ; ils partiront après votre prochain message. /queue clear les supprime.",
   "CmdQueueDraftHeader": "Modification du message en file :",
   "CmdQueueNoMessages": "Aucun message en file",
   "CmdQueueListHeader": "Messages en file ({count}) :",

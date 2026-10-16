@@ -557,6 +557,20 @@ and `codewhale mcp connect` run in their own process, so a server they just
 reached from the shell still reads `not connected` inside a running session
 until that session connects it.
 
+`/new`, and switching sessions from the resume picker without changing
+provider or workspace, keep user-configured stdio servers running: each live
+process moves to the new conversation without a restart, provided its config,
+the workspace and the MCP backend are unchanged. Anything the server holds in
+memory, such as a browser session and its logins, comes along; run
+`/mcp reload` for fresh servers. HTTP/SSE servers reconnect, so they pick up
+current credentials and `[network]` policy. Servers added at runtime and
+plugin-contributed servers are conversation capabilities and are closed.
+`/resume <id>`, `/load` and a provider or workspace switch start a new engine,
+and every server restarts. If an MCP call from the previous conversation is
+still running at the boundary, nothing is handed over and the servers restart
+as before; otherwise later calls from that conversation's background work fail
+instead of reconnecting.
+
 An MCP-focused `tool_search` is also explicit discovery intent: search a
 configured server name (for example `engram`), an exact `mcp_<server>_...`
 name, or use `{"query":"mcp_.*","match":"regex"}`. The current turn's

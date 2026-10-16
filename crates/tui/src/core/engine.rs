@@ -1004,6 +1004,7 @@ pub struct Engine {
     /// Abort the supervisor's reconnect handshakes when its pool is retired.
     mcp_supervisor_task: Option<tokio::task::AbortHandle>,
     mcp_boot_done: Option<tokio::sync::watch::Receiver<bool>>,
+    mcp_handoff: Option<crate::mcp::McpHandoff>,
     /// Generation owned by the currently installed boot receiver. Terminal
     /// cleanup is conditional on this exact value so an older pass can never
     /// clear a newer receiver.
@@ -2337,6 +2338,7 @@ impl Engine {
             mcp_supervisor_rx: None,
             mcp_supervisor_task: None,
             mcp_boot_done: None,
+            mcp_handoff: None,
             mcp_boot_generation: None,
             mcp_boot_task: None,
             mcp_event_generation: 0,
@@ -3109,8 +3111,17 @@ impl Engine {
         // authoritative schedule makes that token fail closed when drained.
         self.scheduled_goal_continuation = None;
         // Runtime-added MCP servers are conversation capabilities even when
-        // both conversations use the same workspace. The sync handler restarts
-        // the session boot once the new session is installed.
+        // both conversations use the same workspace, so the old pool retires.
+        // The sync handler starts the session boot once the new session is
+        // installed.
+        self.mcp_handoff = if self.child_host.is_none() {
+            self.mcp_pool
+                .as_ref()
+                .and_then(|pool| pool.try_lock().ok())
+                .map(|mut pool| pool.retire_for_handoff())
+        } else {
+            None
+        };
         self.drop_mcp_pool();
         // C02-17: cumulative usage belongs to the conversation that spent
         // it. The sync carries no prior total for the installed session, so
@@ -4037,6 +4048,7 @@ impl Engine {
                                 crate::mcp::format_mcp_error_for_display(&error)
                             );
                         }
+                        self.mcp_handoff = None;
                         // SessionUpdated acknowledges the sync. A generic status
                         // would immediately cover the host's confirmed resume receipt.
                         self.emit_session_updated().await;
@@ -8213,6 +8225,10 @@ impl Engine {
     /// pool, skipped a session boot). Progress and the finished receipt flow
     /// as `Event::McpSessionBoot` updates under that generation.
     async fn start_mcp_session_boot(&mut self, refresh: McpConnectRefresh) -> anyhow::Result<u64> {
+        let handoff = self
+            .mcp_handoff
+            .take()
+            .filter(|_| matches!(refresh, McpConnectRefresh::IfChanged));
         if matches!(refresh, McpConnectRefresh::IfChanged)
             && (self.child_host.is_some() || !self.config.features.enabled(Feature::Mcp))
         {
@@ -8249,6 +8265,9 @@ impl Engine {
                 // A malformed source returns Err before anything is dropped,
                 // so a failed explicit reload leaves the live pool intact.
                 McpConnectRefresh::Force => pool.force_reload_config_sources()?,
+            }
+            if let Some(handoff) = handoff {
+                pool.adopt_handoff(handoff);
             }
             let eager = pool.eager_boot_server_names(&requested);
             let (pending, auth_errors) = pool.collect_pending_connects(Some(&eager));

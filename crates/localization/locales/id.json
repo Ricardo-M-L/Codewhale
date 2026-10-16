@@ -646,6 +646,7 @@
   "CmdLoginDescription": "Masuk ke Codewhale atau simpan kunci penyedia",
   "CmdQueueDescription": "Lihat atau edit pesan dalam antrean",
   "CmdQueueUsage": "Penggunaan: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "{count} pesan dalam antrean dipulihkan; pesan akan dikirim setelah pesan Anda berikutnya. /queue clear untuk membuangnya.",
   "CmdQueueDraftHeader": "Mengedit pesan dalam antrean:",
   "CmdQueueNoMessages": "Tidak ada pesan dalam antrean",
   "CmdQueueListHeader": "Pesan dalam antrean ({count}):",

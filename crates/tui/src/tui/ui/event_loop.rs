@@ -1051,11 +1051,11 @@ pub async fn run_tui(
     let restored_offline_queue = install_offline_queue_transition(&mut app, transition)
         || !app.queued_messages.is_empty()
         || app.queued_draft.is_some();
-    if restored_offline_queue && app.status_message.is_none() && app.queued_message_count() > 0 {
-        app.status_message = Some(format!(
-            "Restored {} queued message(s) from previous session — ↑ to edit, Ctrl+X to discard",
-            app.queued_message_count()
-        ));
+    if restored_offline_queue && app.queued_message_count() > 0 {
+        let restored = app
+            .tr(MessageId::QueueRestoredFromPreviousSession)
+            .replace("{count}", &app.queued_message_count().to_string());
+        app.push_status_toast(restored, StatusToastLevel::Warning, None);
     }
 
     let task_manager = TaskManager::start(
@@ -1207,14 +1207,6 @@ pub async fn run_tui(
             persistence_actor::init_actor(handle.clone());
             (handle, task)
         });
-
-    // Re-park the queue restored above, now that the actor exists. Its clear
-    // request carries no session id, so the actor learns which session owns
-    // the parked file from a save — without this, draining a restored queue
-    // to empty would leave the file behind and resend it on the next boot.
-    if restored_offline_queue {
-        persist_offline_queue_state(&app);
-    }
 
     // #4605: create the dispatch completion channel before any submit path so
     // initial input and queued follow-ups can dispatch without blocking the

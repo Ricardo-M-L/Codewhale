@@ -649,6 +649,7 @@
   "CmdLoginDescription": "Đăng nhập Codewhale hoặc lưu khóa nhà cung cấp",
   "CmdQueueDescription": "Xem hoặc chỉnh sửa các tin nhắn đang chờ xử lý",
   "CmdQueueUsage": "Cách dùng: /queue [list|send <n>|edit <n>|drop <n>|clear]",
+  "QueueRestoredFromPreviousSession": "Đã khôi phục {count} tin nhắn đang chờ; chúng sẽ được gửi sau tin nhắn tiếp theo của bạn. /queue clear để hủy chúng.",
   "CmdQueueDraftHeader": "Đang chỉnh sửa tin nhắn đang chờ:",
   "CmdQueueNoMessages": "Không có tin nhắn đang chờ",
   "CmdQueueListHeader": "Tin nhắn đang chờ ({count}):",
