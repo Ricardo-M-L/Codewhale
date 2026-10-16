@@ -489,8 +489,10 @@ mod memory_quick_add_tests {
     }
 }
 
-fn spawn_tui_engine(config: EngineConfig, api_config: &Config) -> EngineHandle {
-    let handle = spawn_engine(config, api_config);
+fn spawn_tui_engine(app: &mut App, api_config: &Config) -> EngineHandle {
+    let handle = spawn_engine(build_engine_config(app, api_config), api_config);
+    app.mcp_snapshot_generation = 0;
+    app.mcp_snapshot_generation_invalidated = false;
     // Prime durable agent + coordination state through the same engine event
     // used by later refreshes. All TUI engine replacements use this wrapper,
     // so workspace switches and provider recovery cannot retain stale Work.
@@ -502,7 +504,7 @@ fn spawn_tui_engine(config: EngineConfig, api_config: &Config) -> EngineHandle {
 /// before admitting any pending input. The existing engine remains the sole
 /// owner of model-facing history and the frozen system prefix.
 async fn spawn_tui_engine_with_session(app: &mut App, config: &Config) -> Result<EngineHandle> {
-    let handle = spawn_tui_engine(build_engine_config(app, config), config);
+    let handle = spawn_tui_engine(app, config);
     let restored = async {
         if !app.api_messages.is_empty() {
             handle

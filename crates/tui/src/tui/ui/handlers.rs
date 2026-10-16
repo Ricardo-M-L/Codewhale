@@ -2030,8 +2030,7 @@ pub(crate) async fn handle_view_events(
                         // only while a saturated engine finishes its turn.
                         if respawn {
                             let _ = engine_handle.send(Op::Shutdown).await;
-                            *engine_handle =
-                                spawn_tui_engine(build_engine_config(app, config), config);
+                            *engine_handle = spawn_tui_engine(app, config);
                         } else {
                             let _ = engine_handle
                                 .send(Op::SetModel {

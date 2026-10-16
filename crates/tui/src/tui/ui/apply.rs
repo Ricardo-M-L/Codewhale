@@ -1283,8 +1283,7 @@ pub(crate) async fn apply_provider_fallback_switch(
     }
 
     let _ = engine_handle.send(Op::Shutdown).await;
-    let engine_config = build_engine_config(app, config);
-    *engine_handle = spawn_tui_engine(engine_config, config);
+    *engine_handle = spawn_tui_engine(app, config);
 
     if !app.api_messages.is_empty() {
         let _ = engine_handle
@@ -1593,7 +1592,7 @@ async fn apply_command_result_inner(
                 sync_runtime_workspace_state(task_manager, app.workspace.clone()).await;
                 if respawn {
                     let _ = engine_handle.send(Op::Shutdown).await;
-                    *engine_handle = spawn_tui_engine(build_engine_config(app, config), config);
+                    *engine_handle = spawn_tui_engine(app, config);
                 } else {
                     let _ = engine_handle
                         .send(Op::SetModel {
@@ -1703,7 +1702,7 @@ async fn apply_command_result_inner(
                 app.update_model_compaction_budget();
                 if provider_changed || workspace_changed {
                     let _ = engine_handle.send(Op::Shutdown).await;
-                    *engine_handle = spawn_tui_engine(build_engine_config(app, config), config);
+                    *engine_handle = spawn_tui_engine(app, config);
                 }
                 // SyncSession carries the conversation but not resolved route
                 // limits. Refresh the engine's model first so a loaded,
@@ -1830,7 +1829,7 @@ async fn apply_command_result_inner(
                     );
                 }
                 let _ = engine_handle.send(Op::Shutdown).await;
-                *engine_handle = spawn_tui_engine(build_engine_config(app, config), config);
+                *engine_handle = spawn_tui_engine(app, config);
                 if !app.api_messages.is_empty() {
                     let _ = engine_handle
                         .send(Op::SyncSession {
@@ -2929,8 +2928,7 @@ async fn apply_command_result_inner(
                         crate::config::initialize_cloud_facts(config);
                         // Rebuild the engine with the new config so API key/model/base URL take effect.
                         let _ = engine_handle.send(Op::Shutdown).await;
-                        let engine_config = build_engine_config(app, config);
-                        *engine_handle = spawn_tui_engine(engine_config, config);
+                        *engine_handle = spawn_tui_engine(app, config);
                         if !app.api_messages.is_empty() {
                             let _ = engine_handle
                                 .send(Op::SyncSession {

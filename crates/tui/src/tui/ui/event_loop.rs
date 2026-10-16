@@ -4563,8 +4563,7 @@ pub(crate) async fn run_event_loop(
         }
         if let Some(rollback_warning) = respawn_after_provider_rollback {
             let _ = engine_handle.send(Op::Shutdown).await;
-            let engine_config = build_engine_config(app, config);
-            engine_handle = spawn_tui_engine(engine_config, config);
+            engine_handle = spawn_tui_engine(app, config);
             if !app.api_messages.is_empty() {
                 let _ = engine_handle
                     .send(Op::SyncSession {
