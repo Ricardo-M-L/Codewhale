@@ -208,9 +208,18 @@ async fn fetch_deepseek_user_balance(
     api_key: &str,
     base_url: &str,
 ) -> Option<crate::pricing::BalanceInfo> {
-    let url = format!("{}/user/balance", base_url.trim_end_matches('/'));
+    let url = deepseek_balance_url(base_url);
     let body: crate::pricing::BalanceResponse = balance_get_json(api_key, &url).await?;
     body.balance_infos.into_iter().next()
+}
+
+pub(crate) fn deepseek_balance_url(base_url: &str) -> String {
+    let origin = base_url.trim_end_matches('/');
+    let origin = origin
+        .strip_suffix("/beta")
+        .or_else(|| origin.strip_suffix("/v1"))
+        .unwrap_or(origin);
+    format!("{origin}/user/balance")
 }
 
 #[derive(serde::Deserialize)]

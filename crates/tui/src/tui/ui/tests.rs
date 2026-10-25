@@ -28993,6 +28993,26 @@ fn openrouter_credits_map_remaining_usd() {
     assert_eq!(info.chip_label().as_deref(), Some("$37.66"));
 }
 
+#[test]
+fn deepseek_balance_url_strips_beta_and_v1_prefixes() {
+    assert_eq!(
+        deepseek_balance_url("https://api.deepseek.com/beta"),
+        "https://api.deepseek.com/user/balance"
+    );
+    assert_eq!(
+        deepseek_balance_url("https://api.deepseek.com"),
+        "https://api.deepseek.com/user/balance"
+    );
+    assert_eq!(
+        deepseek_balance_url("https://api.deepseek.com/v1"),
+        "https://api.deepseek.com/user/balance"
+    );
+    assert_eq!(
+        deepseek_balance_url("https://api.deepseek.com/beta/"),
+        "https://api.deepseek.com/user/balance"
+    );
+}
+
 /// Regression for issue #244: visible session spend must not decrease.
 /// Sub-agent token usage events arrive out of order and may be reconciled
 /// later (cache adjustments, provisional → final swap). The displayed total
