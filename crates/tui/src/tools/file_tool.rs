@@ -133,7 +133,12 @@ impl ToolSpec for WriteTool {
                     "type": "string",
                     "description": "Path to the file to write (relative or absolute)."
                 },
-                "content": { "type": "string", "description": "Content to write to the file." }
+                "content": { "type": "string", "description": "Content to write to the file." },
+                "line_endings": {
+                    "type": "string",
+                    "enum": ["preserve", "lf", "crlf"],
+                    "description": "Line endings for the written file. `preserve` (default) keeps the existing file's style; `lf` forces Unix LF endings; `crlf` forces Windows CRLF endings."
+                }
             },
             "required": ["path", "content"],
             "additionalProperties": false

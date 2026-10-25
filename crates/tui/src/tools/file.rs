@@ -1688,9 +1688,10 @@ impl WriteFileTool {
         input: Value,
         context: &ToolContext,
     ) -> Result<ToolResult, ToolError> {
-        reject_primitive_unknown(&input, "write", &["path", "content"])?;
+        reject_primitive_unknown(&input, "write", &["path", "content", "line_endings"])?;
         let path_str = required_str(&input, "path")?;
         let file_content = required_str(&input, "content")?;
+        let line_endings = contract_line_endings_override(&input)?;
         check_contract_file_size(file_content.len())?;
         let file_path = context.resolve_path(path_str)?;
         let mutation_guard = acquire_file_mutation(&file_path, context).await?;
@@ -1715,20 +1716,9 @@ impl WriteFileTool {
         check_file_operation_cancelled(context)?;
         // Preserve the existing file's line-ending style on overwrite (see
         // `preserve_prior_line_endings`); otherwise a CRLF (Windows) file is
-        // silently rewritten with LF line endings.
-        let mut written = if prior_contents.is_empty() {
-            file_content.to_string()
-        } else {
-            let normalized = normalize_contract_line_endings(file_content);
-            let ending = contract_line_ending(&prior_contents);
-            let extra = if ending == "\r\n" {
-                normalized.bytes().filter(|byte| *byte == b'\n').count()
-            } else {
-                0
-            };
-            check_contract_file_size(normalized.len().saturating_add(extra))?;
-            restore_contract_line_endings(&normalized, ending)
-        };
+        // silently rewritten with LF line endings. An explicit `line_endings`
+        // request ("lf" or "crlf") overrides the preserved style.
+        let mut written = contract_write_content(file_content, &prior_contents, line_endings)?;
         guard_edit(
             &file_path,
             path_str,
@@ -1964,6 +1954,58 @@ fn restore_contract_line_endings(text: &str, ending: &str) -> String {
     } else {
         text.to_string()
     }
+}
+
+/// Parse the optional `line_endings` override on the contract `write` tool.
+///
+/// `Ok(None)` means "preserve the existing file's style" (also what an absent
+/// parameter or the literal `"preserve"` mean); `"lf"` and `"crlf"` force a
+/// specific style.
+fn contract_line_endings_override(input: &Value) -> Result<Option<&'static str>, ToolError> {
+    match input.get("line_endings") {
+        None => Ok(None),
+        Some(Value::String(value)) => match value.as_str() {
+            "preserve" => Ok(None),
+            "lf" => Ok(Some("lf")),
+            "crlf" => Ok(Some("crlf")),
+            other => Err(ToolError::invalid_input(format!(
+                "line_endings must be one of \"preserve\", \"lf\", or \"crlf\"; got \"{other}\""
+            ))),
+        },
+        Some(_) => Err(ToolError::invalid_input(
+            "line_endings must be a string: \"preserve\", \"lf\", or \"crlf\"",
+        )),
+    }
+}
+
+/// Build the text the contract `write` tool persists for `content`.
+///
+/// Without an override the existing file's line-ending style is preserved (a
+/// new file is written verbatim); with `"lf"` or `"crlf"` the content is
+/// normalized to exactly that style regardless of the prior file.
+fn contract_write_content(
+    content: &str,
+    prior: &str,
+    override_ending: Option<&str>,
+) -> Result<String, ToolError> {
+    let ending = match override_ending {
+        Some("lf") => "\n",
+        Some("crlf") => "\r\n",
+        _ => {
+            if prior.is_empty() {
+                return Ok(content.to_string());
+            }
+            contract_line_ending(prior)
+        }
+    };
+    let normalized = normalize_contract_line_endings(content);
+    let extra = if ending == "\r\n" {
+        normalized.bytes().filter(|byte| *byte == b'\n').count()
+    } else {
+        0
+    };
+    check_contract_file_size(normalized.len().saturating_add(extra))?;
+    Ok(restore_contract_line_endings(&normalized, ending))
 }
 
 /// First code point of the placeholder range that carries one non-UTF-8 byte

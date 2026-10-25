@@ -830,6 +830,77 @@ async fn contract_write_over_crlf_file_preserves_crlf_line_endings() {
     );
 }
 
+#[tokio::test]
+async fn contract_write_lf_override_over_crlf_file_writes_lf() {
+    // An explicit `line_endings: "lf"` must win over the preserved CRLF style,
+    // so a user asking for Unix endings is not silently given CRLF (#7070).
+    let tmp = tempdir().expect("tempdir");
+    let ctx = ToolContext::new(tmp.path().to_path_buf());
+    let path = tmp.path().join("crlf.txt");
+    fs::write(&path, b"alpha\r\nbeta\r\n").expect("initial CRLF write");
+    ctx.note_file_read(&ctx.resolve_path("crlf.txt").expect("resolve"));
+
+    WriteFileTool::execute_contract_write(
+        json!({"path": "crlf.txt", "content": "gamma\ndelta\n", "line_endings": "lf"}),
+        &ctx,
+    )
+    .await
+    .expect("execute");
+
+    let written = fs::read(&path).expect("read");
+    assert_eq!(
+        written, b"gamma\ndelta\n",
+        "explicit lf override must not restore the prior CRLF style"
+    );
+}
+
+#[tokio::test]
+async fn contract_write_crlf_override_over_lf_file_writes_crlf() {
+    let tmp = tempdir().expect("tempdir");
+    let ctx = ToolContext::new(tmp.path().to_path_buf());
+    let path = tmp.path().join("lf.txt");
+    fs::write(&path, b"alpha\nbeta\n").expect("initial LF write");
+    ctx.note_file_read(&ctx.resolve_path("lf.txt").expect("resolve"));
+
+    WriteFileTool::execute_contract_write(
+        json!({"path": "lf.txt", "content": "gamma\ndelta\n", "line_endings": "crlf"}),
+        &ctx,
+    )
+    .await
+    .expect("execute");
+
+    let written = fs::read(&path).expect("read");
+    assert_eq!(
+        written, b"gamma\r\ndelta\r\n",
+        "explicit crlf override must normalize LF content to CRLF"
+    );
+}
+
+#[tokio::test]
+async fn contract_write_rejects_unknown_line_endings_value() {
+    let tmp = tempdir().expect("tempdir");
+    let ctx = ToolContext::new(tmp.path().to_path_buf());
+    let path = tmp.path().join("crlf.txt");
+    fs::write(&path, b"alpha\r\nbeta\r\n").expect("initial CRLF write");
+    ctx.note_file_read(&ctx.resolve_path("crlf.txt").expect("resolve"));
+
+    let error = WriteFileTool::execute_contract_write(
+        json!({"path": "crlf.txt", "content": "gamma\ndelta\n", "line_endings": "mixed"}),
+        &ctx,
+    )
+    .await
+    .expect_err("invalid line_endings must be refused");
+    assert!(
+        error.to_string().contains("line_endings"),
+        "refusal must name the bad parameter: {error}"
+    );
+    assert_eq!(
+        fs::read(&path).expect("read"),
+        b"alpha\r\nbeta\r\n",
+        "a refused write must leave the file unchanged"
+    );
+}
+
 #[test]
 fn preserve_prior_line_endings_keeps_the_prior_style() {
     // Existing CRLF file: incoming LF content is re-emitted as CRLF.

@@ -567,7 +567,7 @@ fn primitive_schemas_are_separate_and_small_contract_shaped() {
             .keys()
             .cloned()
             .collect::<std::collections::BTreeSet<_>>(),
-        ["content", "path"]
+        ["content", "line_endings", "path"]
             .into_iter()
             .map(str::to_string)
             .collect()
