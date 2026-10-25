@@ -223,6 +223,8 @@ pub struct TranscriptRenderOptions {
     pub verbose: bool,
     pub show_tool_details: bool,
     pub inline_diff_mode: crate::settings::InlineDiffMode,
+    /// How much of a foreground shell's running command to show on its card.
+    pub running_shell_command: crate::settings::RunningShellCommand,
     pub calm_mode: bool,
     pub low_motion: bool,
     pub motion_mode: MotionMode,
@@ -266,6 +268,7 @@ impl Default for TranscriptRenderOptions {
             verbose: false,
             show_tool_details: true,
             inline_diff_mode: crate::settings::InlineDiffMode::Full,
+            running_shell_command: crate::settings::RunningShellCommand::Off,
             calm_mode: false,
             low_motion: false,
             motion_mode: MotionMode::Full,
@@ -947,7 +950,12 @@ impl ToolCell {
     }
 
     pub fn lines_with_motion(&self, width: u16, low_motion: bool) -> Vec<Line<'static>> {
-        self.lines_with_motion_and_locale(width, low_motion, Locale::En)
+        self.lines_with_motion_and_locale(
+            width,
+            low_motion,
+            Locale::En,
+            crate::settings::RunningShellCommand::Off,
+        )
     }
 
     pub fn lines_with_motion_and_locale(
@@ -955,8 +963,15 @@ impl ToolCell {
         width: u16,
         low_motion: bool,
         locale: Locale,
+        running_shell_command: crate::settings::RunningShellCommand,
     ) -> Vec<Line<'static>> {
-        self.render_with_locale(width, low_motion, RenderMode::Live, locale)
+        self.render_with_locale(
+            width,
+            low_motion,
+            RenderMode::Live,
+            locale,
+            running_shell_command,
+        )
     }
 
     /// Full-content rendering for the pager / clipboard. Tool output that
@@ -972,6 +987,7 @@ impl ToolCell {
             /*low_motion*/ false,
             RenderMode::Transcript,
             locale,
+            crate::settings::RunningShellCommand::Off,
         )
     }
 
@@ -981,9 +997,12 @@ impl ToolCell {
         low_motion: bool,
         mode: RenderMode,
         locale: Locale,
+        running_shell_command: crate::settings::RunningShellCommand,
     ) -> Vec<Line<'static>> {
         match self {
-            ToolCell::Exec(cell) => cell.render_with_locale(width, low_motion, mode, locale),
+            ToolCell::Exec(cell) => {
+                cell.render_with_locale(width, low_motion, mode, locale, running_shell_command)
+            }
             ToolCell::Exploring(cell) => cell.render_with_locale(width, low_motion, mode, locale),
             ToolCell::PlanUpdate(cell) => cell.lines_with_motion(width, low_motion),
             ToolCell::PatchSummary(cell) => cell.render(

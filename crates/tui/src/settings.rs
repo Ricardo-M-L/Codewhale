@@ -63,6 +63,43 @@ impl InlineDiffMode {
     }
 }
 
+/// How much of a foreground shell's running command to show on its card.
+///
+/// Since 0.10.1 the card header always names the command's first line, so
+/// `off` and `first_line` render identically; `full` is the only value that
+/// adds a body. The three-value spelling is kept so the documented
+/// `off | first_line | full` key accepts all of them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RunningShellCommand {
+    /// The shipped behavior: header only while the command runs.
+    #[default]
+    Off,
+    /// The command's first line (already carried by the header).
+    FirstLine,
+    /// The whole command, wrapped and bounded while it runs.
+    Full,
+}
+
+impl RunningShellCommand {
+    #[must_use]
+    pub fn parse(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "first_line" => Self::FirstLine,
+            "full" => Self::Full,
+            _ => Self::Off,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::FirstLine => "first_line",
+            Self::Full => "full",
+        }
+    }
+}
+
 // ============================================================================
 // tui.toml — folded into settings.toml (0.9.12: one settings store)
 // ============================================================================
@@ -346,6 +383,9 @@ pub struct Settings {
     /// This affects inline presentation only; exact evidence remains available
     /// through the tool-details route in every mode.
     pub inline_diffs: String,
+    /// How much of a foreground shell's running command to show on its card:
+    /// `off` (default), `first_line`, or `full`.
+    pub running_shell_command: String,
     /// UI locale: auto, en, ja, zh-Hans, zh-Hant, pt-BR, es-419, vi, ko,
     /// ca, de, fr, id, hi, ru, uk.
     /// Every shipped pack holds full `en.json` parity; nothing falls back.
@@ -578,6 +618,7 @@ impl Default for Settings {
             pin_last_prompt: true,
             show_tool_details: false,
             inline_diffs: "full".to_string(),
+            running_shell_command: "off".to_string(),
             locale: "auto".to_string(),
             theme: DEFAULT_TUI_THEME.to_string(),
             background_color: None,
@@ -727,6 +768,10 @@ fn migrate_sidebar_settings_to_rail(s: &mut Settings) {
 
 fn normalize_inline_diffs(value: &str) -> &'static str {
     InlineDiffMode::parse(value).as_setting()
+}
+
+fn normalize_running_shell_command(value: &str) -> &'static str {
+    RunningShellCommand::parse(value).as_setting()
 }
 
 /// The `(key, value)` fields a named preset applies, or `None` for an unknown
@@ -984,6 +1029,8 @@ impl Settings {
                 .clamp(WORK_SURFACE_TOP_HEIGHT_MIN, WORK_SURFACE_TOP_HEIGHT_MAX);
             s.work_surface_side_width = s.work_surface_side_width.clamp(26, 80);
             s.inline_diffs = normalize_inline_diffs(&s.inline_diffs).to_string();
+            s.running_shell_command =
+                normalize_running_shell_command(&s.running_shell_command).to_string();
             s.synchronized_output =
                 normalize_synchronized_output(&s.synchronized_output).to_string();
             s.locale = normalize_configured_locale(&s.locale)
@@ -1466,6 +1513,7 @@ impl Settings {
             "pin_last_prompt" | "pin_prompt" => "pin_last_prompt",
             "show_tool_details" | "tool_details" => "show_tool_details",
             "inline_diffs" | "inline_diff" | "diffs" => "inline_diffs",
+            "running_shell_command" | "running_shell" => "running_shell_command",
             "locale" | "language" => "locale",
             "theme" | "ui_theme" => "theme",
             "background_color" | "background" | "bg" => "background_color",
@@ -1633,6 +1681,15 @@ impl Settings {
                     );
                 }
                 self.inline_diffs = normalized;
+            }
+            "running_shell_command" | "running_shell" => {
+                let normalized = value.trim().to_ascii_lowercase();
+                if !matches!(normalized.as_str(), "off" | "first_line" | "full") {
+                    anyhow::bail!(
+                        "Failed to update setting: invalid running shell command '{value}'. Expected: off, first_line, or full."
+                    );
+                }
+                self.running_shell_command = normalized;
             }
             "locale" | "language" => {
                 let Some(locale) = normalize_configured_locale(value) else {
@@ -1978,6 +2035,11 @@ impl Settings {
             label: "inline_diffs:".to_string(),
             value: self.inline_diffs.to_string(),
             label_width: 19,
+        });
+        rows.push(codewhale_command_contract::config::CommandSettingsRow {
+            label: "running_shell_command:".to_string(),
+            value: self.running_shell_command.to_string(),
+            label_width: 21,
         });
         rows.push(codewhale_command_contract::config::CommandSettingsRow {
             label: "locale:".to_string(),
@@ -5778,6 +5840,7 @@ zai = ["GLM-5.2", "GLM-5.3"]
             (&["pin_last_prompt", "pin_prompt"], "true"),
             (&["show_tool_details", "tool_details"], "true"),
             (&["inline_diffs", "inline_diff", "diffs"], "off"),
+            (&["running_shell_command", "running_shell"], "full"),
             (&["locale", "language"], "en"),
             (&["theme", "ui_theme"], "terminal"),
             (&["background_color", "background", "bg"], "#1a1b26"),

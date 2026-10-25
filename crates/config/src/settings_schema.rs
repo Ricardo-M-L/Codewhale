@@ -301,6 +301,12 @@ const INLINE_DIFFS: &[SettingOption] = &[
     SettingOption::new("off", "ConfigValueOff", ""),
 ];
 
+const RUNNING_SHELL_COMMAND: &[SettingOption] = &[
+    SettingOption::new("off", "", ""),
+    SettingOption::new("first_line", "", ""),
+    SettingOption::new("full", "", ""),
+];
+
 const STATUS_INDICATOR: &[SettingOption] = &[
     // `whale` is retired: load migrates whale | 🐳 | 🐋 to the typographic
     // mark, so the editor no longer offers it.
@@ -660,6 +666,13 @@ pub const SETTINGS_SCHEMA: &[SettingDef] = &[
             "ConfigLabelInlineDiffs",
             "ConfigHintInlineDiffs",
         ),
+    ),
+    // No sentence: the value list is discoverable from the row's own values.
+    def(
+        "running_shell_command",
+        SettingKind::Enum(RUNNING_SHELL_COMMAND),
+        "off",
+        None,
     ),
     // No sentence: the glyph set is discoverable from the row's own values.
     def(
