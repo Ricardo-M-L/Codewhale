@@ -58,6 +58,24 @@ impl crate::compaction::CompactionNoticeSink for EngineCompactionNoticeSink {
     }
 }
 
+/// Denominator of the auto-compaction fire line reserved as headroom before
+/// the passive soft context notice fires. The default fire line is 80% of the
+/// window; one eighth below that lands the notice at 70% — ten percentage
+/// points early, matching the shape of the manual path's 85%/95% ladder.
+const AUTO_COMPACT_SOFT_NOTICE_OFFSET_DENOMINATOR: usize = 8;
+
+/// Token level at which the model gets a passive "context is filling" notice
+/// while the engine still owns automatic compaction. Always strictly below the
+/// fire line so the notice cannot shadow the engine's own cut.
+fn soft_context_notice_threshold(compaction: &CompactionConfig) -> usize {
+    let fire_line = compaction.token_threshold;
+    if fire_line == 0 {
+        return 0;
+    }
+    let offset = (fire_line / AUTO_COMPACT_SOFT_NOTICE_OFFSET_DENOMINATOR).max(1);
+    fire_line.saturating_sub(offset)
+}
+
 impl Engine {
     pub(super) async fn emit_compaction_started(
         &mut self,
@@ -200,11 +218,8 @@ impl Engine {
         prompt_context: &NextTurnPromptContext,
         system_prompt: Option<&SystemPrompt>,
     ) -> Option<String> {
-        // The engine owns automatic compaction. Asking the model to warn the
-        // user here created a competing save/compact ceremony before the
-        // automatic request-boundary guard could do its work (#5620).
         if self.config.compaction.enabled {
-            return None;
+            return self.soft_context_notice_line(current_text, system_prompt);
         }
         let input_tokens = self.active_input_tokens_with_current_text(current_text, system_prompt);
         let budget = route_context_budget_for_route(
@@ -217,6 +232,33 @@ impl Engine {
             "{warning}. Estimated input: {input_tokens} tokens ({:.1}% of route budget). Making room automatically is off for this session. /compact saves the original conversation and its model-written handoff before replacing context.",
             budget.usage_percent(),
         ))
+    }
+
+    /// Passive, non-actionable context heads-up for the automatic path.
+    ///
+    /// #5620 removed the ESCALATED / "run `/compact`" line because it created
+    /// a competing save/compact ceremony before the engine's own boundary
+    /// guard could act. This is the inverse of that: it never asks the model
+    /// to run compaction or a save ceremony, it only says the window is
+    /// filling so a long off-loop step can reach a clean stopping point and
+    /// checkpoint while headroom remains (#6425). Emitted below the fire line,
+    /// and only when the notice threshold is crossed, so an inactive session
+    /// keeps its appended `<turn_meta>` byte-stable.
+    fn soft_context_notice_line(
+        &self,
+        current_text: &str,
+        system_prompt: Option<&SystemPrompt>,
+    ) -> Option<String> {
+        let threshold = soft_context_notice_threshold(&self.config.compaction);
+        if threshold == 0 {
+            return None;
+        }
+        let input_tokens = self.active_input_tokens_with_current_text(current_text, system_prompt);
+        (input_tokens >= threshold).then(|| {
+            format!(
+                "Context pressure: soft — the context window is filling; automatic compaction is on and will make room at its trigger. Estimated input: {input_tokens} tokens."
+            )
+        })
     }
 
     fn learn_summary_image_cap(
@@ -1135,5 +1177,74 @@ mod tests {
             }
             other => panic!("expected a Status event, got {other:?}"),
         }
+    }
+
+    /// #6425: with automatic compaction enabled the model still gets a
+    /// passive heads-up once the window is filling — but never an actionable
+    /// `/compact` directive, which #5620 removed from the automatic path.
+    #[test]
+    fn context_pressure_line_emits_passive_notice_below_auto_fire_line() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (mut engine, _handle) = Engine::new(
+            EngineConfig {
+                workspace: tmp.path().to_path_buf(),
+                ..EngineConfig::default()
+            },
+            &crate::config::Config::default(),
+        );
+        engine.api_provider = ProviderKind::Deepseek;
+        engine.active_route_limits = Some(codewhale_config::route::RouteLimits {
+            context_tokens: Some(1_000_000),
+            input_tokens: None,
+            output_tokens: Some(512),
+            output_declared: false,
+        });
+        // The default configuration leaves the engine owning the cut.
+        assert!(engine.config.compaction.enabled);
+        // A small fire line keeps the fixture fast while still exercising the
+        // 1/8 headroom derivation.
+        engine.config.compaction.token_threshold = 800;
+        let fire_line = engine.config.compaction.token_threshold;
+        let notice_line = soft_context_notice_threshold(&engine.config.compaction);
+        assert!(notice_line > 0 && notice_line < fire_line);
+
+        let prompt_context = NextTurnPromptContext::for_planned_turn(
+            ProviderKind::Deepseek,
+            "deepseek-v4-flash".to_string(),
+            engine.active_route_limits,
+            AppMode::Agent,
+            None,
+            GoalStatus::Active,
+            None,
+            false,
+            None,
+        );
+
+        // Empty session sits below the notice threshold: no bytes emitted.
+        assert_eq!(
+            engine.context_pressure_line("", &prompt_context, None),
+            None
+        );
+
+        engine.session.messages.push(Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text {
+                text: "x".repeat(1_707),
+                cache_control: None,
+            }],
+        });
+        let estimated =
+            crate::compaction::estimate_input_tokens_conservative(&engine.session.messages, None);
+        assert!(
+            estimated >= notice_line && estimated < fire_line,
+            "fixture must land between the notice and fire lines: {estimated}"
+        );
+        let line = engine
+            .context_pressure_line("", &prompt_context, None)
+            .expect("soft notice once the notice threshold is crossed");
+        assert!(line.contains("Context pressure: soft"), "{line}");
+        assert!(line.contains("automatic compaction is on"), "{line}");
+        assert!(!line.contains("/compact"), "{line}");
+        assert!(!line.contains("Making room automatically is off"), "{line}");
     }
 }
