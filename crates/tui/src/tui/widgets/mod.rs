@@ -1480,8 +1480,7 @@ impl Renderable for ComposerWidget<'_> {
         self.render_plan(area, buf);
     }
     fn desired_height(&self, width: u16) -> u16 {
-        self.frame()
-            .desired_height(width, self.max_height.min(self.max_height_cap()))
+        self.frame().desired_height(width, self.max_height)
     }
     #[cfg(test)]
     fn cursor_pos(&self, area: Rect) -> Option<(u16, u16)> {
@@ -5746,11 +5745,15 @@ mod tests {
             assert_eq!(measure(&app), (n + 2, n), "{n} typed lines");
         }
 
-        // Past the cap the density setting wins, not the content.
+        // Past the cap the content wins, bounded by the room the layout
+        // offered (AVAILABLE): 40 input rows + 2 borders, capped at 24.
         app.clear_input();
         app.insert_str(&vec!["over"; 40].join("\n"));
-        let cap = composer_max_height(ComposerDensity::Comfortable);
-        assert_eq!(measure(&app), (cap, cap - 2), "content beyond the cap");
+        assert_eq!(
+            measure(&app),
+            (AVAILABLE, AVAILABLE - 2),
+            "long draft grows past the cap"
+        );
 
         // Submitting returns the composer to its stable density floor.
         assert!(app.submit_input().is_some());

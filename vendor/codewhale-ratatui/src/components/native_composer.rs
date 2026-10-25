@@ -194,10 +194,13 @@ pub fn native_composer_height(
     } else {
         usize::from(available >= 2)
     };
-    rows.max(floor)
-        .saturating_add(menu)
-        .saturating_add(border)
-        .clamp(1, usize::from(available.min(density.max_rows()))) as u16
+    let desired = rows.max(floor).saturating_add(menu).saturating_add(border);
+    let cap = if desired > usize::from(density.max_rows()) {
+        usize::from(available)
+    } else {
+        usize::from(available).min(usize::from(density.max_rows()))
+    };
+    desired.clamp(1, cap) as u16
 }
 
 /// Display width after the kit's control/bidi guard; raw source scalars remain

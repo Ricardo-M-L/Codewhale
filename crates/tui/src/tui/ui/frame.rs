@@ -1582,7 +1582,8 @@ pub(crate) fn render(f: &mut Frame, app: &mut App, _config: &Config) -> Option<(
                 .saturating_add(info_height)
                 .saturating_add(top_work_strip_height),
         )
-        .max(MIN_COMPOSER_HEIGHT);
+        .max(MIN_COMPOSER_HEIGHT)
+        .min((body_height / 2).max(MIN_COMPOSER_HEIGHT));
     let composer_height = if !pet_main && mini && !mini_cfg.keep_input {
         0
     } else {

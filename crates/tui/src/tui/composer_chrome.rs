@@ -69,16 +69,24 @@ mod tests {
     }
 
     #[test]
-    fn content_growth_expands_up_to_the_density_cap() {
+    fn content_growth_expands_past_the_density_cap_up_to_available_room() {
         // Six content rows + border fits under the Comfortable cap of 9.
         let height = desired_height(6, 0, 12, ComposerDensity::Comfortable, false);
         assert_eq!(height, 7, "typed content must grow the composer: {height}");
 
-        // Past the cap the density setting wins, not the content.
+        // Past the cap the content wins, bounded by the room on offer.
         let capped = desired_height(20, 0, 30, ComposerDensity::Comfortable, false);
-        assert_eq!(capped, 9, "Comfortable caps total rows at 9");
+        assert_eq!(
+            capped, 21,
+            "long content grows past the density cap: {capped}"
+        );
         let spacious = desired_height(20, 0, 30, ComposerDensity::Spacious, false);
-        assert_eq!(spacious, 12, "Spacious caps total rows at 12");
+        assert_eq!(
+            spacious, 21,
+            "long content grows past the density cap: {spacious}"
+        );
+        let bounded = desired_height(20, 0, 12, ComposerDensity::Comfortable, false);
+        assert_eq!(bounded, 12, "growth stops at the available room: {bounded}");
     }
 
     #[test]
