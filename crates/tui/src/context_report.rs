@@ -613,7 +613,7 @@ fn base_source_entries(
         ),
     };
     if let Some(block) = skills_block {
-        builder.push(SourceEntry::text(
+        let mut entry = SourceEntry::text(
             SourceKind::SkillsBlock,
             "Available skills",
             skills_dir.map(|path| path.display().to_string()),
@@ -621,7 +621,12 @@ fn base_source_entries(
             &block,
             CountingConfidence::High,
             Some(5),
-        ));
+        );
+        if block.contains("descriptions shortened for") {
+            entry.truncation_reason =
+                Some("some skill descriptions were shortened for the ambient index".to_string());
+        }
+        builder.push(entry);
     } else {
         builder.push(SourceEntry::omitted(
             SourceKind::SkillsBlock,

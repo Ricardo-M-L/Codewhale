@@ -485,13 +485,8 @@ fn inspect_skills(group: &mut dyn CommandSkillGroupContext) -> CommandResult {
             }
             // The model index caps each description; say so here instead of
             // cutting an imported skill mid-sentence with nobody told.
-            let description_chars = skill
-                .description
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-                .chars()
-                .count();
+            let description_chars =
+                crate::skills::prompt_description_char_count(&skill.description);
             if description_chars > crate::skills::MAX_SKILL_DESCRIPTION_CHARS {
                 let _ = writeln!(
                     output,

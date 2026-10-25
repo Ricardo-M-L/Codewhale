@@ -475,6 +475,63 @@ fn render_available_skills_context_truncates_long_descriptions() {
 }
 
 #[test]
+fn render_skills_block_reports_shortened_descriptions_and_warns() {
+    let tmpdir = TempDir::new().unwrap();
+    let long_desc = "x".repeat(2_000);
+    let body = format!("---\nname: bigdesc\ndescription: {long_desc}\n---\nbody");
+    create_skill_dir(&tmpdir, "bigdesc", &body);
+
+    let rendered = crate::skills::render_available_skills_context(&tmpdir.path().join("skills"))
+        .expect("skill context");
+
+    assert!(
+        rendered.contains("descriptions shortened for 1 of 1 skills"),
+        "aggregate footer missing:\n{rendered}"
+    );
+    assert!(
+        rendered.contains("### Skill load warnings"),
+        "discovery warning heading missing:\n{rendered}"
+    );
+    assert!(
+        rendered.contains("no `Use when:` trigger"),
+        "discovery warning missing:\n{rendered}"
+    );
+}
+
+#[test]
+fn render_skills_block_reports_proportional_shortening_without_warning() {
+    let tmpdir = TempDir::new().unwrap();
+    let mut registry = super::SkillRegistry::default();
+    let desc = "y".repeat(300);
+    for i in 0..100 {
+        registry.skills.push(super::Skill {
+            legacy_activation_name: None,
+            name: format!("skill-{i:03}"),
+            description: desc.clone(),
+            localized_descriptions: std::collections::HashMap::new(),
+            invocation: super::SkillInvocation::ModelAndUser,
+            aliases: Vec::new(),
+            argument_hint: None,
+            body: "body".to_string(),
+            path: tmpdir.path().join(format!("skill-{i:03}/SKILL.md")),
+            source: super::SkillSource::Native,
+        });
+    }
+
+    let rendered =
+        super::render_skills_block(&registry, "en", tmpdir.path()).expect("skill context");
+
+    assert!(
+        rendered.contains("descriptions shortened for 100 of 100 skills"),
+        "aggregate footer missing for tier-2 shortening:\n{rendered}"
+    );
+    assert!(
+        !rendered.contains("no `Use when:` trigger"),
+        "sub-cap descriptions must not produce per-skill warnings:\n{rendered}"
+    );
+}
+
+#[test]
 fn render_available_skills_context_collapses_internal_whitespace() {
     let tmpdir = TempDir::new().unwrap();
     create_skill_dir(

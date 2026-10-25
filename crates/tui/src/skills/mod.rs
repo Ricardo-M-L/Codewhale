@@ -838,7 +838,7 @@ impl SkillRegistry {
         // extracting the first `# Heading` as the skill name so that plain
         // Markdown files (no `---` fence) are accepted instead of rejected.
         let parsed = parse_frontmatter(content)?;
-        let warnings = validate_skill_frontmatter(
+        let mut warnings = validate_skill_frontmatter(
             parsed.as_ref().map(|(metadata, _)| metadata),
             Some(path),
             SkillValidationMode::Lenient,
@@ -860,6 +860,16 @@ impl SkillRegistry {
                 }
                 description.push_str("Use when: ");
                 description.push_str(trigger.trim());
+            }
+
+            if prompt_description_char_count(&description) > MAX_SKILL_DESCRIPTION_CHARS
+                && split_trigger(&description).1.is_none()
+            {
+                warnings.push(format!(
+                    "description is {} chars and has no `Use when:` trigger; the model index shows at most {} chars, so it will be cut mid-sentence — trim it or end it with `Use when: <trigger>`",
+                    prompt_description_char_count(&description),
+                    MAX_SKILL_DESCRIPTION_CHARS
+                ));
             }
 
             let explicit =
@@ -2018,12 +2028,22 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
     // Reserve using the model-selectable total: an actual omitted count can
     // never exceed it. This remains safe for catalogues above 9,999 entries.
     let skill_omission_reserve = omitted_skills_line(rows.len()).chars().count();
+    let shortened_reserve = if rows.is_empty() {
+        0
+    } else {
+        shortened_skills_line(rows.len(), rows.len())
+            .chars()
+            .count()
+    };
     let warning_omission_reserve = if warnings.is_empty() {
         0
     } else {
         WARNING_HEADING.chars().count() + omitted_warnings_line(warnings.len()).chars().count()
     };
-    let fixed = HEADER.chars().count() + USAGE.chars().count() + warning_omission_reserve;
+    let fixed = HEADER.chars().count()
+        + USAGE.chars().count()
+        + warning_omission_reserve
+        + shortened_reserve;
     // Warnings are rendered after the index and share the budget; give them a
     // bounded slice so a noisy install cannot erase the index, and vice versa.
     let warning_slice = if warnings.is_empty() {
@@ -2035,6 +2055,7 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
 
     let mut out = String::from(HEADER);
     let mut omitted = 0usize;
+    let mut shortened = 0usize;
 
     // Tier 1: full descriptions.
     let full_lines: Vec<String> = rows
@@ -2049,6 +2070,13 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
         for line in &full_lines {
             out.push_str(line);
         }
+        shortened = rows
+            .iter()
+            .filter(|row| {
+                let (s, t) = description_split(row, MAX_SKILL_DESCRIPTION_CHARS);
+                s < row.summary_len() || t < row.trigger_len()
+            })
+            .count();
     } else {
         // Tier 2: shorten descriptions proportionally. Fixed cost per row is
         // the name-plus-source scaffolding; whatever remains is shared among
@@ -2065,7 +2093,7 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
             })
             .sum();
         let desc_avail = index_budget.saturating_sub(scaffold);
-        let shortened: Option<Vec<String>> = (desc_full > 0
+        let shortened_lines: Option<Vec<(String, bool)>> = (desc_full > 0
             && desc_avail >= rows.len() * MIN_SHORTENED_DESCRIPTION_CHARS)
             .then(|| {
                 rows.iter()
@@ -2078,16 +2106,26 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
                             .max(MIN_SHORTENED_DESCRIPTION_CHARS)
                             .min(natural);
                         let (s, t) = description_split(row, cap);
-                        row.render(s, t)
+                        (
+                            row.render(s, t),
+                            s < row.summary_len() || t < row.trigger_len(),
+                        )
                     })
                     .collect()
             })
-            .filter(|lines: &Vec<String>| {
-                lines.iter().map(|l| l.chars().count()).sum::<usize>() <= index_budget
+            .filter(|lines: &Vec<(String, bool)>| {
+                lines
+                    .iter()
+                    .map(|(line, _)| line.chars().count())
+                    .sum::<usize>()
+                    <= index_budget
             });
-        if let Some(lines) = shortened {
-            for line in &lines {
-                out.push_str(line);
+        if let Some(lines) = shortened_lines {
+            for (line, was_shortened) in lines {
+                if was_shortened {
+                    shortened += 1;
+                }
+                out.push_str(&line);
             }
         } else {
             // Tier 3: names only. Omission is the last resort and only when
@@ -2102,6 +2140,9 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
                 } else {
                     used += len;
                     out.push_str(&line);
+                    if row.summary_len() + row.trigger_len() > 0 {
+                        shortened += 1;
+                    }
                 }
             }
         }
@@ -2109,6 +2150,10 @@ Skills are optional instruction packs. This index exposes routing metadata; bodi
 
     if omitted > 0 {
         out.push_str(&omitted_skills_line(omitted));
+    }
+
+    if shortened > 0 {
+        out.push_str(&shortened_skills_line(shortened, rows.len()));
     }
 
     if !warnings.is_empty() {
@@ -2174,6 +2219,21 @@ fn omitted_skills_line(count: usize) -> String {
 
 fn omitted_warnings_line(count: usize) -> String {
     format!("- ... {count} additional warnings omitted; run `/skills` to inspect them.\n")
+}
+
+fn shortened_skills_line(shortened: usize, total: usize) -> String {
+    format!(
+        "- ... descriptions shortened for {shortened} of {total} skills; `load_skill` with `name=\"list\"` returns full text.\n"
+    )
+}
+
+pub(crate) fn prompt_description_char_count(value: &str) -> usize {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .count()
 }
 
 fn truncate_for_prompt(value: &str, max_chars: usize) -> String {
