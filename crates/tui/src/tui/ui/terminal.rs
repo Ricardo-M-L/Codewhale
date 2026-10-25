@@ -821,8 +821,12 @@ pub(crate) const UI_QUIESCENT_POLL_MS: u64 = 250;
 pub(crate) struct IdleFacts {
     /// Live sub-agents (`running_agent_count(app) > 0`).
     pub(crate) has_running_agents: bool,
-    /// A spinner, the underwater scene, or a launch animation wants frames.
-    pub(crate) animation_active: bool,
+    /// The ambient (underwater/launch) scene wants frames faster than the
+    /// relaxed poll. The status spinner and elapsed-time label are paced by
+    /// the frame requester at their own cadence and are excluded here
+    /// (#6728): a background job's once-a-second label must not hold the
+    /// loop at the fast poll.
+    pub(crate) ambient_animation_active: bool,
     /// Durable tasks queued, running or waiting.
     pub(crate) durable_tasks_active: bool,
     /// A terminal event is already buffered for this iteration.
@@ -831,10 +835,22 @@ pub(crate) struct IdleFacts {
     pub(crate) pending_engine_op: bool,
 }
 
+/// Whether any durable (non-shell) task is live: queued, running or waiting.
+///
+/// Background shell jobs share the `task_panel` snapshot but are not durable
+/// tasks. Their elapsed-time label is paced by the frame requester, so a
+/// running shell must not hold the loop at the fast poll (#6728).
+pub(crate) fn has_live_durable_tasks(app: &App) -> bool {
+    app.task_panel.iter().any(|task| {
+        task.kind == crate::tui::app::TaskPanelEntryKind::Background
+            && matches!(task.status.as_str(), "queued" | "running" | "waiting")
+    })
+}
+
 /// Whether the UI has nothing to do *right now*: no turn, no live work, no
-/// animation, no pending redraw, no toast about to expire, no modal ticking.
-/// Pure on purpose. A state that is not listed here keeps the 48 ms poll, so
-/// the list errs towards "busy".
+/// ambient animation, no pending redraw, no toast about to expire, no modal
+/// ticking. Pure on purpose. A state that is not listed here keeps the 48 ms
+/// poll, so the list errs towards "busy".
 pub(crate) fn ui_state_is_quiescent(app: &App, facts: &IdleFacts, now: Instant) -> bool {
     let toast_live = |toast: &StatusToast| toast.ttl_ms.is_some() && !toast.is_expired(now);
     !(app.is_loading
@@ -843,7 +859,7 @@ pub(crate) fn ui_state_is_quiescent(app: &App, facts: &IdleFacts, now: Instant) 
         || app.turn_started_at.is_some()
         || matches!(app.runtime_turn_status.as_deref(), Some("in_progress"))
         || facts.has_running_agents
-        || facts.animation_active
+        || facts.ambient_animation_active
         || facts.durable_tasks_active
         || facts.input_pending
         || facts.pending_engine_op
@@ -986,10 +1002,10 @@ mod idle_poll_tests {
             ),
             (
                 IdleFacts {
-                    animation_active: true,
+                    ambient_animation_active: true,
                     ..IdleFacts::default()
                 },
-                "something is animating",
+                "the ambient scene is animating",
             ),
             (
                 IdleFacts {
@@ -1041,6 +1057,67 @@ mod idle_poll_tests {
         let mut app = quiet_app();
         app.onboarding = OnboardingState::Welcome;
         assert!(!ui_state_is_quiescent(&app, &facts, Instant::now()));
+    }
+
+    #[test]
+    fn has_live_durable_tasks_ignores_background_shells() {
+        let mut app = quiet_app();
+        app.task_panel.push(crate::tui::app::TaskPanelEntry {
+            exit_code: None,
+            id: "shell-live".to_string(),
+            status: "running".to_string(),
+            prompt_summary: "shell: sleep 600".to_string(),
+            duration_ms: Some(60_000),
+            kind: crate::tui::app::TaskPanelEntryKind::Shell,
+            stale: false,
+            elapsed_since_output_ms: None,
+            owner_agent_id: None,
+            owner_agent_name: None,
+            current_tool: None,
+            role: None,
+            files_touched: 0,
+        });
+        assert!(!has_live_durable_tasks(&app));
+
+        let mut durable = app.task_panel[0].clone();
+        durable.kind = crate::tui::app::TaskPanelEntryKind::Background;
+        app.task_panel.push(durable);
+        assert!(has_live_durable_tasks(&app));
+    }
+
+    #[test]
+    fn a_running_background_shell_is_busy_but_quiet() {
+        // #6728: a background shell keeps its elapsed-time label ticking, but
+        // that label is paced by the frame requester and must not hold the
+        // loop at the fast poll or the git probe at its active cadence.
+        let mut app = quiet_app();
+        app.task_panel.push(crate::tui::app::TaskPanelEntry {
+            exit_code: None,
+            id: "shell-live".to_string(),
+            status: "running".to_string(),
+            prompt_summary: "shell: sleep 600".to_string(),
+            duration_ms: Some(60_000),
+            kind: crate::tui::app::TaskPanelEntryKind::Shell,
+            stale: false,
+            elapsed_since_output_ms: None,
+            owner_agent_id: None,
+            owner_agent_name: None,
+            current_tool: None,
+            role: None,
+            files_touched: 0,
+        });
+        let facts = IdleFacts {
+            has_running_agents: false,
+            ambient_animation_active: false,
+            durable_tasks_active: has_live_durable_tasks(&app),
+            input_pending: false,
+            pending_engine_op: false,
+        };
+        assert!(ui_state_is_quiescent(&app, &facts, Instant::now()));
+        assert_eq!(
+            idle_poll_duration(&app, &facts, Instant::now(), Duration::from_secs(600)),
+            SLOW
+        );
     }
 }
 
