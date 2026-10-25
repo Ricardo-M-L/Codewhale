@@ -568,7 +568,7 @@ fn load_dir_instructions(
         let file_path = dir.join(filename);
 
         if context_candidate_exists(&file_path) {
-            match load_context_file(dir, &file_path) {
+            match load_context_file_truncating(dir, &file_path) {
                 Ok(content) => {
                     tracing::info!(
                         "Loaded project context from {} ({} bytes)",
@@ -1060,6 +1060,17 @@ fn load_context_file(root: &Path, path: &Path) -> Result<String, ProjectContextE
     read_context_file(file, path)
 }
 
+/// Load a markdown instruction file, keeping the head of an oversized file
+/// with an explicit truncation marker instead of refusing it.
+fn load_context_file_truncating(root: &Path, path: &Path) -> Result<String, ProjectContextError> {
+    let file =
+        crate::fs_confined::open_read(root, path).map_err(|source| ProjectContextError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    read_context_file_truncating(file, path)
+}
+
 fn read_context_file(mut file: fs::File, path: &Path) -> Result<String, ProjectContextError> {
     let metadata = file
         .metadata()
@@ -1087,6 +1098,73 @@ fn read_context_file(mut file: fs::File, path: &Path) -> Result<String, ProjectC
         return Err(ProjectContextError::Empty {
             path: path.to_path_buf(),
         });
+    }
+
+    Ok(content)
+}
+
+fn read_context_file_truncating(
+    mut file: fs::File,
+    path: &Path,
+) -> Result<String, ProjectContextError> {
+    let metadata = file
+        .metadata()
+        .map_err(|source| ProjectContextError::Metadata {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    let full_len = usize::try_from(metadata.len()).unwrap_or(usize::MAX);
+
+    let mut buf = Vec::with_capacity(MAX_CONTEXT_SIZE);
+    (&mut file)
+        .take(MAX_CONTEXT_SIZE as u64)
+        .read_to_end(&mut buf)
+        .map_err(|source| ProjectContextError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    let truncated = buf.len() < full_len;
+
+    let mut content = match String::from_utf8(buf) {
+        Ok(text) => text,
+        Err(error) => {
+            let valid = error.utf8_error().valid_up_to();
+            let mut buf = error.into_bytes();
+            if !truncated || buf.len() - valid > 3 {
+                return Err(ProjectContextError::Read {
+                    path: path.to_path_buf(),
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "stream did not contain valid UTF-8",
+                    ),
+                });
+            }
+            buf.truncate(valid);
+            String::from_utf8(buf).map_err(|e| ProjectContextError::Read {
+                path: path.to_path_buf(),
+                source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+            })?
+        }
+    };
+
+    // Basic validation
+    if content.trim().is_empty() {
+        return Err(ProjectContextError::Empty {
+            path: path.to_path_buf(),
+        });
+    }
+
+    if truncated || content.len() > MAX_CONTEXT_SIZE {
+        let mut end = MAX_CONTEXT_SIZE.min(content.len());
+        while end > 0 && !content.is_char_boundary(end) {
+            end -= 1;
+        }
+        let omitted = full_len.saturating_sub(end);
+        let name = project_instructions_source_label(Some(path));
+        content.truncate(end);
+        content.push_str(&format!(
+            "\n[…truncated: {omitted} of {full_len} bytes omitted from {name} — consider splitting this instructions file]"
+        ));
     }
 
     Ok(content)
@@ -1185,7 +1263,7 @@ fn load_global_context_file(path: &Path) -> Result<String, ProjectContextError> 
             path: path.to_path_buf(),
             source,
         })?;
-    read_context_file(file, path)
+    read_context_file_truncating(file, path)
 }
 
 /// Check if this project is marked as trusted
@@ -1412,7 +1490,7 @@ pub fn project_instruction_sources(
                 &dir,
                 dir.join(filename),
                 &mut scope_loaded,
-                |path| load_context_file(&dir, path),
+                |path| load_context_file_truncating(&dir, path),
             );
         }
     }
@@ -2056,6 +2134,85 @@ mod tests {
 
         assert!(!ctx.has_instructions());
         assert!(!ctx.warnings.is_empty());
+    }
+
+    #[test]
+    fn oversized_context_file_is_trimmed_with_a_marker_not_dropped() {
+        let tmp = tempdir().expect("tempdir");
+        let agents_path = tmp.path().join("AGENTS.md");
+        let head = format!("HEAD-MARKER\n{}", "A".repeat(60 * 1024));
+        let tail = format!("{}\nTAIL-MARKER", "B".repeat(60 * 1024));
+        fs::write(&agents_path, format!("{head}{tail}")).expect("write");
+
+        let loaded = load_context_file_truncating(tmp.path(), &agents_path).expect("load");
+
+        assert!(
+            loaded.contains("HEAD-MARKER"),
+            "the head of an oversized instruction file must survive"
+        );
+        assert!(
+            !loaded.contains("TAIL-MARKER"),
+            "the tail beyond the per-file cap must be cut"
+        );
+        assert!(
+            loaded.contains("[…truncated:"),
+            "a truncation marker must record what was cut: {loaded}"
+        );
+        assert!(
+            loaded.contains("AGENTS.md"),
+            "the marker must name the file"
+        );
+        assert!(
+            !loaded.contains(&tmp.path().display().to_string()),
+            "the marker must not carry the absolute path: {loaded}"
+        );
+    }
+
+    #[test]
+    fn oversized_agents_md_is_trimmed_through_the_project_chain() {
+        let tmp = tempdir().expect("tempdir");
+        fs::write(tmp.path().join("AGENTS.md"), "X".repeat(120 * 1024)).expect("write");
+
+        let ctx = load_project_context(tmp.path());
+        assert!(
+            ctx.has_instructions(),
+            "an oversized AGENTS.md must be trimmed, not dropped"
+        );
+        let instructions = ctx.instructions.as_deref().unwrap_or("");
+        assert!(
+            instructions.contains("[…truncated:"),
+            "the truncation marker must survive prompt assembly: {instructions}"
+        );
+        assert!(
+            instructions.contains("AGENTS.md"),
+            "the marker must name the file"
+        );
+    }
+
+    #[test]
+    fn oversized_global_agents_md_is_trimmed_not_dropped() {
+        let tmp = tempdir().expect("tempdir");
+        let home = tempdir().expect("home");
+        let global = home.path().join(".codewhale").join("AGENTS.md");
+        fs::create_dir_all(global.parent().unwrap()).expect("mkdir");
+        fs::write(&global, "G".repeat(120 * 1024)).expect("write");
+        let workspace = tmp.path().join("ws");
+        fs::create_dir_all(&workspace).expect("mkdir ws");
+
+        let ctx = load_project_context_with_parents_and_home(&workspace, Some(home.path()));
+        assert!(
+            ctx.has_instructions(),
+            "an oversized global AGENTS.md must be trimmed, not dropped"
+        );
+        let instructions = ctx.instructions.as_deref().unwrap_or("");
+        assert!(
+            instructions.contains("[…truncated:"),
+            "the truncation marker must survive global assembly: {instructions}"
+        );
+        assert!(
+            instructions.contains("AGENTS.md"),
+            "the marker must name the file"
+        );
     }
 
     #[test]
