@@ -965,6 +965,27 @@ pub fn render_markdown(content: &str, width: u16, base_style: Style) -> Vec<Line
     render_parsed(&parsed, width, base_style)
 }
 
+/// Convenience wrapper: parse + render with an explicit UI palette mode.
+///
+/// The live transcript's reasoning/thinking and archived-context bodies use
+/// this so a code fence inside those cells follows the selected theme rather
+/// than terminal/OS auto-detection. On a dark community theme (Shoreline) the
+/// auto-detected mode can be Light, which would otherwise select a light
+/// syntax theme and paint dark code text onto the dark surface.
+#[must_use]
+pub(crate) fn render_markdown_with_palette(
+    content: &str,
+    width: u16,
+    base_style: Style,
+    palette_mode: palette::PaletteMode,
+) -> Vec<Line<'static>> {
+    let parsed = parse(content);
+    render_parsed_tagged_with_palette(&parsed, width, base_style, palette_mode)
+        .into_iter()
+        .map(|line| line.line)
+        .collect()
+}
+
 /// Convenience wrapper: parse + render while keeping per-line source metadata.
 #[cfg(test)]
 #[must_use]

@@ -487,6 +487,7 @@ impl HistoryCell {
                     } else {
                         options.thinking_preview_lines
                     },
+                    options.palette_mode,
                 );
                 fold_action = expandable.then_some(if collapsed {
                     CellFoldAction::Expand

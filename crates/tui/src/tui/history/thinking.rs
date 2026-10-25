@@ -116,6 +116,7 @@ pub(crate) fn render_thinking_with_analysis(
         highlight,
         Locale::En,
         THINKING_COMPLETED_PREVIEW_LINE_LIMIT,
+        palette::PaletteMode::detect(),
     )
 }
 
@@ -130,6 +131,7 @@ pub(crate) fn render_thinking_with_preview_limit(
     highlight: bool,
     locale: Locale,
     completed_preview_lines: usize,
+    palette_mode: palette::PaletteMode,
 ) -> (Vec<Line<'static>>, bool) {
     let state = thinking_visual_state(streaming, duration_secs);
     let style = thinking_style();
@@ -173,11 +175,17 @@ pub(crate) fn render_thinking_with_preview_limit(
             streaming,
             body_style,
             completed_preview_lines,
+            palette_mode,
         )
     } else if content.trim().is_empty() {
         (Vec::new(), false)
     } else {
-        let body = markdown_render::render_markdown(content, content_width, body_style);
+        let body = markdown_render::render_markdown_with_palette(
+            content,
+            content_width,
+            body_style,
+            palette_mode,
+        );
         // The collapse affordance mirrors the collapsed preview's "more than
         // the preview would show" test, derived from this single render
         // instead of rendering the preview too: streaming content outgrows
@@ -233,6 +241,7 @@ fn collapsed_thinking_body(
     streaming: bool,
     style: Style,
     completed_preview_lines: usize,
+    palette_mode: palette::PaletteMode,
 ) -> (Vec<Line<'static>>, bool) {
     if !streaming && completed_preview_lines == 0 {
         return (Vec::new(), !content.trim().is_empty());
@@ -271,7 +280,12 @@ fn collapsed_thinking_body(
     let mut lines = if render_source.trim().is_empty() {
         Vec::new()
     } else {
-        markdown_render::render_markdown(render_source, width.saturating_sub(3).max(1), style)
+        markdown_render::render_markdown_with_palette(
+            render_source,
+            width.saturating_sub(3).max(1),
+            style,
+            palette_mode,
+        )
     };
     let truncated = lines.len() > limit;
     if truncated {
@@ -479,6 +493,7 @@ mod tests {
             false,
             Locale::En,
             THINKING_COMPLETED_PREVIEW_LINE_LIMIT,
+            palette::PaletteMode::Dark,
         );
         assert!(expandable, "a long streaming body must offer expand");
         // header (including the affordance) + three preview rows
@@ -509,6 +524,7 @@ mod tests {
             false,
             Locale::En,
             THINKING_COMPLETED_PREVIEW_LINE_LIMIT,
+            palette::PaletteMode::Dark,
         );
         // Code rows carry the two-space code prefix after the rail; if the
         // tail slice started inside the open fence they would render as
@@ -540,6 +556,7 @@ mod tests {
             false,
             Locale::En,
             THINKING_COMPLETED_PREVIEW_LINE_LIMIT,
+            palette::PaletteMode::Dark,
         );
         assert_eq!(
             markdown_render::parse_invocation_count(),
