@@ -14,7 +14,7 @@ Global key chords are not yet user-configurable — tracked for a future release
 | `F2`                 | Toggle the typed Settings editor                              |
 | `F3`                 | Open the provider/model picker (same as `/provider`)          |
 | `Ctrl-K`             | Open the command palette (slash-command finder)                |
-| `Ctrl-C`             | Cancel current turn / dismiss modal / arm-then-confirm quit    |
+| `Ctrl-C`             | Clear a non-empty draft (recoverable — see `Ctrl-Z`); otherwise cancel current turn / dismiss modal / arm-then-confirm quit    |
 | `Ctrl-B`             | Release the current shell wait so the turn can continue; foreground commands move into `/jobs`, and background tasks keep running. Use `/jobs` or `Bash` with `action: "wait"` to inspect output |
 | `Ctrl-D`             | Quit (only when the composer is empty)                         |
 | `Tab`                | When the composer is empty, cycle TUI mode: Plan → Work → Operate → Plan |
@@ -49,6 +49,7 @@ Editing the message you're about to send.
 | `Ctrl-Enter` / `Cmd-Enter`  | Send into the current turn; send normally when idle (when the terminal reports it distinctly) |
 | `Ctrl-U`                    | Clear the whole draft (recoverable — see `Ctrl-Z`)      |
 | `Ctrl-Z`                    | Restore the cleared draft (only while the composer is empty) |
+| `Ctrl-C`                    | Clear the whole draft (recoverable — see `Ctrl-Z`) when the composer is non-empty and nothing is in flight |
 | `Ctrl-W` / `Ctrl-Backspace` / `Alt-Backspace` | Delete previous word        |
 | `Ctrl-A` / `Home`           | Move to start of input / start of line (readline convention) |
 | `Ctrl-E` / `End`            | Move to end of input / end of line                      |

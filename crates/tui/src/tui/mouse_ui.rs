@@ -2038,13 +2038,16 @@ fn clear_active_selection(app: &mut App) -> bool {
 }
 
 /// Branches taken by the Ctrl+C key handler. The order encodes priority and is
-/// the unit-tested contract for #1337 / #1367: a transcript selection always
-/// wins (so users learn that Ctrl+C copies when there's something to copy);
-/// otherwise an active turn is interrupted; otherwise the quit-arm flow runs.
+/// the unit-tested contract for #1337 / #1367 / #6237: a transcript selection
+/// always wins (so users learn that Ctrl+C copies when there's something to
+/// copy); otherwise an active turn is interrupted; otherwise a non-empty
+/// composer is cleared recoverably (the sibling-tool muscle-memory convention);
+/// otherwise the quit-arm flow runs.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum CtrlCDisposition {
     CopySelection,
     CancelTurn,
+    ClearInput,
     ConfirmExit,
     ArmExit,
 }
@@ -2058,6 +2061,8 @@ pub(crate) fn ctrl_c_disposition(app: &App) -> CtrlCDisposition {
         || app.goal_continuation_waiting
     {
         CtrlCDisposition::CancelTurn
+    } else if !app.input.is_empty() {
+        CtrlCDisposition::ClearInput
     } else if app.quit_is_armed() {
         CtrlCDisposition::ConfirmExit
     } else {

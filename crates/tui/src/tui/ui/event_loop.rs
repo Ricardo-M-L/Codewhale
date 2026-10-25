@@ -6059,12 +6059,12 @@ pub(crate) async fn run_event_loop(
                     // the conversation composer match below handle this key
                     // exactly as they would in a live session.
                 } else {
-                    // Ctrl+C on the launch screen follows the same two-tap
+                    // Ctrl+C on the launch screen follows the same
                     // contract as the session shell (`CtrlCDisposition`):
-                    // first press arms the visible exit prompt, the second
-                    // inside QUIT_CONFIRMATION_WINDOW exits. Selection
-                    // copy and turn cancel cannot apply before a session
-                    // exists, so every other disposition arms.
+                    // a non-empty composer clears recoverably, then the first
+                    // press arms the visible exit prompt, the second inside
+                    // QUIT_CONFIRMATION_WINDOW exits. Selection copy and turn
+                    // cancel cannot apply before a session exists.
                     if key.code == KeyCode::Char('c')
                         && key.modifiers.contains(KeyModifiers::CONTROL)
                     {
@@ -6072,6 +6072,13 @@ pub(crate) async fn run_event_loop(
                             CtrlCDisposition::ConfirmExit => {
                                 let _ = engine_handle.send(Op::Shutdown).await;
                                 return Ok(());
+                            }
+                            CtrlCDisposition::ClearInput => {
+                                app.edit_in_progress = false;
+                                app.clear_input_recoverable();
+                                let _ = app.maybe_show_behavioral_tip(
+                                    crate::tui::behavioral_tips::BehavioralTip::ClearedInputRestore,
+                                );
                             }
                             _ => app.arm_quit(),
                         }
@@ -6612,11 +6619,12 @@ pub(crate) async fn run_event_loop(
                     copy_active_selection(app);
                 }
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    // Four behaviors layered on Ctrl+C in priority order — see
+                    // Five behaviors layered on Ctrl+C in priority order — see
                     // `CtrlCDisposition` for the unit-tested decision table.
                     // 1. selection active → copy + clear (Windows convention,
-                    //    #1337); 2. turn in flight → cancel; 3. quit-armed →
-                    //    exit; 4. otherwise → arm the 2-second exit prompt.
+                    //    #1337); 2. turn in flight → cancel; 3. non-empty
+                    //    composer → recoverable clear (#6237); 4. quit-armed →
+                    //    exit; 5. otherwise → arm the 2-second exit prompt.
                     match ctrl_c_disposition(app) {
                         CtrlCDisposition::CopySelection => {
                             copy_active_selection(app);
@@ -6651,6 +6659,13 @@ pub(crate) async fn run_event_loop(
                             };
                             app.status_message = Some(parent_stop_status(app, base));
                             app.disarm_quit();
+                        }
+                        CtrlCDisposition::ClearInput => {
+                            app.edit_in_progress = false;
+                            app.clear_input_recoverable();
+                            let _ = app.maybe_show_behavioral_tip(
+                                crate::tui::behavioral_tips::BehavioralTip::ClearedInputRestore,
+                            );
                         }
                         CtrlCDisposition::ConfirmExit => {
                             let _ = engine_handle.send(Op::Shutdown).await;

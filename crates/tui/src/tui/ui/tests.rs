@@ -19282,6 +19282,38 @@ fn ctrl_c_disposition_goal_delay_cancels_continuation_instead_of_arming_exit() {
 }
 
 #[test]
+fn ctrl_c_disposition_non_empty_composer_clears_input() {
+    // #6237: with a draft present and nothing in flight, Ctrl+C clears the
+    // composer recoverably instead of arming the exit prompt, matching the
+    // sibling-tool muscle-memory convention.
+    let mut app = create_test_app();
+    app.input = "draft".to_string();
+    assert!(!app.is_loading);
+    assert!(!app.quit_is_armed());
+    assert_eq!(ctrl_c_disposition(&app), CtrlCDisposition::ClearInput);
+}
+
+#[test]
+fn ctrl_c_disposition_loading_beats_non_empty_composer() {
+    // In flight, Ctrl+C must stay "cancel"; a draft must not swallow the
+    // only way out of a running turn.
+    let mut app = create_test_app();
+    app.input = "draft".to_string();
+    app.is_loading = true;
+    assert_eq!(ctrl_c_disposition(&app), CtrlCDisposition::CancelTurn);
+}
+
+#[test]
+fn ctrl_c_disposition_non_empty_composer_beats_armed_quit() {
+    // Once a draft is present, Ctrl+C returns to "clear", so the two-tap exit
+    // path only runs on an empty composer.
+    let mut app = create_test_app();
+    app.arm_quit();
+    app.input = "draft".to_string();
+    assert_eq!(ctrl_c_disposition(&app), CtrlCDisposition::ClearInput);
+}
+
+#[test]
 fn escape_goal_delay_cancels_continuation_with_empty_composer() {
     let mut app = create_test_app();
     app.is_loading = false;
