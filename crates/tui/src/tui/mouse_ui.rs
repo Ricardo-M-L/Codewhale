@@ -364,7 +364,7 @@ pub(crate) fn handle_composer_mouse(app: &mut App, mouse: MouseEvent) -> bool {
                 let action =
                     app.decide_composer_submit(crate::tui::app::ComposerSubmitChord::Enter);
                 if !matches!(action, crate::tui::app::ComposerSubmitAction::Noop)
-                    && (app.composer_enter_would_submit()
+                    && (app.composer_enter_would_submit(true)
                         || matches!(action, crate::tui::app::ComposerSubmitAction::SendQueuedNow))
                 {
                     app.pending_composer_submit = Some(crate::tui::app::ComposerSubmitChord::Enter);
@@ -2375,7 +2375,6 @@ mod tests {
         agent_transcript_text, build_context_menu_entries, handle_composer_mouse,
         handle_mouse_event, sidebar_click_action,
     };
-    use crate::config::Config;
     use crate::tui::app::{
         App, SidebarHoverRow, SidebarHoverSection, SidebarRowAction, TuiOptions,
     };
@@ -2386,6 +2385,7 @@ mod tests {
     use crate::tui::views::{ContextMenuAction, ModalKind, ViewEvent};
     use codewhale_models::Role;
     use codewhale_models::{ContentBlock, Message};
+    use codewhale_runtime::config::Config;
     use crossterm::event::{
         KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     };

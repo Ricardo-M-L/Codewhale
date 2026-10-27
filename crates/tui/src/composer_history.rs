@@ -326,7 +326,7 @@ fn write_history_atomic(path: &Path, payload: &[u8]) -> std::io::Result<()> {
         .chain(std::iter::once(None))
         .enumerate()
     {
-        match crate::utils::write_atomic(path, payload) {
+        match codewhale_util::utils::write_atomic(path, payload) {
             Ok(()) => return Ok(()),
             Err(err) if delay.is_some() => {
                 tracing::debug!(

@@ -7,12 +7,12 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-use super::canonical_action::required_action;
 use super::spec::{
     ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec,
 };
 use super::test_runner::RunTestsTool;
 use super::verifier::RunVerifiersTool;
+use codewhale_tools::required_action;
 
 pub struct RunTool {
     name: &'static str,

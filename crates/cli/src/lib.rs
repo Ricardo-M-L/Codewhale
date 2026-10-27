@@ -465,6 +465,21 @@ The command prints the completion script to stdout; redirect it to a path your s
         after_help = "GitHub Releases is the default source. Supported mirrors are explicit overrides or manifest-failure fallbacks. Checksums are required; older releases never replace a newer build.\n\nThe command prints the executable it will update. If you have multiple installs, run the intended binary by its full path.\n\nNew macOS/Linux install: curl -fsSL https://codewhale.net/install.sh | sh\nInstallation and PATH help: https://github.com/codewhale-hq/CodeWhale/blob/main/docs/INSTALL.md"
     )]
     Update(UpdateArgs),
+    #[command(
+        about = "Remove this receipt-owned release install, or print its package manager's removal command; user data is kept unless --purge-data"
+    )]
+    Uninstall {
+        #[arg(
+            long,
+            help = "Remove the preflighted files; without this flag, print the plan"
+        )]
+        yes: bool,
+        #[arg(
+            long,
+            help = "Also delete Codewhale's own data directory (config, secrets file, sessions); previewed unless --yes"
+        )]
+        purge_data: bool,
+    },
     /// Export the route catalog (`providers export --json`).
     Providers(ProvidersArgs),
 }
@@ -2282,6 +2297,17 @@ fn run() -> Result<()> {
             || matches!(cli.command.as_ref(), Some(Commands::AppServer(args)) if args.http),
         "An inherited Runtime listener requires serve --http or app-server --http"
     );
+    if let Some(Commands::Uninstall { yes, purge_data }) = cli.command.as_ref() {
+        #[cfg(any(all(unix, not(target_env = "ohos")), windows))]
+        return update::uninstall::run(*yes, *purge_data);
+        #[cfg(not(any(all(unix, not(target_env = "ohos")), windows)))]
+        {
+            let _ = (yes, purge_data);
+            bail!(
+                "Automatic uninstall is supported for receipt-owned macOS, Linux and Windows release installs. Use the installer or package manager that owns this copy; user data is preserved."
+            );
+        }
+    }
     preserve_exec_separator(&mut cli, &argv);
     capture_exec_startup_options(&mut cli)?;
     capture_serve_full_access(&mut cli);
@@ -2772,6 +2798,9 @@ fn run() -> Result<()> {
             };
             finish_cli_telemetry(session, &outcome, cli.verbose);
             outcome
+        }
+        Some(Commands::Uninstall { .. }) => {
+            unreachable!("uninstall dispatches before config loading")
         }
         Some(Commands::Providers(args)) => run_providers_command(args),
         None => {
@@ -4404,7 +4433,7 @@ fn owned_oauth_account(store: &ConfigStore, provider: ProviderKind) -> Result<Op
     .oauth_credential_generation
     .as_deref()
     .context("no sign-in generation configured")?;
-    codewhale_tui::owned_oauth_account_label(provider, generation)
+    codewhale_runtime::oauth::owned_oauth_account_label(provider, generation)
 }
 
 #[cfg(test)]
@@ -5415,8 +5444,8 @@ fn run_config_command(
             }
             // A settings.toml key is answered from settings.toml, even when a
             // stale config.toml copy that nothing reads is still present.
-            if codewhale_tui::config_keys::config_key_home(&key)
-                == codewhale_tui::config_keys::ConfigKeyHome::SettingsToml
+            if codewhale_runtime::config_keys::config_key_home(&key)
+                == codewhale_runtime::config_keys::ConfigKeyHome::SettingsToml
             {
                 let value = settings_key_value(store, &key)?;
                 note_unread_config_copy(store, &key);
@@ -5424,7 +5453,7 @@ fn run_config_command(
                 return Ok(());
             }
             if key == "stream" || key.starts_with("stream.") {
-                let stream = codewhale_tui::config_keys::resolved_stream_config(&store.config)?;
+                let stream = codewhale_runtime::config_keys::resolved_stream_config(&store.config)?;
                 let value = if key == "stream" {
                     &stream
                 } else {
@@ -5466,11 +5495,11 @@ fn run_config_command(
             }
             // Refuse a key nothing reads, and send settings.toml keys to
             // settings.toml, before config.toml is touched (#6563).
-            match codewhale_tui::config_keys::config_key_home(&key) {
-                codewhale_tui::config_keys::ConfigKeyHome::ConfigToml => {
+            match codewhale_runtime::config_keys::config_key_home(&key) {
+                codewhale_runtime::config_keys::ConfigKeyHome::ConfigToml => {
                     // A value typed or validated by its config.toml reader.
                     if let Some(typed) =
-                        codewhale_tui::config_keys::config_toml_value(&key, &value)?
+                        codewhale_runtime::config_keys::config_toml_value(&key, &value)?
                     {
                         store.config.extras.insert(key.trim().to_string(), typed);
                         store.save()?;
@@ -5478,15 +5507,17 @@ fn run_config_command(
                         return Ok(());
                     }
                 }
-                codewhale_tui::config_keys::ConfigKeyHome::SettingsToml => {
+                codewhale_runtime::config_keys::ConfigKeyHome::SettingsToml => {
                     refuse_workspace_scoped_settings_key(store, &key)?;
-                    let path = codewhale_tui::config_keys::set_settings_value(&key, &value)?;
+                    let path = codewhale_runtime::config_keys::set_settings_value(&key, &value)?;
                     println!("set {key} in {}", path.display());
                     note_unread_config_copy(store, &key);
                     return Ok(());
                 }
-                codewhale_tui::config_keys::ConfigKeyHome::Unknown => {
-                    bail!(codewhale_tui::config_keys::unknown_config_key_message(&key));
+                codewhale_runtime::config_keys::ConfigKeyHome::Unknown => {
+                    bail!(codewhale_runtime::config_keys::unknown_config_key_message(
+                        &key
+                    ));
                 }
             }
             store.config.set_value(&key, &value)?;
@@ -5595,7 +5626,7 @@ fn run_config_command(
                 .context("config must be a TOML table")?
                 .insert(
                     "stream".to_string(),
-                    codewhale_tui::config_keys::resolved_stream_config(&store.config)?,
+                    codewhale_runtime::config_keys::resolved_stream_config(&store.config)?,
                 );
             print!("{}", toml::to_string_pretty(&document)?);
             Ok(())
@@ -5685,7 +5716,8 @@ fn refuse_workspace_scoped_settings_key(store: &ConfigStore, key: &str) -> Resul
 /// never a config.toml copy that nothing reads.
 fn settings_key_value(store: &ConfigStore, key: &str) -> Result<String> {
     refuse_workspace_scoped_settings_key(store, key)?;
-    codewhale_tui::config_keys::settings_value(key)?.ok_or_else(|| anyhow!("key not found: {key}"))
+    codewhale_runtime::config_keys::settings_value(key)?
+        .ok_or_else(|| anyhow!("key not found: {key}"))
 }
 
 /// Point at a config.toml copy of a settings.toml key: nothing reads it.
@@ -5724,7 +5756,7 @@ fn apply_per_run_overrides(store: &mut ConfigStore, specs: &[String]) -> Result<
 fn run_config_doctor(store: &ConfigStore) -> Result<()> {
     println!("# {}", store.path().display());
     let mut errors: Vec<String> = Vec::new();
-    let unread = codewhale_tui::config_keys::unread_config_keys(
+    let unread = codewhale_runtime::config_keys::unread_config_keys(
         store.config.extras.keys().map(String::as_str),
     );
     for finding in &unread {
@@ -7225,7 +7257,7 @@ mod tests {
             &overlays,
         )
         .unwrap();
-        let stream = codewhale_tui::config_keys::resolved_stream_config(&store.config).unwrap();
+        let stream = codewhale_runtime::config_keys::resolved_stream_config(&store.config).unwrap();
         assert_eq!(stream["open_timeout_secs"].as_integer(), Some(120));
         assert_eq!(stream["max_resumes"].as_integer(), Some(6));
         assert_eq!(
@@ -7247,7 +7279,7 @@ mod tests {
             "zzz_unknown = 1\ncalm_mode = \"false\"\nmax_subagents = 4\n",
         );
         let store = ConfigStore::load(Some(path)).expect("load fixture");
-        let unread = codewhale_tui::config_keys::unread_config_keys(
+        let unread = codewhale_runtime::config_keys::unread_config_keys(
             store.config.extras.keys().map(String::as_str),
         );
         assert_eq!(unread.len(), 2, "{unread:#?}");

@@ -9,7 +9,6 @@ use std::time::Instant;
 use tempfile::TempDir;
 
 use crate::commands::CommandResult;
-use crate::config::Config;
 use crate::reasoning_preference::ReasoningEffort;
 use crate::session_manager::create_saved_session_with_id_and_mode;
 use crate::test_support::SealedHome;
@@ -17,6 +16,7 @@ use crate::tui::app::{App, AppAction, TuiOptions, TurnCacheRecord};
 use crate::tui::history::HistoryCell;
 use codewhale_config::AppMode;
 use codewhale_models::Role;
+use codewhale_runtime::config::Config;
 
 fn dispatch_lifecycle(app: &mut App, name: &str, arg: Option<&str>) -> CommandResult {
     let command = match arg {
@@ -150,7 +150,7 @@ fn save_preserves_latest_auto_route_receipt() {
     assert_eq!(route.receipt, receipt);
     assert_eq!(
         route.effective_reasoning_effort,
-        Some(crate::work_graph::ReasoningEffortTier::ThinkingEnabledGranularityUnavailable)
+        Some(codewhale_models::reasoning_effort_tier::ReasoningEffortTier::ThinkingEnabledGranularityUnavailable)
     );
 }
 
@@ -369,7 +369,7 @@ fn conversation_reset_forgets_approvals(command: &str) {
         "k",
         "g",
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
     crate::tui::pending_requests::record(

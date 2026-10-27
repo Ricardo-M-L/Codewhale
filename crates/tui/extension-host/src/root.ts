@@ -31,7 +31,10 @@ import {
   type ToolResultWire,
 } from './protocol.ts'
 import { RpcError, type RpcPeer } from './rpc.ts'
+import { UserQuestionError } from './dsh/dsh-message-compat.js'
 import { explainImportError } from './dsh/resolve-hooks.ts'
+import compatibility from './dsh/compatibility.json' with { type: 'json' }
+import { assertSupportedJsonSchema, validateJsonSchemaValue, ToolOutputError } from './dsh/dsh-tools-compat.js'
 import { isJson } from './json.ts'
 import { makeCoreApi } from './shims/core.ts'
 import { OwnedRegistrations } from './shims/owned.ts'
@@ -47,7 +50,6 @@ import {
   commandSpec,
   defineCommandsService,
   makeInvocation,
-  normalizeResult,
   type LocalCommand,
   type NormalizedCommand,
 } from './shims/commands.ts'
@@ -61,31 +63,10 @@ export const OWNER = Symbol.for('codewhale.extension-host.owner')
  * provided by the host root as shims and are refused to plugins for the same
  * reason.
  */
-export const REFUSED_SERVICES = new Set(['shellHooks',
-  'loader', // one host-owned composition loader; plugins may not replace it
-  'approval',
-  'agents',
-  'subagents',
-  'sessions',
-  'llm',
-  'sandboxPolicy',
-  'credentials',
-  'fs',
-  'subprocess',
-  'systemPrompt',
-  'runtimeLoop', // the one Rust Engine owns scheduling and execution
-  'tools',
-  'commands',
-  'prompt',
-  'storage',
-  'skills',
-  'avatars',
-  'mcp',
-  'logger',
-])
+export const REFUSED_SERVICES = new Set(compatibility.refused_services)
 
 /** Services the root provides; `inject` of anything else fails activation. */
-const PROVIDED_SERVICES = new Set(['tools', 'commands', 'prompt', 'storage', 'skills', 'avatars', 'mcp', 'logger', 'events', 'reflect', 'registry'])
+const PROVIDED_SERVICES = new Set(compatibility.provided_services)
 
 const ACTIVATE_DEADLINE_MS = 5_000
 const DISPOSE_DEADLINE_MS = 2_000
@@ -152,8 +133,21 @@ function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promis
   return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
 }
 
+interface ToolInvocation {
+  owner: OwnerRecord
+  session: object | undefined
+  agent: object | undefined
+  questionTicket: string | undefined
+  delegated: boolean
+  ticket: string | undefined
+  signal: AbortSignal
+  active: boolean
+  pending: Promise<void>
+}
+
 export class HostRoot {
   readonly root: any
+  private readonly toolInvocations = new AsyncLocalStorage<ToolInvocation>()
   readonly owners = new Map<string, OwnerRecord>()
   private readonly toolRegistrations: OwnedRegistrations<OwnerRecord, LocalTool>
   private readonly commandRegistrations: OwnedRegistrations<OwnerRecord, LocalCommand<OwnerRecord>>
@@ -251,10 +245,13 @@ export class HostRoot {
       }
 
       /** DSH `ctx.tools.register(defineTool(...))`: returns an idempotent disposer. */
-      register(definition: any) {
+      register(definition: any, options?: unknown) {
         const ctx: any = this.ctx
         const owner: OwnerRecord | undefined = ctx[OWNER]
         if (!owner) throw new Error('tools.register called outside an extension owner')
+        if (options !== undefined && (!options || typeof options !== 'object' || Array.isArray(options) || Reflect.ownKeys(options).length !== 0)) {
+          throw new TypeError('tools.register options are unsupported by the Codewhale DSH 0.2.1-rc.2 definition adapter')
+        }
         validateDefinition(definition)
         return ctx.effect(() => host.addTool(owner, definition), `tools.register(${JSON.stringify(definition.name)})`)
       }
@@ -291,11 +288,151 @@ export class HostRoot {
       set(key: string, value: Json) { return this.api().set(key, value) }
       delete(key: string) { return this.api().delete(key) }
     }
+    class SessionsShim extends Service {
+      constructor(ctx: any) { super(ctx, 'sessions') }
+      async flush(session: unknown): Promise<boolean> {
+        const invocation = host.toolInvocations.getStore()
+        const owner: OwnerRecord | undefined = (this.ctx as any)[OWNER]
+        const live = () => invocation && invocation.active && !invocation.signal.aborted
+          && invocation.owner === owner && owner?.state === 'active' && !owner.disposing
+          && invocation.ticket !== undefined && session === invocation.session && session !== undefined
+        if (!live()) throw new RpcError(ErrorCode.NotAvailable, 'sessions.flush requires this live tool invocation’s session')
+        const call = invocation!
+        const run = async () => {
+          if (!live()) throw new RpcError(ErrorCode.NotAvailable, 'session checkpoint invocation ended')
+          const result = await host.rpc.request<unknown>('session/checkpoint', { owner: call.owner.ref, ticket: call.ticket }, call.signal)
+          if (!live()) throw new RpcError(ErrorCode.NotAvailable, 'session checkpoint invocation ended')
+          if (typeof result !== 'boolean') throw new RpcError(ErrorCode.Internal, 'invalid session checkpoint receipt')
+          return result
+        }
+        const result = call.pending.then(run)
+        call.pending = result.then(() => undefined, () => undefined)
+        return result
+      }
+    }
+    class UserQuestionsShim extends Service {
+      constructor(ctx: any) { super(ctx, 'userQuestions') }
+      async ask(request: { agent?: unknown; questions: unknown; signal?: AbortSignal; wait?: unknown }) {
+        const invocation = host.toolInvocations.getStore()
+        const owner: OwnerRecord | undefined = (this.ctx as any)[OWNER]
+        const data = (value: unknown, allowed: string[]): Record<string, unknown> => {
+          if (value === null || typeof value !== 'object' || Array.isArray(value)
+            || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) throw new RpcError(ErrorCode.InvalidParams, 'expected a plain question object')
+          const result: Record<string, unknown> = Object.create(null)
+          for (const key of Reflect.ownKeys(value)) {
+            const descriptor = Object.getOwnPropertyDescriptor(value, key)!
+            if (typeof key !== 'string' || !allowed.includes(key) || !descriptor.enumerable || !('value' in descriptor)) throw new RpcError(ErrorCode.InvalidParams, 'unsupported question property')
+            if (descriptor.value !== undefined) result[key] = descriptor.value
+          }
+          return result
+        }
+        const list = (value: unknown, maximum: number): unknown[] => {
+          if (!Array.isArray(value) || value.length > maximum || Reflect.ownKeys(value).length !== value.length + 1) throw new RpcError(ErrorCode.InvalidParams, 'invalid question array')
+          return Array.from({ length: value.length }, (_, index) => {
+            const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+            if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) throw new RpcError(ErrorCode.InvalidParams, 'invalid question array item')
+            return descriptor.value
+          })
+        }
+        const input = data(request, ['agent', 'questions', 'signal', 'wait'])
+        if (input.wait !== undefined) throw new RpcError(ErrorCode.NotAvailable, 'timed or continued questions are not yet supported')
+        request = input as typeof request
+        if (request.signal !== undefined && !(request.signal instanceof AbortSignal)) {
+          throw new RpcError(ErrorCode.InvalidParams, 'question signal must be an AbortSignal')
+        }
+        if (request.signal?.aborted) throw new UserQuestionError('ask_user_question was aborted before the user answered', 'ASK_ABORTED')
+        const items = list(request.questions, 10)
+        if (items.length === 0) throw new UserQuestionError('ask_user_question requires at least one question', 'EMPTY_QUESTIONS')
+        if (request.agent === undefined) throw new RpcError(ErrorCode.NotAvailable, 'userQuestions.ask requires this live tool invocation’s agent')
+        if (!invocation || !invocation.active || invocation.signal.aborted || invocation.agent === undefined || request.agent !== invocation.agent) {
+          throw new UserQuestionError('human interaction requires the exact live calling agent when an agent is supplied', 'CALLER_NOT_LIVE')
+        }
+        if (invocation.owner !== owner || owner?.state !== 'active' || owner.disposing) throw new RpcError(ErrorCode.NotAvailable, 'userQuestions.ask service owner is no longer current')
+        if (invocation.delegated) throw new UserQuestionError("human interaction is unavailable while the calling agent is owned by another live agent; include the unresolved question or decision in the child agent's final result", 'DELEGATED_CALLER')
+        const live = () => invocation.active && !invocation.signal.aborted
+          && invocation.owner === owner && owner?.state === 'active' && !owner.disposing
+          && invocation.questionTicket !== undefined && request.agent === invocation.agent
+        if (!live()) throw new RpcError(ErrorCode.NotAvailable, 'userQuestions.ask requires this live tool invocation’s question ticket')
+        const signal = request.signal === undefined ? invocation.signal : AbortSignal.any([invocation.signal, request.signal])
+        const questions = items.map(value => {
+          const question = data(value, ['id', 'question', 'header', 'detail', 'options', 'multiSelect', 'intent'])
+          const options = list(question.options === undefined ? [] : question.options, 1000)
+          const intent = question.intent === undefined ? undefined : data(question.intent, ['kind', 'approve', 'callId'])
+          if (intent !== undefined && intent.kind !== 'plan-review') throw new RpcError(ErrorCode.InvalidParams, 'unsupported question intent')
+          return {
+            id: question.id, question: question.question, header: question.header === undefined ? '' : question.header,
+            ...(question.detail === undefined ? {} : { detail: question.detail }),
+            ...(intent === undefined ? {} : { intent: { kind: 'plan-review', approve: intent.approve,
+              ...(intent.callId === undefined ? {} : { call_id: intent.callId }) } }),
+            options: options.map(option => {
+              const item = data(option, ['label', 'description'])
+              return { label: item.label, description: item.description === undefined ? '' : item.description }
+            }),
+            allow_free_text: true, multi_select: question.multiSelect === undefined ? false : question.multiSelect,
+          }
+        })
+        if (!isJson(questions)) throw new RpcError(ErrorCode.InvalidParams, 'question data must be lossless JSON')
+        for (const question of questions) {
+          if (question.intent === undefined) continue
+          if (!question.options.some(option => option.label === question.intent!.approve)) throw new UserQuestionError('question ' + question.id + ' declares an intent whose approve label names none of its options', 'BAD_INTENT')
+          if (question.detail === undefined) throw new UserQuestionError('question ' + question.id + ' declares an intent without the detail it reviews', 'BAD_INTENT')
+        }
+        if (Buffer.byteLength(JSON.stringify(questions)) > 1024 * 1024) throw new RpcError(ErrorCode.InvalidParams, 'question payload exceeds 1 MiB')
+        const call = invocation!
+        const run = async () => {
+          if (!live() || signal.aborted) throw new RpcError(ErrorCode.Cancelled, 'question invocation ended')
+          const result = await host.rpc.request<unknown>('user-questions/ask', { owner: call.owner.ref, ticket: call.questionTicket, questions }, signal).catch(error => {
+            if (error instanceof RpcError && isJson(error.data)
+              && error.data !== null && typeof error.data === 'object' && !Array.isArray(error.data)) {
+              const code = error.data.user_question_error
+              if ((error.code === ErrorCode.NotAvailable && code === 'NO_PROVIDER')
+                || (error.code === ErrorCode.Cancelled && code === 'ASK_CANCELLED')) {
+                throw new UserQuestionError(error.message, code, { cause: error })
+              }
+            }
+            if (signal.aborted) throw new UserQuestionError('ask_user_question was aborted before the user answered', 'ASK_ABORTED', { cause: error })
+            throw error
+          })
+          if (!live() || signal.aborted) throw new RpcError(ErrorCode.Cancelled, 'question invocation ended')
+          if (!isJson(result) || result === null || typeof result !== 'object' || Array.isArray(result) || !Array.isArray(result.answers)) {
+            throw new RpcError(ErrorCode.Internal, 'invalid question answer receipt')
+          }
+          const answers = questions.map(question => ({ id: question.id, selected: [] as string[], custom: undefined as string | undefined, skipped: false, rows: 0 }))
+          for (const row of result.answers) {
+            if (row === null || typeof row !== 'object' || Array.isArray(row) || typeof row.label !== 'string' || typeof row.value !== 'string') throw new RpcError(ErrorCode.Internal, 'invalid question answer row')
+            const answer = answers.find(answer => answer.id === row.id)
+            const question = questions.find(question => question.id === row.id)
+            if (!answer || !question || answer.skipped) throw new RpcError(ErrorCode.Internal, 'question answer identity mismatch')
+            if (row.kind === 'choice' && row.label === row.value && question.options.some(option => option.label === row.value) && !answer.selected.includes(row.value)) answer.selected.push(row.value)
+            else if (row.kind === 'custom' && row.label === '' && row.value.trim() !== '' && answer.custom === undefined) answer.custom = row.value
+            else if (row.kind === 'skipped' && row.label === '' && row.value === '' && answer.rows === 0) answer.skipped = true
+            else throw new RpcError(ErrorCode.Internal, 'ambiguous question answer receipt')
+            answer.rows += 1
+            if (!question.multi_select && answer.selected.length + (answer.custom === undefined ? 0 : 1) > 1) throw new RpcError(ErrorCode.Internal, 'invalid single-select answer')
+          }
+          if (answers.some(answer => answer.rows === 0)) throw new RpcError(ErrorCode.Internal, 'missing question answer')
+          return { answers: answers.map(({ id, selected, custom }) => ({ id, selected, ...(custom === undefined ? {} : { custom }) })) }
+        }
+        const result = call.pending.then(run)
+        call.pending = result.then(() => undefined, () => undefined)
+        let cancel: () => void = () => {}
+        const cancelled = new Promise<never>((_, reject) => {
+          cancel = () => reject(new UserQuestionError('ask_user_question was aborted before the user answered', 'ASK_ABORTED'))
+          signal.addEventListener('abort', cancel, { once: true })
+          if (signal.aborted) cancel()
+        })
+        return Promise.race([result, cancelled]).finally(() => signal.removeEventListener('abort', cancel))
+      }
+    }
+    Object.freeze(UserQuestionsShim.prototype)
+    Object.freeze(SessionsShim.prototype)
     Object.freeze(StorageShim.prototype)
     shimClasses.set('tools', ToolsShim)
     shimClasses.set('commands', CommandsShim)
     shimClasses.set('prompt', PromptShim)
     shimClasses.set('storage', StorageShim)
+    shimClasses.set('sessions', SessionsShim)
+    shimClasses.set('userQuestions', UserQuestionsShim)
     shimClasses.set('skills', SkillsShim)
     shimClasses.set('avatars', AvatarsShim)
     shimClasses.set('mcp',McpShim)
@@ -304,6 +441,8 @@ export class HostRoot {
     root.plugin(CommandsShim)
     root.plugin(PromptShim)
     root.plugin(StorageShim)
+    root.plugin(SessionsShim)
+    root.plugin(UserQuestionsShim)
     root.plugin(SkillsShim)
     root.plugin(AvatarsShim)
     root.plugin(McpShim)
@@ -565,12 +704,33 @@ export class HostRoot {
     // this plugin's own directory. Both are read-only strings.
     // `core` exists only when the core gave this call a ticket (`exec.core` in shims/core.ts).
     const core = ticket === undefined ? {} : { core: makeCoreApi(this.rpc, local.owner.ref, ticket, signal) }
-    const exec = Object.freeze({ signal, callId, args: input, ...callContext(local.owner, workspace, identity), ...core })
-    const run = ownerStorage.run(local.owner, async () => {
+    const agent = workspace && identity?.session_id ? Object.freeze({
+      id: identity.agent_id ?? identity.session_id,
+      session: Object.freeze({ header: Object.freeze({ cwd: workspace }) }),
+    }) : undefined
+    const exec = Object.freeze({ signal, callId, args: input, ...callContext(local.owner, workspace, identity), ...core, ...(agent === undefined ? {} : { agent }) })
+    const closed = new AbortController()
+    const invocation: ToolInvocation = {
+      owner: local.owner,
+      session: agent?.session,
+      agent,
+      questionTicket: identity?.question_ticket,
+      delegated: identity?.agent_id !== undefined,
+      ticket: identity?.checkpoint_ticket,
+      signal: AbortSignal.any([signal, closed.signal]),
+      active: true,
+      pending: Promise.resolve(),
+    }
+    const run = ownerStorage.run(local.owner, () => this.toolInvocations.run(invocation, async () => {
       const value = await definition.execute(input, exec)
       return renderResult(definition, input, value)
-    })
-    return Promise.race([run, abortedBy(signal)])
+    }))
+    try {
+      return await Promise.race([run, abortedBy(signal)])
+    } finally {
+      invocation.active = false
+      closed.abort()
+    }
   }
 
   /** `command/run`: only for a handle the core admitted, and only on a user's own invocation. */
@@ -580,11 +740,20 @@ export class HostRoot {
       throw new RpcError(ErrorCode.NotAvailable, `command handle ${handle} is not live`)
     }
     const { definition } = local
+    const call = makeInvocation(definition.name, rawInput, commandId, signal, callContext(local.owner, workspace, identity))
     const run = ownerStorage.run(local.owner, async () => {
-      const value = await definition.handler(makeInvocation(rawInput, commandId, signal, callContext(local.owner, workspace, identity)))
-      return normalizeResult(definition.name, value)
+      try {
+        const value = await definition.handler(call.invocation)
+        return call.complete(value)
+      } finally {
+        call.close()
+      }
     })
-    return Promise.race([run, abortedBy(signal)])
+    try {
+      return await Promise.race([run, abortedBy(signal)])
+    } finally {
+      call.close()
+    }
   }
 
   async evaluateHook(params: HookEvaluateParams, signal: AbortSignal): Promise<HookVerdictWire> {
@@ -607,6 +776,8 @@ export class HostRoot {
 
 /** The read-only context a call carries beyond its input; a field the core did not send is absent. */
 interface InvocationIdentityWire {
+  question_ticket?: string
+  checkpoint_ticket?: string
   session_id?: string
   agent_id?: string
   origin_turn_id?: string
@@ -633,15 +804,21 @@ function abortedBy(signal: AbortSignal): Promise<never> {
 
 function renderResult(definition: any, input: unknown, value: unknown): ToolResultWire {
   let blocks: unknown = undefined
-  if (typeof definition.output?.render === 'function') {
+  if (definition.output !== undefined) {
+    if (!isJson(value)) throw new ToolOutputError(definition.name, ['value must be lossless JSON'])
+    const violations = validateJsonSchemaValue(definition.output.schema, value)
+    if (violations.length > 0) throw new ToolOutputError(definition.name, violations)
     blocks = definition.output.render(input, value)
+    if (!Array.isArray(blocks)) throw new ToolOutputError(definition.name, ['output.render must return an array of content blocks'])
   }
   const content: ContentBlockWire[] = []
   if (Array.isArray(blocks)) {
     for (const block of blocks) {
-      if (block && typeof block === 'object' && (block as any).type === 'text' && typeof (block as any).text === 'string') {
-        content.push({ type: 'text', text: (block as any).text })
+      if (!block || typeof block !== 'object' || (block as any).type !== 'text' || typeof (block as any).text !== 'string') {
+        throw new ToolOutputError(definition.name, ['output.render returned an unsupported content block; this host accepts text blocks only'])
       }
+      if (Reflect.ownKeys(block).some(key => key !== 'type' && key !== 'text')) throw new ToolOutputError(definition.name, ['output.render returned unsupported text-block fields'])
+      content.push({ type: 'text', text: (block as any).text })
     }
   } else {
     content.push({ type: 'text', text: typeof value === 'string' ? value : safeStringify(value) })
@@ -666,6 +843,16 @@ function validateDefinition(definition: any) {
   if (definition.parameters !== undefined && (typeof definition.parameters !== 'object' || definition.parameters === null)) {
     throw new TypeError(`tool \`${definition.name}\` parameters must be a JSON schema object`)
   }
+  if (definition.output !== undefined) {
+    if (!definition.output || typeof definition.output !== 'object' || typeof definition.output.render !== 'function') {
+      throw new TypeError(`tool \`${definition.name}\` output must declare a schema and render function`)
+    }
+    assertSupportedJsonSchema(definition.output.schema)
+  }
+  for (const field of ['projectContent', 'finalizeContent', 'timeoutMs']) {
+    if (definition[field] !== undefined) throw new TypeError(`tool \`${definition.name}\` requires unsupported DSH execution field \`${field}\``)
+  }
+  if (definition.deferLoading === true) throw new TypeError(`tool \`${definition.name}\` requires unsupported DSH deferred loading`)
 }
 
 function pickPlugin(module: any): any {

@@ -1,9 +1,9 @@
 use crate::commands::CommandResult;
-use crate::config::Config;
 use crate::tui::app::{App, AppAction, TuiOptions};
 use crate::tui::views::ModalKind;
 use codewhale_config::AppMode;
 use codewhale_localization::Locale;
+use codewhale_runtime::config::Config;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
@@ -525,8 +525,8 @@ fn workspace_rejects_file_path() {
 #[cfg(test)]
 mod anchor {
     use crate::commands::CommandResult;
-    use crate::config::Config;
     use crate::tui::app::{App, TuiOptions};
+    use codewhale_runtime::config::Config;
     use tempfile::TempDir;
 
     fn anchor(app: &mut App, arg: Option<&str>) -> CommandResult {

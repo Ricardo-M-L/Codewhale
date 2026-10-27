@@ -24,10 +24,7 @@ use codewhale_config::catalog::{CatalogSource, CatalogStatus};
 use codewhale_config::model_reference::ModelReferenceCard;
 use codewhale_config::pricing::OfferingPricing;
 
-use crate::codex_model_cache::{
-    self, CodexModelCacheFreshness, CodexModelMetadata, CodexModelRoster,
-};
-use crate::config::Config;
+use crate::codex_model_cache::{self};
 use crate::model_profile::{
     CapabilityOverride, SupportState, resolved_capability_profile_for_route_with_overrides,
     resolved_capability_profile_with_overrides,
@@ -35,7 +32,6 @@ use crate::model_profile::{
 use crate::models_dev_live::{self, ModelsDevFreshness};
 use crate::provider_lake::{catalog_offering_for_model_identity, configured_providers};
 use crate::reasoning_preference::ReasoningEffort;
-use crate::settings::PinnedModel;
 use crate::tui::app::{App, StatusToastLevel};
 use crate::tui::menu_style;
 use crate::tui::provider_picker::ProviderOffer;
@@ -44,11 +40,16 @@ use crate::tui::views::{
     ActionHint, ListDetailLayout, ModalKind, ModalView, ViewAction, ViewEvent, render_modal_footer,
     render_underwater_surface,
 };
-use crate::utils::format_context_window;
 use codewhale_config::ProviderKind;
 use codewhale_config::catalog::reviewed::constants::DEEPSEEK_ALIAS_REPLACEMENT;
 use codewhale_localization::{Locale, MessageId, tr};
 use codewhale_palette as palette;
+use codewhale_runtime::codex_model_roster::{
+    CodexModelCacheFreshness, CodexModelMetadata, CodexModelRoster,
+};
+use codewhale_runtime::config::Config;
+use codewhale_runtime::settings::PinnedModel;
+use codewhale_util::utils::format_context_window;
 
 /// Thinking-effort rows shown for DeepSeek-style providers, in the order
 /// DeepSeek behaviorally distinguishes them.
@@ -217,7 +218,7 @@ pub struct ModelPickerView {
     previous_model: String,
     initial_provider: ProviderKind,
     initial_provider_identity: String,
-    initial_identity: Option<crate::config::ProviderIdentity>,
+    initial_identity: Option<codewhale_runtime::config::ProviderIdentity>,
     /// Raw preference before the picker opened. An absent explicit preference
     /// is represented by Auto so applying a visible fixed-route tier is still
     /// recognized as an intentional picker choice.
@@ -247,12 +248,12 @@ pub struct ModelPickerView {
     /// alongside `initial_provider`'s own rows without requiring the user to
     /// type a search query first. Uses the same definition as the
     /// `/provider` manager's default view
-    /// (`crate::config::provider_is_configured_for_active`): active
+    /// (`crate::provider_readiness::provider_is_configured_for_active`): active
     /// provider, working credentials/OAuth, or an explicit
     /// `[providers.<name>]` entry. Self-hosted providers (Ollama/Sglang/
     /// Vllm) don't qualify just because routing to them doesn't require a
     /// key.
-    configured_providers: Vec<crate::config::ProviderIdentity>,
+    configured_providers: Vec<codewhale_runtime::config::ProviderIdentity>,
     row_hitboxes: RefCell<Vec<(Rect, Pane, usize)>>,
     last_mouse_selected: Option<(Pane, usize)>,
     hovered_row: Option<(Pane, usize)>,
@@ -298,7 +299,7 @@ struct ModelPickerProjection {
     sort: Option<ModelSort>,
     indices: Vec<usize>,
     rows: Vec<PaneRow>,
-    custom: Option<(String, crate::config::ProviderIdentity)>,
+    custom: Option<(String, codewhale_runtime::config::ProviderIdentity)>,
 }
 
 struct VisibleModelRows<'a> {
@@ -332,7 +333,7 @@ struct ModelPickerRow {
     /// Concrete persistence identity. `Custom` alone cannot identify a named
     /// custom route, so pins must carry this exact key when present.
     provider_identity: Option<String>,
-    admitted_identity: Option<crate::config::ProviderIdentity>,
+    admitted_identity: Option<codewhale_runtime::config::ProviderIdentity>,
     hint: String,
     metadata: EffectivePickerMetadata,
     selectable: bool,
@@ -357,19 +358,20 @@ enum DefaultSection {
     Pinned,
     Recent,
     ProviderDefault,
+    Roster,
 }
 
 /// Most rows the default view's recent section shows.
 const RECENT_ROW_LIMIT: usize = 8;
 
-/// Most rows one custom relay's own roster contributes to the default view.
+/// Most rows the current route's roster, or one custom relay's roster,
+/// contributes to the default view.
 ///
-/// A relay has no bundled snapshot to browse: its roster exists only in the
-/// listing that route itself answered. Hiding all of it but the configured
-/// default is what made `/model` show one row for a route the provider panel
-/// had just listed a dozen for. The bound keeps a gateway fronting a thousand
-/// models from taking the view over.
-const CUSTOM_ROSTER_ROWS_IN_DEFAULT_VIEW: usize = 20;
+/// Hiding all of a route's roster but the configured default is what made
+/// `/model` show one row for a route the provider panel had just listed a
+/// dozen for. The bound keeps a gateway fronting a thousand models from taking
+/// the view over.
+const ROUTE_ROSTER_ROWS_IN_DEFAULT_VIEW: usize = 20;
 
 /// A fresh live roster for the row's exact route omits its id. Only a fresh
 /// roster may say so: a stale one lags the provider (and would condemn ids it
@@ -1044,7 +1046,7 @@ impl ModelPickerView {
             .map(|identity| identity.key.to_string())
     }
 
-    fn resolved_admitted_identity(&self) -> Option<crate::config::ProviderIdentity> {
+    fn resolved_admitted_identity(&self) -> Option<codewhale_runtime::config::ProviderIdentity> {
         let rows = self.visible_model_rows();
         let identity = if let Some(row) = rows.get(self.selected_model_idx) {
             row.admitted_identity.clone()
@@ -1116,7 +1118,7 @@ impl ModelPickerView {
         .unwrap_or_else(|_| self.route_config.base_url_for_route(&identity))
     }
 
-    fn custom_model_row(&self) -> Option<(String, crate::config::ProviderIdentity)> {
+    fn custom_model_row(&self) -> Option<(String, codewhale_runtime::config::ProviderIdentity)> {
         self.ensure_projection();
         self.projection.borrow().as_ref().unwrap().custom.clone()
     }
@@ -1124,7 +1126,7 @@ impl ModelPickerView {
     fn custom_model_row_for_visible(
         &self,
         visible_rows: &[&ModelPickerRow],
-    ) -> Option<(String, crate::config::ProviderIdentity)> {
+    ) -> Option<(String, codewhale_runtime::config::ProviderIdentity)> {
         let query = self.query.trim();
         if query.is_empty() {
             return self
@@ -1162,7 +1164,7 @@ impl ModelPickerView {
     fn provider_qualified_custom_query(
         &self,
         query: &str,
-    ) -> Option<(crate::config::ProviderIdentity, String)> {
+    ) -> Option<(codewhale_runtime::config::ProviderIdentity, String)> {
         for (provider_key, model) in provider_query_splits(query) {
             let Ok(provider) = self.route_config.legacy_selection_identity(provider_key) else {
                 continue;
@@ -1184,7 +1186,7 @@ impl ModelPickerView {
 
     fn provider_accepts_custom_model(
         &self,
-        identity: &crate::config::ProviderIdentity,
+        identity: &codewhale_runtime::config::ProviderIdentity,
         model: &str,
     ) -> bool {
         (Some(identity) == self.initial_identity.as_ref() && self.active_accepts_custom_model_ids)
@@ -1192,7 +1194,11 @@ impl ModelPickerView {
                 && self
                     .route_config
                     .model_ids_pass_through_for_provider(identity))
-            || crate::config::normalize_model_name_for_provider(identity.provider, model).is_some()
+            || codewhale_runtime::config::normalize_model_name_for_provider(
+                identity.provider,
+                model,
+            )
+            .is_some()
     }
 
     fn clamp_model_selection(&mut self) {
@@ -2448,28 +2454,44 @@ fn assign_default_sections(
             row.default_rank = Some((DefaultSection::ProviderDefault, usize::MAX));
         }
     }
-    // A custom relay's roster is the reason the route was configured, and the
-    // default view used to hide every one of its rows but the provider default
-    // -- the panel listed the route's dozen models and `/model` showed one.
-    // Surface the route's own live rows, bounded per route so a large gateway
-    // cannot take the view over.
+    // The current route's roster and a custom relay's roster are what the
+    // user came to choose from, and the default view used to hide every row
+    // but the provider default -- the panel listed a dozen models and `/model`
+    // showed one. Surface each such route's own rows, bounded per route so a
+    // large gateway cannot take the view over: newest first for a built-in
+    // provider, the relay's own listing order for a custom relay.
+    let current_identity = current.map(|(identity, _)| identity);
+    let mut roster: Vec<usize> = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| {
+            row.default_rank.is_none()
+                && row.not_listed.is_none()
+                && !model_is_non_language(row)
+                && row_provider_identity(row).is_some_and(|identity| {
+                    current_identity == Some(identity)
+                        || (row.provider == Some(ProviderKind::Custom)
+                            && matches!(row.metadata.source, Some(CatalogSource::Live { .. })))
+                })
+        })
+        .map(|(index, _)| index)
+        .collect();
+    roster.sort_by_cached_key(|&index| {
+        let row = &rows[index];
+        (row.provider != Some(ProviderKind::Custom))
+            .then(|| std::cmp::Reverse(model_version_key(&row.id)))
+    });
     let mut shown_per_route: BTreeMap<String, usize> = BTreeMap::new();
-    for row in rows.iter_mut() {
-        if row.default_rank.is_some()
-            || row.provider != Some(ProviderKind::Custom)
-            || !matches!(row.metadata.source, Some(CatalogSource::Live { .. }))
-        {
-            continue;
-        }
-        let Some(identity) = row_provider_identity(row).map(str::to_string) else {
+    for index in roster {
+        let Some(identity) = row_provider_identity(&rows[index]).map(str::to_string) else {
             continue;
         };
         let shown = shown_per_route.entry(identity).or_default();
-        if *shown >= CUSTOM_ROSTER_ROWS_IN_DEFAULT_VIEW {
+        if *shown >= ROUTE_ROSTER_ROWS_IN_DEFAULT_VIEW {
             continue;
         }
         *shown += 1;
-        row.default_rank = Some((DefaultSection::ProviderDefault, usize::MAX));
+        rows[index].default_rank = Some((DefaultSection::Roster, usize::MAX));
     }
 }
 
@@ -2493,7 +2515,7 @@ fn push_inactive_route_rows(
     rows: &mut Vec<ModelPickerRow>,
     app: &App,
     config: &Config,
-    admitted: &crate::config::ProviderIdentity,
+    admitted: &codewhale_runtime::config::ProviderIdentity,
     codex_roster: &CodexModelRoster,
 ) {
     if config.verify_provider_identity(admitted).is_err() {
@@ -2543,7 +2565,7 @@ fn route_provider_config<'a>(
     config: &'a Config,
     provider: ProviderKind,
     key: &str,
-) -> Option<&'a crate::config::ProviderConfig> {
+) -> Option<&'a codewhale_runtime::config::ProviderConfig> {
     let identity = config.legacy_selection_identity(key).ok()?;
     (identity.provider == provider).then_some(())?;
     config.provider_config_for(&identity)
@@ -2551,7 +2573,7 @@ fn route_provider_config<'a>(
 
 fn push_provider_model_rows(
     rows: &mut Vec<ModelPickerRow>,
-    admitted: &crate::config::ProviderIdentity,
+    admitted: &codewhale_runtime::config::ProviderIdentity,
     mut model_ids: Vec<String>,
     active_provider: ProviderKind,
     config: &Config,
@@ -2566,7 +2588,7 @@ fn push_provider_model_rows(
     let base_url = config.base_url_for_route(admitted);
     let fresh_roster = fresh_roster_listing(provider, &identity, &base_url);
     for declaration in config.custom_models.as_deref().unwrap_or_default() {
-        if crate::config::configured_model_for_route(
+        if codewhale_runtime::config::configured_model_for_route(
             config,
             provider,
             &identity,
@@ -3030,10 +3052,17 @@ fn model_row_matches_query(
         return true;
     }
     let normalized_query = normalize_picker_search_text(&query);
+    let compact = |text: &str| {
+        text.chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect::<String>()
+    };
+    let compact_query = compact(&query);
     let matches = |candidate: &str| {
         let candidate = candidate.to_ascii_lowercase();
         candidate.contains(&query)
             || normalize_picker_search_text(&candidate).contains(&normalized_query)
+            || (!compact_query.is_empty() && compact(&candidate).contains(&compact_query))
     };
     let provider_matches = row.provider.is_some_and(|provider| {
         row.provider_identity.as_deref().is_some_and(matches)
@@ -3713,9 +3742,9 @@ fn effective_picker_metadata_with_codex(
         .and_then(|windows| windows.get(id).copied())
         .or_else(|| config.context_window_for_provider_config(admitted));
     let base_url = config.base_url_for_route(admitted);
-    if let Some(declared) =
-        crate::config::configured_model_for_route(config, provider, identity, &base_url, id)
-    {
+    if let Some(declared) = codewhale_runtime::config::configured_model_for_route(
+        config, provider, identity, &base_url, id,
+    ) {
         let (wire_model_id, canonical_model) = picker_offering_identity(offering.as_ref(), id);
         return EffectivePickerMetadata {
             display_name: declared.display_name.clone(),
@@ -4315,16 +4344,16 @@ impl ModalView for ModelPickerView {
             {
                 self.explain_unselectable_selection()
             }
-            // ⇧P / ⇧F act on the highlighted row, searching or not: a search
-            // is how a model is found, and the verbs used to become query
-            // text the moment one was typed (#6500). The filter ignores case,
-            // so only a custom id being typed (no catalog row highlighted)
-            // still receives the capital letter. Some terminals report the
+            // ⇧P / ⇧F act on the highlighted row while no search is typed;
+            // while searching they are query text, so `Step-5-Preview` types
+            // its `P` instead of pinning a row. Ctrl+P / Ctrl+F act on the
+            // highlighted row either way, so a model found by search can still
+            // be pinned or added to Fleet (#6500). Some terminals report the
             // chord as lowercase + SHIFT, hence `eq_ignore_ascii_case`.
             KeyCode::Char(ch)
-                if key.modifiers == KeyModifiers::SHIFT
-                    && ch.eq_ignore_ascii_case(&'p')
-                    && (self.query.is_empty() || self.highlighted_route().is_some()) =>
+                if ch.eq_ignore_ascii_case(&'p')
+                    && ((key.modifiers == KeyModifiers::SHIFT && self.query.is_empty())
+                        || key.modifiers == KeyModifiers::CONTROL) =>
             {
                 let Some((provider, provider_id, model)) = self.highlighted_route() else {
                     return ViewAction::None;
@@ -4336,10 +4365,10 @@ impl ModalView for ModelPickerView {
                 })
             }
             KeyCode::Char(ch)
-                if key.modifiers == KeyModifiers::SHIFT
-                    && ch.eq_ignore_ascii_case(&'f')
+                if ch.eq_ignore_ascii_case(&'f')
                     && self.purpose == ModelPickerPurpose::Session
-                    && (self.query.is_empty() || self.highlighted_route().is_some()) =>
+                    && ((key.modifiers == KeyModifiers::SHIFT && self.query.is_empty())
+                        || key.modifiers == KeyModifiers::CONTROL) =>
             {
                 let Some((provider, provider_id, model)) = self.highlighted_route() else {
                     return ViewAction::None;
@@ -4630,17 +4659,23 @@ impl ModelPickerView {
         }
         // Keep compact route modals focused on the core browse/apply actions;
         // wider shells have room to disclose the pin action too.
-        // ⇧P / ⇧F act only on a highlighted catalog route; without one
-        // (typing a custom id) they are query text, so they are not offered.
+        // Pin and Fleet act only on a highlighted catalog route. While a
+        // search is typed the shifted letters are query text, so the Ctrl
+        // chords are advertised instead.
         if inner.width >= 72 && inner.height >= 16 && self.highlighted_route().is_some() {
+            let (fleet_key, pin_key) = if searching {
+                ("Ctrl+F", "Ctrl+P")
+            } else {
+                ("⇧F", "⇧P")
+            };
             if self.purpose == ModelPickerPurpose::Session {
                 footer_hints.push(ActionHint::new(
-                    "⇧F",
+                    fleet_key,
                     tr(self.locale, MessageId::PickerActionFleet),
                 ));
             }
             footer_hints.push(ActionHint::new(
-                "⇧P",
+                pin_key,
                 tr(self.locale, MessageId::PickerActionPin),
             ));
         }
@@ -4896,7 +4931,7 @@ fn route_picker_efforts(
     // Exact-route overrides still win over catalog metadata: Kimi Code K3 and
     // OpenAI Codex have wire dialects the generic Models.dev shape does not
     // fully describe.
-    if crate::config::is_exact_kimi_code_k3_route(provider, base_url, wire_model) {
+    if codewhale_runtime::config::is_exact_kimi_code_k3_route(provider, base_url, wire_model) {
         return KIMI_CODE_K3_PICKER_EFFORTS.to_vec();
     }
     if provider == ProviderKind::OpenaiCodex {
@@ -6235,9 +6270,11 @@ mod tests {
         crate::provider_catalog_live::reset_cache_for_test();
         crate::provider_lake::clear_live_snapshot();
 
-        let config = Config {
-            provider: Some("openrouter".to_string()),
-            ..Config::default()
+        let config = {
+            let __cw_config_init_0_0 = Some("openrouter".to_string());
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value
         };
         let base_url = config.base_url_for_route(
             &config
@@ -6443,7 +6480,7 @@ model = "deepseek/deepseek-v4-flash"
             },
             ..Default::default()
         };
-        let roster: Vec<_> = (0..CUSTOM_ROSTER_ROWS_IN_DEFAULT_VIEW + 5)
+        let roster: Vec<_> = (0..ROUTE_ROSTER_ROWS_IN_DEFAULT_VIEW + 5)
             .map(|index| offering(&format!("relay-{index}")))
             .collect();
         crate::provider_catalog_live::record_success_if_current(
@@ -6471,7 +6508,7 @@ model = "deepseek/deepseek-v4-flash"
             .collect();
         assert_eq!(
             visible.len(),
-            CUSTOM_ROSTER_ROWS_IN_DEFAULT_VIEW,
+            ROUTE_ROSTER_ROWS_IN_DEFAULT_VIEW,
             "the relay's own roster shows in the default view, bounded per route: {visible:?}"
         );
         assert!(
@@ -6636,7 +6673,7 @@ model = "deepseek/deepseek-v4-flash"
     /// use of models no config names, and a Fleet pin on a provider with no
     /// configured model.
     fn founder_shaped_app(home: &std::path::Path, workspace: &std::path::Path) -> (Config, App) {
-        let settings_path = crate::settings::Settings::path().expect("settings path");
+        let settings_path = codewhale_runtime::settings::Settings::path().expect("settings path");
         std::fs::create_dir_all(settings_path.parent().unwrap()).unwrap();
         std::fs::write(
             &settings_path,
@@ -6792,10 +6829,12 @@ api_key = "fixture-xai-key"
                         "at most one default per provider: {rows:#?}"
                     );
                 }
-                // The active provider's roster stays one search away.
                 assert!(
-                    !rows.iter().any(|(_, id, _)| id == "deepseek-v4-pro"),
-                    "{rows:#?}"
+                    rows.iter()
+                        .any(|(identity, id, section)| identity == "deepseek"
+                            && id == "deepseek-v4-pro"
+                            && *section == Some(DefaultSection::Roster)),
+                    "the active provider's roster is listed: {rows:#?}"
                 );
 
                 picker.update_query("GLM-5.2".to_string());

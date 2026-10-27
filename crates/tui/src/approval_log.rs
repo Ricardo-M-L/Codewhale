@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::fleet::files::WorkspaceFile;
-use crate::sandbox::SandboxPolicy;
+use codewhale_sandbox::SandboxPolicy;
+use codewhale_util::files::WorkspaceFile;
 
 const APPROVAL_LOG_FILE: &str = "approval_receipts.jsonl";
 const APPROVAL_LOCK_FILE: &str = "approval_receipts.lock";
@@ -463,7 +463,7 @@ impl ApprovalReceiptStore {
         if create {
             fs::create_dir_all(&self.sessions_dir)?;
         }
-        WorkspaceFile::open(
+        WorkspaceFile::open_resolved_root(
             &self.sessions_dir,
             &PathBuf::from(session_id).join(APPROVAL_LOG_FILE),
             create,
@@ -780,7 +780,7 @@ mod tests {
             ApprovalOutcome::Cancelled,
             ApprovalOutcome::Unavailable,
             ApprovalOutcome::RetryWithPolicy {
-                policy: crate::sandbox::SandboxPolicy::DangerFullAccess,
+                policy: codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             },
         ];
 

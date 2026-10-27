@@ -241,6 +241,11 @@ case "$install_dir/" in
     ;;
 esac
 [ -w "$install_dir" ] || fail "$install_dir is not writable; choose a user directory (no sudo is used)"
+for cargo_receipt in "$install_dir/../.crates.toml" "$install_dir/../.crates2.json"; do
+  if [ -e "$cargo_receipt" ] || [ -L "$cargo_receipt" ]; then
+    fail "Cargo install metadata beside this directory; use a fresh directory instead"
+  fi
+done
 
 tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t codewhale-install)"
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -376,6 +381,17 @@ if [ "${CODEWHALE_INSTALL_COMPILED_HOST:-}" = 1 ]; then
   done
 fi
 
+receipt_name=".codewhale-install.sha256"
+for command_name in codewhale codew; do
+  command_digest="$(sha256_file "$tmpdir/$command_name" | tr '[:upper:]' '[:lower:]')"
+  [ "${#command_digest}" -eq 64 ] || fail "invalid command digest for $command_name"
+  case "$command_digest" in *[!0-9a-f]*) fail "invalid command digest for $command_name" ;; esac
+  printf '%s  %s\n' "$command_digest" "$command_name"
+done > "$tmpdir/$receipt_name"
+if [ -e "$install_dir/$receipt_name" ] || [ -L "$install_dir/$receipt_name" ]; then
+  [ ! -L "$install_dir/$receipt_name" ] && [ -f "$install_dir/$receipt_name" ] && cmp -s "$tmpdir/$receipt_name" "$install_dir/$receipt_name" || fail "existing command receipt differs; use this installation's updater or a fresh directory"
+fi
+check_destination "$install_dir/$receipt_name" "$tmpdir/$receipt_name" 644
 check_destination "$install_dir/codewhale" "$tmpdir/codewhale"
 check_destination "$install_dir/codew" "$tmpdir/codew"
 
@@ -414,6 +430,8 @@ if [ "${CODEWHALE_INSTALL_COMPILED_HOST:-}" = 1 ]; then
   say "Installed qualified opt-in image and its notice/relink-source closure; Node remains default."
 fi
 
+install_binary "$tmpdir/$receipt_name" "$install_dir/$receipt_name" 644
+say "Uninstall this receipted copy: \"$install_dir/codewhale\" uninstall --yes"
 say "Installed checksummed release commands:"
 say "  $install_dir/codewhale"
 say "  $install_dir/codew"

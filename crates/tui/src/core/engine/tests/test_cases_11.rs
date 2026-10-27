@@ -511,9 +511,7 @@ async fn operate_model_shell_uses_normal_approval_and_workspace_sandbox() {
         .mount(&server)
         .await;
 
-    let api_config = Config {
-        ..Config::default()
-    }
+    let api_config = Config::default()
     .with_legacy_root(Some("test-key".to_string()), Some(server.uri()));
     let (engine, handle) = Engine::new(
         EngineConfig {
@@ -677,9 +675,7 @@ async fn posture_change_during_approval_wait(
         .mount(&server)
         .await;
 
-    let api_config = Config {
-        ..Config::default()
-    }
+    let api_config = Config::default()
     .with_legacy_root(Some("test-key".to_string()), Some(server.uri()));
     let (engine, handle) = Engine::new(
         EngineConfig {
@@ -892,9 +888,7 @@ async fn full_access_subagent_handoff_keeps_model_shell_free_of_approval_prompts
         .mount(&server)
         .await;
 
-    let api_config = Config {
-        ..Config::default()
-    }
+    let api_config = Config::default()
     .with_legacy_root(Some("test-key".to_string()), Some(server.uri()));
     let (engine, handle) = Engine::new(
         EngineConfig {
@@ -1042,9 +1036,7 @@ async fn assert_full_access_model_tool_batch_is_blocked(
         .mount(&server)
         .await;
 
-    let api_config = Config {
-        ..Config::default()
-    }
+    let api_config = Config::default()
     .with_legacy_root(Some("test-key".to_string()), Some(server.uri()));
     let (engine, handle) = Engine::new(engine_config, &api_config);
     let run_task = tokio::spawn(engine.run());
@@ -1251,9 +1243,7 @@ async fn assert_full_access_model_tool_batch_runs(
         .mount(&server)
         .await;
 
-    let api_config = Config {
-        ..Config::default()
-    }
+    let api_config = Config::default()
     .with_legacy_root(Some("test-key".to_string()), Some(server.uri()));
     let (engine, handle) = Engine::new(engine_config, &api_config);
     let run_task = tokio::spawn(engine.run());

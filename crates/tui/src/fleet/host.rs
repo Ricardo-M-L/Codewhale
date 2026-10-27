@@ -928,7 +928,7 @@ fn open_worker_log(workspace: &Path, path: &Path) -> FleetHostResult<File> {
             path.display()
         ))
     })?;
-    let file = super::files::WorkspaceFile::open(workspace, relative, true)
+    let file = codewhale_util::files::WorkspaceFile::open(workspace, relative, true)
         .and_then(|target| target.open_write(false))
         .map_err(|err| FleetHostError::retryable(format!("opening worker log: {err}")))?;
     // Validated handle first, truncation second.
@@ -939,9 +939,10 @@ fn open_worker_log(workspace: &Path, path: &Path) -> FleetHostResult<File> {
 
 fn read_bounded_log(workspace: &Path, path: &Path, max_bytes: usize) -> FleetHostResult<String> {
     // The worker may still hold its log open for writing.
-    let mut file = crate::fs_confined::open_read_shared(workspace, path).map_err(|err| {
-        FleetHostError::retryable(format!("opening worker log {}: {err}", path.display()))
-    })?;
+    let mut file =
+        codewhale_util::fs_confined::open_read_shared(workspace, path).map_err(|err| {
+            FleetHostError::retryable(format!("opening worker log {}: {err}", path.display()))
+        })?;
     let len = file
         .metadata()
         .map_err(|err| FleetHostError::retryable(format!("reading worker log metadata: {err}")))?

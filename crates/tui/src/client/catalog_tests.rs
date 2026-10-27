@@ -5,7 +5,7 @@ use super::tests::{
     openrouter_client_for,
 };
 use super::*;
-use crate::config::{ProviderConfig, ProvidersConfig};
+use codewhale_runtime::config::{ProviderConfig, ProvidersConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use wiremock::matchers::{method, path};
@@ -17,17 +17,20 @@ const CURSOR: &str = "cursor/second +?&=雪-canary";
 #[tokio::test]
 async fn chatgpt_models_http_uses_visible_roster_and_rejects_secret_labels() {
     let server = MockServer::start().await;
-    let client = CodewhaleClient::new(&Config {
-        provider: Some("openai-codex".into()),
-        providers: Some(ProvidersConfig {
+    let client = CodewhaleClient::new(&{
+        let __cw_config_init_0_0 = Some("openai-codex".into());
+        let __cw_config_init_0_1 = Some(ProvidersConfig {
             openai_codex: ProviderConfig {
                 api_key: Some(KEY.into()),
                 base_url: Some(format!("{}/v1", server.uri())),
                 ..ProviderConfig::default()
             },
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_0_value: Config = Config::default();
+        __cw_config_init_0_value.provider = __cw_config_init_0_0;
+        __cw_config_init_0_value.providers = __cw_config_init_0_1;
+        __cw_config_init_0_value
     })
     .expect("explicit local ChatGPT protocol fixture");
     mount_models_json(
@@ -104,9 +107,9 @@ async fn chatgpt_models_http_uses_visible_roster_and_rejects_secret_labels() {
 }
 
 fn anthropic_client(base_url: &str) -> CodewhaleClient {
-    let mut client = CodewhaleClient::new(&Config {
-        provider: Some("anthropic".into()),
-        providers: Some(ProvidersConfig {
+    let mut client = CodewhaleClient::new(&{
+        let __cw_config_init_1_0 = Some("anthropic".into());
+        let __cw_config_init_1_1 = Some(ProvidersConfig {
             anthropic: ProviderConfig {
                 api_key: Some(KEY.into()),
                 base_url: Some(base_url.into()),
@@ -117,8 +120,11 @@ fn anthropic_client(base_url: &str) -> CodewhaleClient {
                 ..ProviderConfig::default()
             },
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_1_value: Config = Config::default();
+        __cw_config_init_1_value.provider = __cw_config_init_1_0;
+        __cw_config_init_1_value.providers = __cw_config_init_1_1;
+        __cw_config_init_1_value
     })
     .expect("explicit local Anthropic fixture client");
     client.retry.enabled = false;
@@ -347,17 +353,20 @@ async fn opencode_go_published_unpaginated_roster_keeps_documented_protocols() {
         )
         .mount(&server)
         .await;
-    let mut client = CodewhaleClient::new(&Config {
-        provider: Some("opencode-go".into()),
-        providers: Some(ProvidersConfig {
+    let mut client = CodewhaleClient::new(&{
+        let __cw_config_init_2_0 = Some("opencode-go".into());
+        let __cw_config_init_2_1 = Some(ProvidersConfig {
             opencode_go: ProviderConfig {
                 api_key: Some(KEY.into()),
                 base_url: Some(base_url.clone()),
                 ..ProviderConfig::default()
             },
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_2_value: Config = Config::default();
+        __cw_config_init_2_value.provider = __cw_config_init_2_0;
+        __cw_config_init_2_value.providers = __cw_config_init_2_1;
+        __cw_config_init_2_value
     })
     .expect("explicit local Go route");
     client.retry.enabled = false;
@@ -1215,10 +1224,13 @@ async fn custom_messages_wire_listing_authenticates_with_bearer() {
             ..ProviderConfig::default()
         },
     );
-    let client = CodewhaleClient::new(&Config {
-        provider: Some("relay-messages-wire".to_string()),
-        providers: Some(providers),
-        ..Config::default()
+    let client = CodewhaleClient::new(&{
+        let __cw_config_init_3_0 = Some("relay-messages-wire".to_string());
+        let __cw_config_init_3_1 = Some(providers);
+        let mut __cw_config_init_3_value: Config = Config::default();
+        __cw_config_init_3_value.provider = __cw_config_init_3_0;
+        __cw_config_init_3_value.providers = __cw_config_init_3_1;
+        __cw_config_init_3_value
     })
     .expect("custom Messages-wire relay client");
 

@@ -87,7 +87,7 @@ pub(super) fn toggle_model_picker_pin(
 ) {
     let locale = app.ui_locale;
     let route = format!("{provider_key}/{model}");
-    let (receipt, level) = match crate::settings::Settings::transact(|settings| {
+    let (receipt, level) = match codewhale_runtime::settings::Settings::transact(|settings| {
         Ok(settings.toggle_pinned_model(provider_key, model))
     }) {
         Ok(true) => (
@@ -103,7 +103,7 @@ pub(super) fn toggle_model_picker_pin(
             StatusToastLevel::Error,
         ),
     };
-    if let Ok(settings) = crate::settings::Settings::load_persisted() {
+    if let Ok(settings) = codewhale_runtime::settings::Settings::load_persisted() {
         app.pinned_models = settings.pinned_models;
     }
     app.status_message = Some(receipt.clone());
@@ -551,8 +551,8 @@ fn start_mcp_login(app: &mut App, config: &Config, name: String, scopes: Vec<Str
     let workspace = app.workspace.clone();
     let plugin_registry = Arc::clone(&app.plugin_registry);
     let network_policy = config.network.clone().map(|network| {
-        crate::network_policy::NetworkPolicyDecider::with_default_audit(
-            crate::network_policy::NetworkPolicy::from(network),
+        codewhale_net::network_policy::NetworkPolicyDecider::with_default_audit(
+            codewhale_net::network_policy::NetworkPolicy::from(network),
         )
     });
     let callback_port = config.mcp_oauth_callback_port;
@@ -1224,8 +1224,8 @@ pub(crate) async fn handle_mcp_ui_action(
         }
     } else if discover {
         let network_policy = config.network.clone().map(|toml_cfg| {
-            crate::network_policy::NetworkPolicyDecider::with_default_audit(
-                crate::network_policy::NetworkPolicy::from(toml_cfg),
+            codewhale_net::network_policy::NetworkPolicyDecider::with_default_audit(
+                codewhale_net::network_policy::NetworkPolicy::from(toml_cfg),
             )
         });
         mcp::discover_manager_snapshot_with_workspace_and_plugins(
@@ -1366,8 +1366,8 @@ pub(crate) async fn handle_skill_mutation_requested(
     app: &mut App,
     request: crate::skills::mutation::SkillMutationRequest,
 ) {
-    use crate::skills::install::{DEFAULT_MAX_SIZE_BYTES, DEFAULT_REGISTRY_URL};
     use crate::skills::mutation::{MutationContext, SkillMutationOutcome, SkillMutationRequest};
+    use codewhale_skill_install::install::{DEFAULT_MAX_SIZE_BYTES, DEFAULT_REGISTRY_URL};
 
     let focus = match &request {
         SkillMutationRequest::ImportExternal { source_id, .. } => Some(source_id.clone()),
@@ -1382,11 +1382,11 @@ pub(crate) async fn handle_skill_mutation_requested(
 
     let workspace = app.workspace.clone();
     let home = codewhale_paths::user_home();
-    let cfg = crate::config::Config::load(None, None).unwrap_or_default();
+    let cfg = crate::plugins::providers::load_config(None, None).unwrap_or_default();
     let network = cfg
         .network
         .clone()
-        .map(crate::network_policy::NetworkPolicy::from)
+        .map(codewhale_net::network_policy::NetworkPolicy::from)
         .unwrap_or_default();
     let skills_cfg = cfg.skills.as_ref();
     let max_size = skills_cfg
@@ -2238,7 +2238,7 @@ pub(crate) async fn handle_view_events(
                 app.status_items = items.clone();
                 app.needs_redraw = true;
                 if final_save {
-                    match crate::config_persistence::persist_status_items(&items) {
+                    match codewhale_runtime::config_persistence::persist_status_items(&items) {
                         Ok(path) => {
                             app.status_message =
                                 Some(format!("Status line saved to {}", path.display()));
@@ -2706,7 +2706,7 @@ pub(crate) async fn handle_view_events(
                             .resolve_provider_pin_identity(provider_id)
                             .and_then(|identity| {
                                 let active = app.admitted_provider_identity()?;
-                                if crate::config::provider_is_configured_for_active(
+                                if crate::provider_readiness::provider_is_configured_for_active(
                                     config, &identity, active,
                                 ) {
                                     Ok(())
@@ -2974,7 +2974,7 @@ pub(crate) async fn handle_view_events(
                 delta,
             } => {
                 let provider_key = provider_id.unwrap_or_else(|| provider.as_str().to_string());
-                let reordered = crate::settings::Settings::transact_opt(|settings| {
+                let reordered = codewhale_runtime::settings::Settings::transact_opt(|settings| {
                     if !settings.move_pinned_model(&provider_key, &model, delta) {
                         return Ok(None);
                     }

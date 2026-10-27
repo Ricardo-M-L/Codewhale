@@ -15,7 +15,7 @@ async fn real_host_complete_html_region_selection_preserves_all_document_bytes()
     };
     let root = tempfile::tempdir().unwrap();
     let manager = Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-        runtime: crate::config::ExtensionHostRuntime::Node,
+        runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
         node_override: Some(node),
         root: Some(root.path().join("host")),
         ..ExtensionHostOptions::default()

@@ -434,7 +434,8 @@ async fn root_fork_of_depth_two_leaf_cannot_regain_a_generation() {
     runtime.manager = Arc::clone(&manager);
     runtime.cancel_token.cancel();
     let mut guard = manager.write().await;
-    let (canonical, directory) = crate::runtime_api::open_workspace_directory(tmp.path()).unwrap();
+    let (canonical, directory) =
+        codewhale_util::workspace_dir::open_workspace_directory(tmp.path()).unwrap();
     guard
         .admit_coordination_workspace(tmp.path().to_path_buf(), canonical, Arc::new(directory))
         .unwrap();

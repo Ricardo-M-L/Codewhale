@@ -52,6 +52,8 @@ execpolicy        cargo test -p codewhale-execpolicy --lib --locked
 hooks             cargo test -p codewhale-hooks --lib --locked
 lane              cargo test -p codewhale-lane --lib --locked
 mcp               cargo test -p codewhale-mcp --lib --locked
+net               cargo test -p codewhale-net --lib --locked
+notify            cargo test -p codewhale-notify --lib --locked
 paths             cargo test -p codewhale-paths --lib --locked
 portable-config cargo test -p codewhale-portable-config --lib --locked
 portable-core-navigation cargo test -p codewhale-portable-core-navigation --lib --locked
@@ -64,6 +66,12 @@ state             cargo test -p codewhale-state --lib --locked
 telemetry         cargo test -p codewhale-telemetry --lib --locked
 tools             cargo test -p codewhale-tools --lib --locked
 tui               cargo test -p codewhale-tui --lib --locked
+skill-install     cargo test -p codewhale-skill-install --lib --locked
+util              cargo test -p codewhale-util --lib --locked
+dependencies      cargo test -p codewhale-dependencies --lib --locked
+snapshot          cargo test -p codewhale-snapshot --lib --locked
+lsp               cargo test -p codewhale-lsp --lib --locked
+repl              cargo test -p codewhale-repl --lib --locked
 tui-integration   cargo test -p codewhale-tui --test integration --locked
 tui-cucumber      cargo test -p codewhale-tui --test cucumber --locked
 workflow          cargo test -p codewhale-workflow --lib --locked
@@ -195,6 +203,8 @@ case $area in
   hooks) pkg=codewhale-hooks ;;
   lane) pkg=codewhale-lane ;;
   mcp) pkg=codewhale-mcp ;;
+  net) pkg=codewhale-net ;;
+  notify) pkg=codewhale-notify ;;
   paths) pkg=codewhale-paths ;;
   portable-config) pkg=codewhale-portable-config ;;
   portable-core-navigation) pkg=codewhale-portable-core-navigation ;;
@@ -207,6 +217,12 @@ case $area in
   telemetry) pkg=codewhale-telemetry ;;
   tools) pkg=codewhale-tools ;;
   tui) pkg=codewhale-tui ;;
+  skill-install) pkg=codewhale-skill-install ;;
+  util) pkg=codewhale-util ;;
+  dependencies) pkg=codewhale-dependencies ;;
+  snapshot) pkg=codewhale-snapshot ;;
+  lsp) pkg=codewhale-lsp ;;
+  repl) pkg=codewhale-repl ;;
   workflow) pkg=codewhale-workflow ;;
   workflow-js) pkg=codewhale-workflow-js ;;
   tui-integration)

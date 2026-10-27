@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -194,10 +194,10 @@ Codewhale은 따로 설정하지 않아도 `AGENTS.md`를 읽습니다. `CLAUDE.
 [훅](../HOOKS.md)을 실행할 수 있습니다. 코드 모드(실험적, 기본으로 켜짐)에서는
 모델이 여러 MCP 및 플러그인 도구를 호출하는 `execute_tools` 프로그램 하나를
 작성할 수 있으며, 각 호출은 여전히 승인 규칙을 따르고 영수증에 남습니다. 기본
-포함된 Computer Use
+별도로 설치하는 Computer Use
 플러그인(실험적, macOS 전용)은 다른 앱을 관찰하고 조작할 수 있습니다. 접근
 범위를 검토하고 활성화하기 전까지는 꺼져 있습니다
-([안내서](../../crates/tui/plugins/computer-use/README.md)).
+([안내서](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## 실행 방법
 

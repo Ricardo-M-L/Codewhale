@@ -222,7 +222,8 @@ impl Engine {
                             .reasoning_only_reprompt_message
                             .clone()
                             .unwrap_or_else(|| {
-                                crate::config::DEFAULT_REASONING_ONLY_REPROMPT_MESSAGE.to_string()
+                                codewhale_runtime::config::DEFAULT_REASONING_ONLY_REPROMPT_MESSAGE
+                                    .to_string()
                             })
                     })
                     .filter(|text| !text.trim().is_empty());
@@ -302,7 +303,8 @@ impl Engine {
                             .reasoning_only_reprompt_message
                             .clone()
                             .unwrap_or_else(|| {
-                                crate::config::DEFAULT_REASONING_ONLY_REPROMPT_MESSAGE.to_string()
+                                codewhale_runtime::config::DEFAULT_REASONING_ONLY_REPROMPT_MESSAGE
+                                    .to_string()
                             });
                         if !text.trim().is_empty() {
                             progress.reasoning_only_nudge = Some(text);

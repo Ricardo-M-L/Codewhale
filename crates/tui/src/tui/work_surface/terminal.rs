@@ -85,12 +85,12 @@ enum Request {
         selected: Option<String>,
         session: String,
     },
-    Create(crate::sandbox::SandboxPolicy),
+    Create(codewhale_sandbox::SandboxPolicy),
     Input {
         name: String,
         id: String,
         bytes: Vec<u8>,
-        policy: crate::sandbox::SandboxPolicy,
+        policy: codewhale_sandbox::SandboxPolicy,
     },
     Resize {
         name: String,
@@ -262,7 +262,7 @@ fn tab_ids(dock: &TerminalDock) -> Vec<String> {
 }
 
 #[cfg(all(unix, not(target_env = "ohos")))]
-fn policy(app: &App) -> crate::sandbox::SandboxPolicy {
+fn policy(app: &App) -> codewhale_sandbox::SandboxPolicy {
     crate::core::authority::sandbox_policy_for_turn(
         app.mode,
         app.approval_mode,

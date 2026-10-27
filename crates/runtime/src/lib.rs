@@ -1,6 +1,6 @@
 //! Codewhale runtime: the headless half of the runtime/TUI split.
 //!
-//! Modules move here from `crates/tui/src` with `git mv`, in the order
+//! Modules move here from `crates/tui/src` by explicit path, in the order
 //! `docs/design/TUI_DECONSTRUCTION.md` records. The TUI calls them by their
 //! `codewhale_runtime::<module>` paths; there is no alias block.
 //!
@@ -12,6 +12,7 @@
 
 pub use codewhale_command_contract::elapsed;
 
+pub mod active_workshop;
 pub mod audit;
 pub mod browser;
 pub mod child_env;
@@ -42,6 +43,7 @@ pub mod safe_label;
 pub mod session_tree;
 pub mod skill_state;
 pub mod sleep_guard;
+pub mod stall_report;
 pub mod startup_trace;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
@@ -50,3 +52,17 @@ pub mod turn_budget;
 pub mod workspace_discovery;
 
 pub const CODEWHALE_MAIN_STACK_BYTES: usize = 32 * 1024 * 1024;
+
+pub mod catalog_cache;
+
+pub mod codex_model_roster;
+
+pub mod config;
+
+pub mod config_keys;
+
+pub mod config_persistence;
+
+pub mod oauth;
+
+pub mod settings;

@@ -231,6 +231,10 @@ impl ToolSpec for AutomationTool {
                 }),
             );
             properties.insert(
+                "thread_id".to_string(),
+                json!({ "type": "string", "description": "Existing thread each run is delivered into as a new turn; \"current\" means this thread, \"\" clears it. Omit to run each occurrence in a new background task thread. (action=create/update)" }),
+            );
+            properties.insert(
                 "paused".to_string(),
                 json!({ "type": "boolean", "default": false, "description": "Create the automation paused (action=create)." }),
             );
@@ -340,6 +344,7 @@ impl AutomationTool {
             optional_bool_value(input, "auto_approve"),
         );
         let req = CreateAutomationRequest {
+            destination_thread_id: destination_thread(input, context, None)?,
             name: required_str(input, "name")?.to_string(),
             prompt: required_str(input, "prompt")?.to_string(),
             rrule: required_str(input, "rrule")?.to_string(),
@@ -454,6 +459,11 @@ impl AutomationTool {
             "update",
         )?;
         let req = UpdateAutomationRequest {
+            destination_thread_id: if input.get("thread_id").is_some() {
+                Some(destination_thread(input, context, None)?.unwrap_or_default())
+            } else {
+                None
+            },
             name: optional_str(input, "name")?.map(ToString::to_string),
             prompt: optional_str(input, "prompt")?.map(ToString::to_string),
             rrule: optional_str(input, "rrule")?.map(ToString::to_string),
@@ -686,6 +696,26 @@ fn session_reachable_cwds(
     cwds: Vec<String>,
 ) -> Result<Vec<PathBuf>, ToolError> {
     cwds.iter().map(|raw| context.resolve_path(raw)).collect()
+}
+
+pub(crate) fn destination_thread(
+    input: &Value,
+    context: &ToolContext,
+    default: Option<String>,
+) -> Result<Option<String>, ToolError> {
+    match optional_str(input, "thread_id")?.map(str::trim) {
+        None => Ok(default),
+        Some("") => Ok(None),
+        Some(id) => match context.runtime.active_thread_id.as_deref() {
+            Some(current) if id == "current" || id == current => Ok(Some(current.to_string())),
+            Some(_) => Err(ToolError::invalid_input(
+                "thread_id can name only this thread (\"current\"); the Runtime API targets other threads",
+            )),
+            None => Err(ToolError::invalid_input(
+                "thread_id: this session is not a Runtime thread",
+            )),
+        },
+    }
 }
 
 fn optional_bool_value(input: &Value, field: &str) -> Option<bool> {

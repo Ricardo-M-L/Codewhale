@@ -11,11 +11,12 @@ use codewhale_lane::LaneRegistry;
 use super::{
     BindingId, ChangeCtx, CompatPlanMetadata, CompatProjectionState, CompatTodoBinding, EdgeKind,
     IdempotencyKey, NodeKind, NodeState, OperationBinding, OperationIntent, OperationObservation,
-    OperationOwnerSnapshot, Provenance, ReasoningEffortTier, WorkActivityEvent, WorkEdge,
-    WorkEdgeId, WorkGraph, WorkGraphChange, WorkGraphSnapshot, WorkNode, WorkNodeId, WorkNodePatch,
+    OperationOwnerSnapshot, Provenance, WorkActivityEvent, WorkEdge, WorkEdgeId, WorkGraph,
+    WorkGraphChange, WorkGraphSnapshot, WorkNode, WorkNodeId, WorkNodePatch,
     external_identity_is_well_formed, fleet_task_owner_snapshot, import_legacy,
     lane_owner_snapshot, project_plan, project_todos, validate,
 };
+use codewhale_models::reasoning_effort_tier::ReasoningEffortTier;
 
 pub(crate) const ACTIVE_OPERATION_SUMMARY_START: &str =
     "<!-- codewhale:active-work-operations:start -->";

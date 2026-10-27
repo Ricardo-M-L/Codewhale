@@ -15,7 +15,7 @@ struct CatalogReset;
 impl Drop for CatalogReset {
     fn drop(&mut self) {
         cold_process();
-        crate::tools::large_output_router::install_active_workshop(None);
+        codewhale_runtime::active_workshop::install_active_workshop(None);
     }
 }
 
@@ -60,9 +60,11 @@ fn persist_catalog(kind: ProviderKind, identity: &str, endpoint: &str, images: b
 }
 
 fn config_for(identity: &str, endpoint: &str) -> Config {
-    let mut config = Config {
-        provider: Some(identity.into()),
-        ..Default::default()
+    let mut config = {
+        let __cw_config_init_0_0 = Some(identity.into());
+        let mut __cw_config_init_0_value: Config = Default::default();
+        __cw_config_init_0_value.provider = __cw_config_init_0_0;
+        __cw_config_init_0_value
     };
     let route = if identity == "openrouter" {
         &mut config
@@ -112,7 +114,7 @@ fn headless_startup_publishes_cold_endpoint_catalog_capabilities() -> Result<()>
     // gate and holds both (#6306), so it is the whole lock acquisition. Taking
     // `lock_test_env()` again here parks this thread on a non-reentrant mutex
     // it already owns; the ordering that #6049 hand-rolled now lives in the guard.
-    let _workshop = crate::tools::large_output_router::active_workshop_test_guard();
+    let _workshop = codewhale_runtime::active_workshop::active_workshop_test_guard();
     let _offline = EnvVarGuard::set("CODEWHALE_DISABLE_CLOUD_FACTS", "1");
     let _live = crate::provider_lake::lock_live_snapshot();
     let home = tempfile::tempdir()?;
@@ -145,7 +147,7 @@ fn headless_startup_publishes_cold_endpoint_catalog_capabilities() -> Result<()>
 async fn headless_reload_publishes_only_the_accepted_identity_and_endpoint() -> Result<()> {
     // The guard owns the env barrier and the workshop gate — see the
     // headless_startup twin.
-    let _workshop = crate::tools::large_output_router::active_workshop_test_guard();
+    let _workshop = codewhale_runtime::active_workshop::active_workshop_test_guard();
     let _offline = EnvVarGuard::set("CODEWHALE_DISABLE_CLOUD_FACTS", "1");
     let _live = crate::provider_lake::lock_live_snapshot();
     let home = tempfile::tempdir()?;

@@ -60,8 +60,8 @@
 
 use serde_json::Value;
 
-use crate::tools::canonical_action::canonical_action_alias;
 use crate::tools::spec::{ApprovalRequirement, ToolCapability, ToolSpec};
+use codewhale_execpolicy::canonical_action::canonical_action_alias;
 
 /// The execution authority a child actually holds, read off the runtime posture
 /// rather than off a label.

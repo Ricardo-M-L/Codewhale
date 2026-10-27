@@ -1,6 +1,5 @@
 //! Remaining legacy core commands: clear, exit, model and related interactions.
 
-use crate::config::{normalize_custom_model_id, normalize_model_name_for_provider};
 #[cfg(test)]
 use crate::reasoning_preference::ReasoningEffort;
 use crate::tui::app::{App, AppAction};
@@ -8,6 +7,7 @@ use crate::tui::views::{ModalKind, SubAgentsView, subagent_view_agents};
 use codewhale_config::ProviderKind;
 use codewhale_localization::Locale;
 use codewhale_localization::{MessageId, tr};
+use codewhale_runtime::config::{normalize_custom_model_id, normalize_model_name_for_provider};
 
 use super::CommandResult;
 
@@ -264,7 +264,7 @@ pub fn model(app: &mut App, model_name: Option<&str>) -> CommandResult {
             // Moonshot's direct API route. Do not pass an unrelated stale
             // endpoint through here; doing so would turn a foreign provider
             // model into an apparent custom-route selection.
-            let route_base_url = crate::config::is_exact_kimi_code_k3_route(
+            let route_base_url = codewhale_runtime::config::is_exact_kimi_code_k3_route(
                 app.api_provider,
                 &app.active_route_base_url,
                 &model_id,
@@ -370,11 +370,11 @@ pub fn profile_switch(app: &mut App, arg: Option<&str>) -> CommandResult {
 mod tests {
     use super::*;
     use crate::client::PromptInspection;
-    use crate::config::Config;
     use crate::tui::app::{App, TuiOptions, TurnCacheRecord};
     use crate::tui::history::HistoryCell;
     use codewhale_models::Message;
     use codewhale_models::Role;
+    use codewhale_runtime::config::Config;
     use std::ffi::OsString;
     use std::path::PathBuf;
     use std::time::Instant;
@@ -759,7 +759,7 @@ mod tests {
         // NOTHING was written to settings: no scoped model, no default
         // provider, no default model. The message says the change is
         // session-only.
-        let settings = crate::settings::Settings::load().expect("load settings");
+        let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
         assert_eq!(
             settings
                 .provider_models
@@ -787,18 +787,22 @@ mod tests {
         // model either — the change is session-local until the user explicitly
         // saves it via the route-save prompt.
         let _settings = SettingsPathGuard::new();
-        let startup_config = crate::config::home_config_path().expect("isolated startup config");
+        let startup_config =
+            codewhale_runtime::config::home_config_path().expect("isolated startup config");
         let startup_before = std::fs::read(&startup_config).ok();
         {
-            let seed = crate::settings::Settings {
-                default_provider: Some("deepseek".to_string()),
-                ..Default::default()
+            let seed = {
+                let __cw_config_init_0_0 = Some("deepseek".to_string());
+                let mut __cw_config_init_0_value: codewhale_runtime::settings::Settings =
+                    Default::default();
+                __cw_config_init_0_value.default_provider = __cw_config_init_0_0;
+                __cw_config_init_0_value
             };
             seed.save().expect("seed settings");
         }
         let mut app = create_test_app();
         app.set_provider_identity_record(
-            crate::config::Config::default()
+            codewhale_runtime::config::Config::default()
                 .resolve_provider_identity(codewhale_config::ProviderKind::Zai.as_str())
                 .expect("captured fixture provider"),
         );
@@ -810,7 +814,7 @@ mod tests {
         assert!(result.message.is_some(), "expected a model-changed message");
         assert!(!result.is_error, "GLM-5.2 is valid on Z.ai");
 
-        let settings = crate::settings::Settings::load().expect("load settings");
+        let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
         // Neither canonical startup config nor the legacy archive changes.
         assert_eq!(std::fs::read(startup_config).ok(), startup_before);
         assert_eq!(settings.default_provider.as_deref(), Some("deepseek"));
@@ -833,7 +837,7 @@ mod tests {
         let _settings = SettingsPathGuard::new();
         let mut app = create_test_app();
         app.set_provider_identity_record(
-            crate::config::Config::default()
+            codewhale_runtime::config::Config::default()
                 .resolve_provider_identity(codewhale_config::ProviderKind::Zai.as_str())
                 .expect("captured fixture provider"),
         );
@@ -900,7 +904,7 @@ mod tests {
         // Shared settings: NOTHING was written by either `/model` — both
         // changes are session-local with a pending save decision, and the
         // global default provider was never flipped.
-        let settings = crate::settings::Settings::load().expect("load settings");
+        let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
         assert_eq!(settings.default_provider.as_deref(), None);
         assert_eq!(settings.provider_models, None);
         // Both sessions carry their own pending save decisions.

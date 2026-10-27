@@ -29,8 +29,8 @@
     ],
     "sources": [
       "Cargo.toml",
-      "crates/tui/src/config.rs",
-      "crates/tui/src/sandbox/mod.rs",
+      "crates/runtime/src/config.rs",
+      "crates/sandbox/src/lib.rs",
       "web/scripts/derive-facts.mjs"
     ],
     "providerCountDefinition": "Website descriptor identities in this source snapshot, excluding Custom and retired identities; includes protocol/plan variants. Not a count of distinct vendors, ProviderKind identities, live catalogs, or providers in any published release."
@@ -95,7 +95,7 @@
     "sources": [
       "docs/MODES.md",
       "docs/KEYBINDINGS.md",
-      "crates/tui/src/settings.rs"
+      "crates/runtime/src/settings.rs"
     ]
   },
   "toolSurface": {
@@ -160,7 +160,7 @@
       "docs/RUNTIME_SIMPLIFICATION_DESIGN.md",
       "crates/tui/src/core/engine/tool_catalog.rs",
       "crates/tui/src/tools/registry.rs",
-      "crates/tui/src/config/subagent_limits.rs"
+      "crates/runtime/src/config/subagent_limits.rs"
     ]
   },
   "surfaces": {

@@ -51,9 +51,6 @@ mod output;
 use super::shell_output::{
     kill_outcome_note, output_phase_hint, summarize_output, truncate_with_meta,
 };
-use crate::sandbox::{
-    CommandSpec, ExecEnv, SandboxManager, SandboxPolicy as ExecutionSandboxPolicy, SandboxType,
-};
 use crate::tools::resource_admission::{
     CommandExpense, HeavyCommandPermit, MemoryPressure, acquire_heavy_command_permit,
     infer_command_expense,
@@ -64,6 +61,9 @@ use crate::work_graph::{
 };
 use codewhale_agent_contract::worker_profile::ShellPolicy;
 use codewhale_runtime::child_env;
+use codewhale_sandbox::{
+    CommandSpec, ExecEnv, SandboxManager, SandboxPolicy as ExecutionSandboxPolicy, SandboxType,
+};
 use output::{
     BoundedOutputAccumulator, BoundedOutputSnapshot, RAW_STREAM_SETTLED_TAIL_BYTES,
     RawOutputBuffer, SharedRawOutput, new_shared_raw_output, tail_from_buffer, tail_text,
@@ -2071,7 +2071,7 @@ impl ShellManager {
 
     /// Set user-configured bwrap mount extensions (#5410): extra read-only
     /// roots and writable device nodes such as `/dev/null`.
-    pub fn set_bwrap_extensions(&mut self, extensions: crate::sandbox::BwrapMountExtensions) {
+    pub fn set_bwrap_extensions(&mut self, extensions: codewhale_sandbox::BwrapMountExtensions) {
         self.sandbox_manager.set_bwrap_extensions(extensions);
     }
 
@@ -2299,7 +2299,7 @@ impl ShellManager {
         timeout_bounds_ms: (u64, u64),
     ) -> Result<ShellResult> {
         // Log execution via ShellDispatcher when SHELL_DISPATCHER_LOG is set.
-        crate::shell_dispatcher::ShellDispatcher::log_exec(command);
+        codewhale_sandbox::shell_dispatcher::ShellDispatcher::log_exec(command);
 
         let work_dir = working_dir.map_or_else(|| self.default_workspace.clone(), PathBuf::from);
         validate_shell_working_dir(&work_dir, working_dir.is_none())?;
@@ -2377,7 +2377,7 @@ impl ShellManager {
         policy_override: Option<ExecutionSandboxPolicy>,
         extra_env: HashMap<String, String>,
     ) -> Result<ShellResult> {
-        crate::shell_dispatcher::ShellDispatcher::log_exec(command);
+        codewhale_sandbox::shell_dispatcher::ShellDispatcher::log_exec(command);
 
         // A new Unix process group that inherits the terminal is not its
         // foreground owner. Letting it read stdin triggers SIGTTIN; sharing
@@ -2425,7 +2425,7 @@ impl ShellManager {
         let args = exec_env.args();
 
         let mut cmd = Command::new(program);
-        crate::utils::suppress_console_window(&mut cmd);
+        codewhale_util::utils::suppress_console_window(&mut cmd);
         push_shell_args(&mut cmd, program, args);
         cmd.current_dir(working_dir)
             .stdout(Stdio::piped())
@@ -2580,7 +2580,7 @@ impl ShellManager {
         let args = exec_env.args();
 
         let mut cmd = Command::new(program);
-        crate::utils::suppress_console_window(&mut cmd);
+        codewhale_util::utils::suppress_console_window(&mut cmd);
         push_shell_args(&mut cmd, program, args);
         cmd.current_dir(working_dir)
             .stdin(Stdio::inherit())
@@ -2780,7 +2780,7 @@ impl ShellManager {
             }
         } else if persist_pending {
             let mut cmd = Command::new(program);
-            crate::utils::suppress_console_window(&mut cmd);
+            codewhale_util::utils::suppress_console_window(&mut cmd);
             push_shell_args(&mut cmd, program, args);
             cmd.current_dir(working_dir)
                 .stdin(Stdio::null())
@@ -2803,7 +2803,7 @@ impl ShellManager {
             (ShellChild::Process(child), None, None, None)
         } else {
             let mut cmd = Command::new(program);
-            crate::utils::suppress_console_window(&mut cmd);
+            codewhale_util::utils::suppress_console_window(&mut cmd);
             push_shell_args(&mut cmd, program, args);
             cmd.current_dir(working_dir).stdin(Stdio::piped());
             let combined_reader = if small_contract_mode {
@@ -4088,7 +4088,7 @@ fn looks_like_network_blocked_failure(result: &ShellResult) -> bool {
 const READONLY_OFFLINE_NETWORK_HINT: &str = "This read_only run has no network and cannot write files. Read-only commands reach the network only in Full Access, with a session sandbox that allows network, a [network] policy that does not deny by default, and this agent's network grant. Use a web tool if this session has one; otherwise report the source as unreachable.";
 
 fn readonly_offline_network_hint(command: &str, result: &ShellResult) -> Option<&'static str> {
-    if result.sandbox_denied && crate::sandbox::bwrap_setup_failure(&result.stderr).is_some() {
+    if result.sandbox_denied && codewhale_sandbox::bwrap_setup_failure(&result.stderr).is_some() {
         return None;
     }
     let rest = split_leading_cd(command).map(|(_, rest)| rest);
@@ -4103,7 +4103,7 @@ fn shell_network_restricted_hint<'a>(
     command: &str,
     result: &ShellResult,
 ) -> Option<&'a str> {
-    if result.sandbox_denied && crate::sandbox::bwrap_setup_failure(&result.stderr).is_some() {
+    if result.sandbox_denied && codewhale_sandbox::bwrap_setup_failure(&result.stderr).is_some() {
         return None;
     }
     let hint = context.shell_network_denied_hint.as_deref()?;
@@ -4129,7 +4129,7 @@ fn shell_sandbox_denied_hint(context: &ToolContext, result: &ShellResult) -> Opt
     if !result.sandbox_denied {
         return None;
     }
-    if let Some(error) = crate::sandbox::bwrap_setup_failure(&result.stderr) {
+    if let Some(error) = codewhale_sandbox::bwrap_setup_failure(&result.stderr) {
         return Some(format!(
             "The Linux sandbox (bubblewrap) could not be set up, so this command did not run and nothing ran outside the sandbox: {error}. Every sandboxed command fails the same way until the cause it names is fixed or removed, or `prefer_bwrap = false` is set to run without the OS sandbox. [sandbox: Ask-only escalation — to run only this command without the sandbox, retry it once with sandbox_permissions \"danger-full-access\" + justification; the approval prompt asks the user]"
         ));
@@ -4211,7 +4211,7 @@ fn enforce_readonly_network_reads(command: &str, context: &ToolContext) -> Resul
         let lone = agent_readonly_verdict(command).is_ok_and(|segments| segments.len() == 1);
         reads.retain(|read| lone && *read == NetworkRead::GitHub);
     }
-    use crate::network_policy::Decision;
+    use codewhale_net::network_policy::Decision;
     for read in reads {
         let host = read.host();
         match decider.evaluate(host, "Bash") {
@@ -4304,7 +4304,7 @@ pub(crate) fn sandboxed_runner_command(
             .map_err(|error| ToolError::permission_denied(error.to_string()))?;
     }
     let mut cmd = tokio::process::Command::new(exec_env.program());
-    crate::utils::suppress_tokio_console_window(&mut cmd);
+    codewhale_util::utils::suppress_tokio_console_window(&mut cmd);
     cmd.args(exec_env.args())
         .current_dir(&exec_env.cwd)
         .stdout(std::process::Stdio::piped())
@@ -4521,9 +4521,9 @@ fn readonly_command_needs_shell(command: &str) -> bool {
 }
 
 fn hardened_readonly_script(command: &str, workspace: &std::path::Path) -> Result<String> {
-    use crate::shell_dispatcher::ShellKind;
+    use codewhale_sandbox::shell_dispatcher::ShellKind;
     // POSIX quoting must never be passed to a different command interpreter.
-    let supported = match crate::shell_dispatcher::global_dispatcher().kind() {
+    let supported = match codewhale_sandbox::shell_dispatcher::global_dispatcher().kind() {
         ShellKind::Bash => true,
         ShellKind::Custom { binary, .. } => matches!(
             std::path::Path::new(binary)
@@ -4600,14 +4600,14 @@ fn hardened_readonly_argv(command: &str) -> Result<(String, Vec<String>)> {
                 let at = subcommand_index + 1;
                 argv.splice(
                     at..at,
-                    crate::dependencies::Git::REVIEW_DIFF_ARGS.map(String::from),
+                    codewhale_dependencies::Git::REVIEW_DIFF_ARGS.map(String::from),
                 );
             }
             "log" | "show" => {
                 let at = subcommand_index + 1;
                 argv.splice(
                     at..at,
-                    crate::dependencies::Git::REVIEW_DIFF_ARGS
+                    codewhale_dependencies::Git::REVIEW_DIFF_ARGS
                         .into_iter()
                         .chain(["--no-show-signature"])
                         .map(String::from),
@@ -5024,7 +5024,7 @@ async fn execute_foreground_via_background(
             && !direct_argv
             && !spawned.sandboxed
             && !spawned.sandbox_denied
-            && !crate::shell_dispatcher::global_dispatcher()
+            && !codewhale_sandbox::shell_dispatcher::global_dispatcher()
                 .kind()
                 .is_powershell()
         {
@@ -5902,7 +5902,7 @@ impl ToolSpec for BashTool {
         // `action` as absent and fell through to the branch that runs
         // arbitrary code: `Bash{action: 3, command: "…"}` executed the
         // command. Every sibling family refuses a non-string action
-        // (`canonical_action::required_action`), and `Bash` cannot be the
+        // (`codewhale_tools::required_action`), and `Bash` cannot be the
         // lenient one. `optional_str` is the type-strictness lane's extractor:
         // absent or `null` takes the documented `run` default, anything else
         // is a `type_mismatch` naming the field and the type it needed.
@@ -6248,7 +6248,7 @@ impl ToolSpec for BashTool {
             let overrides = tokio::task::spawn_blocking(move || {
                 let mut overrides = std::collections::BTreeSet::new();
                 for dir in git_dirs {
-                    overrides.extend(crate::dependencies::Git::review_filter_overrides(&dir)?);
+                    overrides.extend(codewhale_dependencies::Git::review_filter_overrides(&dir)?);
                 }
                 anyhow::Ok(overrides)
             })
@@ -6410,8 +6410,8 @@ impl ToolSpec for BashTool {
         // registered it would only ride along in tool metadata, which the
         // Runtime API persists and emits for every call.
         let wants_receipt = context.runtime.hook_executor.as_ref().is_some_and(|hooks| {
-            hooks.has_hooks_for_event(crate::hooks::HookEvent::ToolCallAfter)
-                || hooks.has_hooks_for_event(crate::hooks::HookEvent::OnError)
+            hooks.has_hooks_for_event(codewhale_config::hooks::HookEvent::ToolCallAfter)
+                || hooks.has_hooks_for_event(codewhale_config::hooks::HookEvent::OnError)
         });
         let result = if interactive {
             let mut manager = context
@@ -7607,7 +7607,7 @@ impl ToolSpec for NoteTool {
             let workspace = context.workspace.clone();
             let notes_path = context.notes_path.clone();
             let file = tokio::task::spawn_blocking(move || {
-                crate::fs_confined::open_append(&workspace, &notes_path)
+                codewhale_util::fs_confined::open_append(&workspace, &notes_path)
             })
             .await
             .map_err(|e| ToolError::execution_failed(format!("Failed to open notes file: {e}")))?

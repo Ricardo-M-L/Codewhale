@@ -22,9 +22,9 @@
 //! }, None).await;
 //! ```
 
-use crate::config::RetryPolicy;
 use anyhow::Result;
 use codewhale_models::{MessageRequest, MessageResponse, StreamEvent};
+use codewhale_runtime::config::RetryPolicy;
 use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
@@ -392,7 +392,7 @@ pub enum LlmError {
     /// Authorization or provider-side blocking failed (HTTP 403)
     AuthorizationError(String),
 
-    /// Invalid request parameters (HTTP 400)
+    /// Invalid request parameters or body size (HTTP 4xx)
     InvalidRequest { status: u16, message: String },
 
     /// Model-specific error (model not found, etc.)
@@ -497,6 +497,12 @@ impl LlmError {
         retry_after: Option<Duration>,
         body_retry_after: Option<Duration>,
     ) -> Self {
+        if status == 413 {
+            return LlmError::InvalidRequest {
+                status,
+                message: body.to_string(),
+            };
+        }
         let body_retry_after = body_retry_after.filter(|delay| *delay <= PROVIDER_RETRY_HINT_MAX);
         let quota_code = explicit_quota_code(body).or_else(|| explicit_quota_code_marker(body));
         if let Some(error) = quota_code
@@ -1370,6 +1376,17 @@ pub(crate) type RetryStatusEmitter =
     std::sync::Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ImageProjectionReceipt {
+    pub cause: String,
+    pub original_image_blocks: usize,
+    pub omitted_oldest_blocks: usize,
+    pub retained_newest_blocks: usize,
+    pub body_bytes_before: usize,
+    pub body_bytes_after: usize,
+    pub omission_note: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct OutboundWireObservation {
     pub provider_id: String,
     pub route_id: Option<String>,
@@ -1377,6 +1394,8 @@ pub struct OutboundWireObservation {
     pub wire_model: String,
     pub wire_dialect: String,
     pub tools: ToolWireMeasurement,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_projection: Option<ImageProjectionReceipt>,
 }
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -1408,6 +1427,12 @@ impl OutboundWireObservations {
 
     fn record(&self, observation: OutboundWireObservation) {
         let retained_bytes = [
+            observation
+                .image_projection
+                .as_ref()
+                .map_or(0, |projection| {
+                    projection.cause.capacity() + projection.omission_note.capacity()
+                }),
             observation.provider_id.capacity(),
             observation.route_id.as_ref().map_or(0, String::capacity),
             observation.endpoint_fingerprint.capacity(),
@@ -1479,7 +1504,7 @@ pub(crate) fn observe_outbound_wire(observation: impl FnOnce() -> OutboundWireOb
     }
 }
 
-async fn observe_transport_status(message: String) {
+pub(crate) async fn observe_transport_status(message: String) {
     let observation = REQUEST_RETRY_OBSERVATION
         .try_with(Clone::clone)
         .ok()
@@ -1489,7 +1514,7 @@ async fn observe_transport_status(message: String) {
     }
 }
 
-fn observe_transport_attempt() {
+pub(crate) fn observe_transport_attempt() {
     let _ = REQUEST_RETRY_OBSERVATION.try_with(|observation| {
         if let Some(observation) = observation {
             let mut count = observation

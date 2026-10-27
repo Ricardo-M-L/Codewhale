@@ -52,10 +52,12 @@ impl Engine {
             .sandbox_backend
             .as_deref()
             .is_some_and(|kind| !kind.trim().is_empty() && !kind.eq_ignore_ascii_case("none"));
-        let backend = crate::sandbox::backend::create_backend(&self.api_config)
+        let backend = codewhale_sandbox::backend::create_backend(&self.api_config)
             .ok()
             .flatten()
-            .filter(|backend| backend.kind() != crate::sandbox::backend::SandboxKind::Unsupported)
+            .filter(|backend| {
+                backend.kind() != codewhale_sandbox::backend::SandboxKind::Unsupported
+            })
             .map(Arc::from);
         let shell = authority.allow_shell
             && self.turn_acp_shell_ceiling.unwrap_or(authority.allow_shell)
@@ -154,9 +156,11 @@ fn remove_acp_overridden_builtin(registry: &mut crate::tools::ToolRegistry, tool
 mod tests {
     use super::*;
     fn fixture(workspace: &std::path::Path) -> (Engine, EngineHandle, TurnRouteContext) {
-        let api = Config {
-            allow_shell: Some(true),
-            ..Config::default()
+        let api = {
+            let __cw_config_init_0_0 = Some(true);
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.allow_shell = __cw_config_init_0_0;
+            __cw_config_init_0_value
         }
         .with_legacy_root(Some("local-acp-profile-fixture".into()), None);
         let (mut engine, handle) = Engine::new(
@@ -272,12 +276,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let _home = crate::test_support::SealedHome::at(dir.path());
         let (mut engine, _handle, route) = fixture(dir.path());
-        engine.api_config.tools = Some(crate::config::ToolsConfig {
+        engine.api_config.tools = Some(codewhale_runtime::config::ToolsConfig {
             overrides: Some(HashMap::from([
-                ("write".into(), crate::config::ToolOverride::Disabled),
+                (
+                    "write".into(),
+                    codewhale_runtime::config::ToolOverride::Disabled,
+                ),
                 (
                     "exec_shell".into(),
-                    crate::config::ToolOverride::Command {
+                    codewhale_runtime::config::ToolOverride::Command {
                         command: "must-never-launch".into(),
                         args: None,
                     },

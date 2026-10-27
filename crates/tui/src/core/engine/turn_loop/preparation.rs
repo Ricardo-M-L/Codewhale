@@ -59,6 +59,9 @@ impl Engine {
             }
             progress.mode = self.current_mode;
         }
+        if self.record_mode_context(self.current_mode) {
+            self.emit_session_updated().await;
+        }
 
         let mut accepted_steer = false;
         while let Some(pending) = self.next_turn_steer() {
@@ -188,6 +191,33 @@ impl Engine {
             &progress.active_tool_names,
             strict_tool_mode,
         );
+        let guard_effort = resolve_auto_effort(
+            self.session.reasoning_effort.as_deref(),
+            self.api_provider,
+            &self.api_config.active_route_base_url(),
+            &self.config.model,
+        );
+        let mut output_tokens = crate::route_budget::effective_max_output_tokens_for_turn(
+            self.api_provider,
+            &self.session.model,
+            self.active_route_limits,
+            turn.max_output_tokens,
+            guard_effort.as_deref(),
+        );
+        if turn.max_output_tokens.is_some() {
+            output_tokens =
+                output_tokens.min(client.effective_max_output_tokens(&self.session.model));
+        }
+        if let Err(error) = self
+            .apply_instruction_budget_notices(
+                active_tools.as_deref().unwrap_or_default(),
+                output_tokens,
+            )
+            .await
+        {
+            self.post_turn_budget_stop(&error).await;
+            return PhaseResult::Return((TurnOutcomeStatus::Failed, Some(error)));
+        }
         match self
             .run_auto_compaction(
                 client.as_ref(),
@@ -557,7 +587,8 @@ impl Engine {
             }
         }
         if let Some(cap) = image_cap {
-            let window = crate::image_attach::cap_request_images(&mut request.messages, cap);
+            let window =
+                codewhale_models::image_window::cap_request_images(&mut request.messages, cap);
             self.note_request_image_window(image_provider, window).await;
         }
         let request_input = crate::compaction::estimate_request_input_tokens(
@@ -782,6 +813,29 @@ impl Engine {
         }
         self.record_current_constitution().await;
         self.record_current_extension_prompt_contributions().await;
+        let reasoning_effort = resolve_auto_effort(
+            self.session.reasoning_effort.as_deref(),
+            self.api_provider,
+            &self.api_config.active_route_base_url(),
+            &self.config.model,
+        );
+        let mut planned_output_tokens = crate::route_budget::effective_max_output_tokens_for_turn(
+            self.api_provider,
+            &self.session.model,
+            self.active_route_limits,
+            turn.max_output_tokens,
+            reasoning_effort.as_deref(),
+        );
+        if turn.max_output_tokens.is_some() {
+            planned_output_tokens =
+                planned_output_tokens.min(client.effective_max_output_tokens(&self.session.model));
+        }
+        if let Err(error) = self
+            .apply_instruction_budget_notices(&[], planned_output_tokens)
+            .await
+        {
+            return PhaseResult::Return((TurnOutcomeStatus::Failed, Some(error)));
+        }
         let estimated = turn
             .live_input_tokens_for_compaction(
                 &self.session.messages,
@@ -806,12 +860,6 @@ impl Engine {
         }) {
             return PhaseResult::Return((TurnOutcomeStatus::Failed, Some("RLM whole round history exceeds the captured route context budget; history was not truncated".into())));
         }
-        let reasoning_effort = resolve_auto_effort(
-            self.session.reasoning_effort.as_deref(),
-            self.api_provider,
-            &self.api_config.active_route_base_url(),
-            &self.config.model,
-        );
         let mut request = prepare_primary_turn_request(PrimaryTurnRequest {
             model: self.session.model.clone(),
             messages: self.messages_with_turn_metadata(),

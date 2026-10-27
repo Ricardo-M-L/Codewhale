@@ -11,8 +11,6 @@ use std::cell::{Cell, RefCell};
 use std::fmt;
 use unicode_width::UnicodeWidthStr;
 
-use crate::config::{ApprovalPolicyControl, Config};
-use crate::settings::Settings;
 use crate::tools::UserInputResponse;
 use crate::tools::subagent::{
     SubAgentAssignment, SubAgentResult, SubAgentStatus, localized_whale_display_names,
@@ -30,7 +28,9 @@ use codewhale_localization::{
     Locale, MessageId, configured_locale_is_partial_pack, normalize_configured_locale, tr, tr_key,
 };
 use codewhale_palette as palette;
+use codewhale_runtime::config::{ApprovalPolicyControl, Config};
 use codewhale_runtime::features::{FEATURES, Stage};
+use codewhale_runtime::settings::Settings;
 
 pub mod automations;
 pub mod extensions;
@@ -800,7 +800,7 @@ pub enum ViewEvent {
     /// status message.
     ModelPickerApplied {
         model: String,
-        identity: Option<crate::config::ProviderIdentity>,
+        identity: Option<codewhale_runtime::config::ProviderIdentity>,
         effort: crate::reasoning_preference::ReasoningEffort,
         previous_model: String,
         previous_effort: crate::reasoning_preference::ReasoningEffort,
@@ -880,7 +880,7 @@ pub enum ViewEvent {
         reasoning: Option<crate::reasoning_preference::ReasoningEffort>,
     },
     ModelPickerNeedsAuth {
-        identity: crate::config::ProviderIdentity,
+        identity: codewhale_runtime::config::ProviderIdentity,
         model: String,
         reason: String,
     },
@@ -905,14 +905,14 @@ pub enum ViewEvent {
     /// that already has credentials — the handler should perform the same
     /// switch as `AppAction::SwitchProvider`.
     ProviderPickerApplied {
-        identity: crate::config::ProviderIdentity,
+        identity: codewhale_runtime::config::ProviderIdentity,
     },
     /// Emitted by the `/provider` picker after the user types an API key
     /// inline for a provider that lacked one. The handler validates the key
     /// live; on success it reopens the guided flow at the model-pick stage
     /// without persisting yet (#3875).
     ProviderPickerApiKeySubmitted {
-        identity: crate::config::ProviderIdentity,
+        identity: codewhale_runtime::config::ProviderIdentity,
         api_key: String,
         /// Endpoint chosen in the wizard's billing-route stage, applied to the
         /// verification config only — nothing is written until confirm (#4526).
@@ -922,7 +922,7 @@ pub enum ViewEvent {
     /// accepted provider + model. The handler persists the key (and model)
     /// via the comment-preserving config path, then performs the switch.
     ProviderPickerSetupConfirmed {
-        identity: crate::config::ProviderIdentity,
+        identity: codewhale_runtime::config::ProviderIdentity,
         api_key: String,
         model: String,
         context_window: Option<u32>,
@@ -966,12 +966,12 @@ pub enum ViewEvent {
     /// Emitted by the `/provider` picker (the `M` action) to jump straight to
     /// the `/model` picker pre-filtered to the highlighted provider (#3083).
     ProviderPickerOpenModels {
-        identity: crate::config::ProviderIdentity,
+        identity: codewhale_runtime::config::ProviderIdentity,
     },
     /// Emitted by `/provider` `T`: probe `/models` and refresh readiness
     /// without treating a 2xx as model-ready (#5350).
     ProviderPickerTestConnection {
-        identity: crate::config::ProviderIdentity,
+        identity: codewhale_runtime::config::ProviderIdentity,
         /// Restore Catalog vs Configured after the probe. Must not force
         /// the all-providers catalog if the user was on configured-only.
         catalog_view: bool,
@@ -985,7 +985,7 @@ pub enum ViewEvent {
     /// updates `app.status_items` immediately and persists on `final_save`
     /// so the footer animates without a write per keystroke.
     StatusItemsUpdated {
-        items: Vec<crate::config::StatusItem>,
+        items: Vec<codewhale_runtime::config::StatusItem>,
         final_save: bool,
     },
     /// Emitted by the `/hotbar` setup wizard when the user saves the draft
@@ -2249,12 +2249,14 @@ impl ConfigView {
             }
             Err(error) => (Settings::default(), Some(error.to_string())),
         };
-        let (config, config_error) =
-            match Config::load(app.config_path.clone(), app.config_profile.as_deref()) {
-                Ok(config) => (config, None),
-                Err(error) => (Config::default(), Some(error.to_string())),
-            };
-        let motion_override = crate::settings::detect_low_motion_override();
+        let (config, config_error) = match crate::plugins::providers::load_config(
+            app.config_path.clone(),
+            app.config_profile.as_deref(),
+        ) {
+            Ok(config) => (config, None),
+            Err(error) => (Config::default(), Some(error.to_string())),
+        };
+        let motion_override = codewhale_runtime::settings::detect_low_motion_override();
         let motion_facts = |facts: ConfigRowFacts| match motion_override {
             Some(source) => facts.overridden(source.is_environment(), source.label()),
             None => facts,
@@ -6877,8 +6879,6 @@ mod tests {
         config_label_for_key_for_locale, render_modal_footer_with_gutter,
         render_underwater_surface, subagent_view_agents, truncate_view_text,
     };
-    use crate::config::Config;
-    use crate::settings::Settings;
     use crate::tools::subagent::{SubAgentAssignment, SubAgentResult, SubAgentStatus};
     use crate::tui::app::{App, TuiOptions};
     use crate::tui::history::{HistoryCell, SubAgentCell};
@@ -6887,6 +6887,8 @@ mod tests {
     use codewhale_agent_contract::role::FleetRole;
     use codewhale_localization::{Locale, MessageId, tr, tr_key};
     use codewhale_palette as palette;
+    use codewhale_runtime::config::Config;
+    use codewhale_runtime::settings::Settings;
     use crossterm::event::{
         KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     };
@@ -8943,7 +8945,7 @@ base_url = "https://api.xiaomimimo.com/v1"
         std::fs::write(&path, "[notifications]\nquiet = false\nsound = \"off\"\n").unwrap();
         let mut app = create_test_app();
         app.config_path = Some(path.clone());
-        let mut config = Config::load(Some(path), None).unwrap();
+        let mut config = crate::plugins::providers::load_config(Some(path), None).unwrap();
         crate::tui::ui::apply_notification_update(
             &mut app,
             &mut config,
@@ -9151,7 +9153,7 @@ base_url = "https://api.xiaomimimo.com/v1"
                     )
                     .unwrap();
                     edit.persist(&path).unwrap();
-                    let loaded = Config::load(Some(path.clone()), None)
+                    let loaded = crate::plugins::providers::load_config(Some(path.clone()), None)
                         .unwrap()
                         .notifications_config();
                     assert_eq!(
@@ -9226,36 +9228,47 @@ base_url = "https://api.xiaomimimo.com/v1"
     /// no kind, no provenance layer, and no resolver home.
     #[test]
     fn every_persisted_settings_field_is_declared_in_the_schema() {
-        use crate::settings::PinnedModel;
+        use codewhale_runtime::settings::PinnedModel;
 
         // Options serialize as absent when None; force them present so the
         // table below names every key settings.toml can hold.
-        let settings = Settings {
-            background_color: Some("#1a1b26".to_string()),
-            default_provider: Some("deepseek".to_string()),
-            default_model: Some("deepseek-v4-pro".to_string()),
-            reasoning_effort: Some("medium".to_string()),
-            permission_posture: Some("ask".to_string()),
-            sandbox_mode: Some("read-only".to_string()),
-            provider_models: Some(std::collections::HashMap::from([(
+        let settings = {
+            let __cw_config_init_0_0 = Some("#1a1b26".to_string());
+            let __cw_config_init_0_1 = Some("deepseek".to_string());
+            let __cw_config_init_0_2 = Some("deepseek-v4-pro".to_string());
+            let __cw_config_init_0_3 = Some("medium".to_string());
+            let __cw_config_init_0_4 = Some("ask".to_string());
+            let __cw_config_init_0_5 = Some("read-only".to_string());
+            let __cw_config_init_0_6 = Some(std::collections::HashMap::from([(
                 "deepseek".to_string(),
                 "deepseek-v4-pro".to_string(),
-            )])),
-            enabled_models: Some(std::collections::HashMap::from([(
+            )]));
+            let __cw_config_init_0_7 = Some(std::collections::HashMap::from([(
                 "deepseek".to_string(),
                 vec!["deepseek-v4-pro".to_string()],
-            )])),
-            pinned_models: vec![PinnedModel {
+            )]));
+            let __cw_config_init_0_8 = vec![PinnedModel {
                 provider: "deepseek".to_string(),
                 model: "deepseek-v4-pro".to_string(),
                 label: None,
-            }],
-            behavioral_tip_impressions: std::collections::BTreeMap::from([(
-                "probe".to_string(),
-                1u8,
-            )]),
-            footer_hint_uses: std::collections::BTreeMap::from([("probe".to_string(), 1u8)]),
-            ..Settings::default()
+            }];
+            let __cw_config_init_0_9 =
+                std::collections::BTreeMap::from([("probe".to_string(), 1u8)]);
+            let __cw_config_init_0_10 =
+                std::collections::BTreeMap::from([("probe".to_string(), 1u8)]);
+            let mut __cw_config_init_0_value: Settings = Settings::default();
+            __cw_config_init_0_value.background_color = __cw_config_init_0_0;
+            __cw_config_init_0_value.default_provider = __cw_config_init_0_1;
+            __cw_config_init_0_value.default_model = __cw_config_init_0_2;
+            __cw_config_init_0_value.reasoning_effort = __cw_config_init_0_3;
+            __cw_config_init_0_value.permission_posture = __cw_config_init_0_4;
+            __cw_config_init_0_value.sandbox_mode = __cw_config_init_0_5;
+            __cw_config_init_0_value.provider_models = __cw_config_init_0_6;
+            __cw_config_init_0_value.enabled_models = __cw_config_init_0_7;
+            __cw_config_init_0_value.pinned_models = __cw_config_init_0_8;
+            __cw_config_init_0_value.behavioral_tip_impressions = __cw_config_init_0_9;
+            __cw_config_init_0_value.footer_hint_uses = __cw_config_init_0_10;
+            __cw_config_init_0_value
         };
         let table = toml::Value::try_from(&settings)
             .expect("settings serialize")
@@ -9383,8 +9396,8 @@ context_window = 262144
         .expect("config");
         let _config_path =
             crate::test_support::EnvVarGuard::set("DEEPSEEK_CONFIG_PATH", &config_path);
-        let config =
-            Config::load(Some(config_path.clone()), None).expect("captured fixture config");
+        let config = crate::plugins::providers::load_config(Some(config_path.clone()), None)
+            .expect("captured fixture config");
         let options = TuiOptions {
             config_path: Some(config_path),
             ..crate::tui::test_support::test_tui_options(temp.path())
@@ -9458,7 +9471,8 @@ context_window = 131072
 "#,
         )
         .expect("saved custom provider");
-        let saved = Config::load(Some(saved_path.clone()), None).expect("saved custom config");
+        let saved = crate::plugins::providers::load_config(Some(saved_path.clone()), None)
+            .expect("saved custom config");
         let saved_identity = saved
             .active_provider_identity()
             .expect("saved admitted custom identity");

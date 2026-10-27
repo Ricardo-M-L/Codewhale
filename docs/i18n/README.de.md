@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -206,11 +206,11 @@ Verbinde [MCP-Server](../MCP.md), füge [Skills](../SKILLS.md) und
 und Tool-Ereignissen aus. Der Code-Modus (experimentell, standardmäßig
 eingeschaltet) lässt das Modell ein einziges `execute_tools`-Programm schreiben,
 das mehrere MCP- und Plugin-Tools aufruft; jeder Aufruf unterliegt weiterhin
-deinen Freigaberegeln und behält seinen Beleg. Das mitgelieferte Plugin
+deinen Freigaberegeln und behält seinen Beleg. Das unabhängig installierte Plugin
 Computer Use (experimentell, nur macOS) kann andere Apps beobachten und
 bedienen. Es bleibt ausgeschaltet,
 bis du seine Zugriffsrechte geprüft und es aktiviert hast
-([Anleitung](../../crates/tui/plugins/computer-use/README.md)).
+([Anleitung](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## Wege, es auszuführen
 

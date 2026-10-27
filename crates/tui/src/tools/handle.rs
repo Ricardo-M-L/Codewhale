@@ -552,7 +552,7 @@ fn count_projection(record: &HandleRecord) -> Value {
         }),
         HandleValue::Json(value) => {
             let bytes = {
-                let mut cw = crate::utils::CountingWriter::new();
+                let mut cw = codewhale_util::utils::CountingWriter::new();
                 let _ = serde_json::to_writer(&mut cw, value);
                 cw.count()
             };

@@ -2378,7 +2378,7 @@ fn project_skills_require_workspace_trust() {
         registry.warnings()
     );
 
-    crate::config::save_workspace_trust(workspace).expect("trust workspace");
+    codewhale_runtime::config::save_workspace_trust(workspace).expect("trust workspace");
     let registry = super::discover_in_workspace(workspace);
     assert!(registry.get("repo-skill").is_some());
     assert!(registry.get("owned-project-skill").is_some());
@@ -2395,8 +2395,8 @@ fn project_skills_require_workspace_trust() {
 #[test]
 fn hidden_and_backup_payload_changes_stale_the_trust_receipt() {
     use super::audit::{self, SkillAuditMode, TrustState};
-    use super::install::{INSTALLED_FROM_MARKER, TRUSTED_MARKER, write_trust_v2};
-    use super::package_digest::compute_package_digest;
+    use codewhale_skill_install::install::{INSTALLED_FROM_MARKER, TRUSTED_MARKER, write_trust_v2};
+    use codewhale_skill_install::package_digest::compute_package_digest;
     use std::fs;
     let tmp = tempfile::tempdir().unwrap();
     let package = tmp.path().join(".codewhale/skills/demo");
@@ -2550,7 +2550,7 @@ fn flat_skills_root_opt_in() {
         super::SkillDiscoveryMode::Compatible,
     );
     assert!(default.get("flat").is_none());
-    let config: crate::config::Config =
+    let config: codewhale_runtime::config::Config =
         toml::from_str("[skills]\nflat_workspace_root = true\n").unwrap();
     let mode = super::SkillDiscoveryMode::from_config(&config.skills_config());
     assert_eq!(mode, super::SkillDiscoveryMode::CompatibleWithFlatWorkspace);
@@ -2561,7 +2561,7 @@ fn flat_skills_root_opt_in() {
         mode,
     );
     assert_eq!(enabled.get("flat").unwrap().body, "flat body");
-    let owned_only: crate::config::Config =
+    let owned_only: codewhale_runtime::config::Config =
         toml::from_str("[skills]\nflat_workspace_root = true\nscan_codewhale_only = true\n")
             .unwrap();
     assert_eq!(

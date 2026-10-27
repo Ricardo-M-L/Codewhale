@@ -169,7 +169,7 @@ pub(super) fn structured_plan_schema() -> Value {
 #[cfg(test)]
 mod tests {
     use super::structured_plan_schema;
-    use crate::tools::schema_sanitize::{sanitize, sanitize_for_strict};
+    use codewhale_models::schema_sanitize::{sanitize, sanitize_for_strict};
     use serde_json::{Value, json};
 
     fn property_names(schema: &Value) -> Vec<&str> {

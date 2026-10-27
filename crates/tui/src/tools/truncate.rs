@@ -152,7 +152,7 @@ pub(crate) fn publish_legacy_spillover_ownership(
     let sidecar = legacy_spillover_ownership_path(payload_path);
     let encoded = serde_json::to_vec_pretty(&ownership)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    crate::utils::write_atomic(&sidecar, &encoded)?;
+    codewhale_util::utils::write_atomic(&sidecar, &encoded)?;
     Ok(sidecar)
 }
 
@@ -220,7 +220,7 @@ pub fn write_sha_spillover(sha: &str, content: &str) -> io::Result<PathBuf> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    crate::utils::write_atomic(&path, content.as_bytes())?;
+    codewhale_util::utils::write_atomic(&path, content.as_bytes())?;
     Ok(path)
 }
 
@@ -241,7 +241,7 @@ pub fn write_spillover(id: &str, content: &str) -> io::Result<PathBuf> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    crate::utils::write_atomic(&path, content.as_bytes())?;
+    codewhale_util::utils::write_atomic(&path, content.as_bytes())?;
     Ok(path)
 }
 

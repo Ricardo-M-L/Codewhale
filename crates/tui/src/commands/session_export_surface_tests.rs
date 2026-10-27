@@ -25,7 +25,6 @@ use crate::commands::session_export_test_support::{
     assert_only_export_facet_exposed, normalize_export_time,
 };
 use crate::commands::{CommandResult, execute};
-use crate::config::Config;
 use crate::test_support::{EnvVarGuard, TestEnvLock};
 use crate::tui::app::{App, TuiOptions};
 use crate::tui::clipboard::ClipboardHandler;
@@ -34,6 +33,7 @@ use codewhale_command_contract::CommandDiscovery;
 use codewhale_config::ProviderKind;
 use codewhale_localization::Locale;
 use codewhale_models::{ContentBlock, Message, Role};
+use codewhale_runtime::config::Config;
 
 const EXPORT_NAME: &str = "export";
 const EXPORT_ALIAS: &str = "daochu";
@@ -537,8 +537,8 @@ fn portable_export_source_has_no_host_dependency() {
         "use crate::",
         "crate::tui",
         "crate::client",
-        "crate::config",
-        "crate::snapshot",
+        "codewhale_runtime::config",
+        "codewhale_snapshot",
         "crate::session_manager",
         "std::fs",
         "std::net",

@@ -269,12 +269,12 @@ fn sidebar_agent_status_is_terminal(status: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::sidebar_agent_rows;
-    use crate::config::Config;
     use crate::tui::app::{
         AgentCurrentActivity, AgentCurrentActivityStatus, AgentProgressMeta, App,
         SidebarHoverSection, SidebarHoverState, TuiOptions,
     };
     use codewhale_localization::Locale;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     fn create_test_app() -> App {

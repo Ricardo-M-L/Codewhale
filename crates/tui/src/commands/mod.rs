@@ -295,7 +295,7 @@ pub fn get_command_info(name: &str) -> Option<&'static CommandInfo> {
 pub fn execute_with_config(
     cmd: &str,
     app: &mut App,
-    config: &crate::config::Config,
+    config: &codewhale_runtime::config::Config,
 ) -> CommandResult {
     execute_in_context(cmd, app, Some(config))
 }
@@ -309,7 +309,7 @@ pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
 fn execute_in_context(
     cmd: &str,
     app: &mut App,
-    config: Option<&crate::config::Config>,
+    config: Option<&codewhale_runtime::config::Config>,
 ) -> CommandResult {
     // Keep the command's raw remainder available for commands whose payload is
     // byte-sensitive. Most slash commands intentionally receive a normalized
@@ -525,13 +525,13 @@ fn suggest_command_names(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::tools::plan::{PlanItemArg, StepStatus, UpdatePlanArgs};
     use crate::tools::todo::TodoStatus;
     use crate::tui::app::{App, AppAction, TuiOptions};
     use crate::tui::work_surface::{RailPanel, WorkSurfacePlacement};
     use codewhale_config::ProviderKind;
     use codewhale_localization::{Locale, MessageId};
+    use codewhale_runtime::config::Config;
     use std::path::{Path, PathBuf};
     use tempfile::tempdir;
 

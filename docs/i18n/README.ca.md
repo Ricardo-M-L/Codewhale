@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -200,9 +200,9 @@ Connecta [servidors MCP](../MCP.md), afegeix [skills](../SKILLS.md) i
 sessió i d’eines. Code mode (experimental, activat per defecte) permet que el
 model escrigui un sol programa `execute_tools` que crida diverses eines de MCP i
 de plugins; cada crida continua subjecta a les teves regles d’aprovació i
-conserva el seu rebut. El plugin Computer Use inclòs (experimental, només
+conserva el seu rebut. El plugin Computer Use instal·lat independentment (experimental, només
 macOS) pot observar i operar altres aplicacions. Roman desactivat fins que en revises
-l’accés i l’actives ([guia](../../crates/tui/plugins/computer-use/README.md)).
+l’accés i l’actives ([guia](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## Maneres d’executar-lo
 

@@ -425,7 +425,7 @@ mod tests {
 
         assert_eq!(codewhale_paths::user_home(), Some(home.clone()));
         assert_eq!(
-            crate::config::workspace_trust_config_candidate_paths(),
+            codewhale_runtime::config::workspace_trust_config_candidate_paths(),
             vec![
                 primary.join("config.toml"),
                 home.join(".deepseek").join("config.toml")

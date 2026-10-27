@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -168,9 +168,9 @@ Codewhale 發現這類檔案卻沒有載入時，會發出警告。
 連接 [MCP 伺服器](../MCP.md)、加入[技能](../SKILLS.md)與[外掛](../PLUGINS.md)，
 並在工作階段與工具事件上執行 [Hook](../HOOKS.md)。程式碼模式（Code mode，實驗性，預設開啟）
 讓模型撰寫一個 `execute_tools` 程式來呼叫多個 MCP 與外掛工具；每次呼叫仍須遵守你的核准規則，
-並保留各自的回條。隨附的 Computer Use 外掛（實驗性，
+並保留各自的回條。獨立安裝的 Computer Use 外掛（實驗性，
 僅限 macOS）可以觀察並操作其他應用程式。在你檢視其存取範圍並啟用之前，它會保持關閉
-（[指南](../../crates/tui/plugins/computer-use/README.md)）。
+（[指南](https://github.com/codewhale-hq/codewhale-cu-plugin)）。
 
 ## 執行方式
 

@@ -32,7 +32,7 @@ use crate::mcp::McpPool;
 use crate::tools::spec::{
     ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec,
 };
-use crate::utils::write_atomic;
+use codewhale_util::utils::write_atomic;
 
 // === Registry API response types ===
 

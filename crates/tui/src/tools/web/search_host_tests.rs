@@ -13,7 +13,7 @@ fn host_context(root: &std::path::Path) -> ToolContext {
 }
 fn new_manager(node: std::path::PathBuf, root: &std::path::Path) -> Arc<ExtensionHostManager> {
     Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-        runtime: crate::config::ExtensionHostRuntime::Node,
+        runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
         node_override: Some(node),
         root: Some(root.join("host")),
         ..ExtensionHostOptions::default()

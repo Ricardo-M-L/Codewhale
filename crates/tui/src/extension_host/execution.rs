@@ -11,7 +11,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use super::protocol::{
-    CoreRequest, ExecutionRedeemParams, HarnessRunParams, OwnerRef, RpcErrorWire, error_code,
+    CoreRequest, ExecutionRedeemParams, HarnessRunParams, RpcErrorWire, error_code,
 };
 use super::registry::OwnerState;
 use super::supervisor::HostRequestContext;
@@ -21,6 +21,7 @@ use super::{ExtensionHostManager, ManagerShared, activation};
 use crate::plugins::PluginRegistry;
 use crate::plugins::activation::PluginActivationCapability;
 use crate::tools::spec::{ToolContext, ToolError, ToolResult};
+use codewhale_config::OwnerRef;
 use codewhale_config::PluginAuthority;
 
 const DEADLINE: Duration = Duration::from_secs(120);
@@ -254,7 +255,7 @@ fn check_stock_snapshot(operation: StockOperation, input: &Value) -> Result<(), 
 type HookRun = Box<dyn FnOnce(CancellationToken) -> crate::hooks::HookResult + Send>;
 struct HookLaunch {
     run: HookRun,
-    hook: crate::hooks::Hook,
+    hook: codewhale_config::hooks::Hook,
 }
 struct PdfLaunch {
     input: crate::tools::pdf::CapturedPdf,
@@ -394,7 +395,7 @@ impl Broker {
             }
         }
     }
-    pub(super) fn revoke_scope(&self, plugin_id: &str, scope: &super::protocol::EntryRef) {
+    pub(super) fn revoke_scope(&self, plugin_id: &str, scope: &codewhale_config::EntryRef) {
         for job in self.jobs.lock().expect("execution lock").values() {
             if job.caller.plugins.as_ref().is_some_and(|plugins| {
                 plugins
@@ -691,7 +692,7 @@ async fn run_job(shared: Arc<ManagerShared>, job: Arc<Job>) -> Result<Value, Str
             }
             job_worker.check(&shared_worker)?;
             // ShellEnv stdout may contain credentials. It is retained only in Rust.
-            let projection=if launch_hook.hook.event==crate::hooks::HookEvent::ShellEnv {
+            let projection=if launch_hook.hook.event==codewhale_config::hooks::HookEvent::ShellEnv {
                 json!({"kind":"hook","event":"shell_env","success":result.success,"exit_code":result.exit_code,"keys":crate::hooks::shell_env_keys(&result.stdout)})
             } else if launch_hook.hook.native_shell.is_some() {
                 json!({"kind":"hook","event":launch_hook.hook.event.as_str(),"success":result.success,"exit_code":result.exit_code,"stdout":result.stdout,"stderr":result.stderr})
@@ -1218,7 +1219,7 @@ impl ExtensionHostManager {
     pub(crate) async fn execute_hook<F>(
         &self,
         caller: crate::hooks::HookCaller,
-        hook: crate::hooks::Hook,
+        hook: codewhale_config::hooks::Hook,
         timeout: Duration,
         query: String,
         run: F,
@@ -1352,7 +1353,7 @@ impl ExtensionHostManager {
             .ok_or("hook process produced no receipt")?;
         // Only Native dialect codecs may project a bounded proposal; final steering stays Rust-owned.
         if hook.native_shell.is_some()
-            && hook.event != crate::hooks::HookEvent::ShellEnv
+            && hook.event != codewhale_config::hooks::HookEvent::ShellEnv
             && let Some(stdout) = value.get("proposal").and_then(Value::as_str)
         {
             if stdout.len() > 64 * 1024 {
@@ -1486,7 +1487,7 @@ mod tests {
         };
         let root = tempfile::tempdir().unwrap();
         let manager = ExtensionHostManager::new(ExtensionHostOptions {
-            runtime: crate::config::ExtensionHostRuntime::Node,
+            runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
             node_override: Some(node),
             root: Some(root.path().join("host")),
             ..Default::default()
@@ -1591,7 +1592,7 @@ mod tests {
     }
     #[tokio::test(flavor = "current_thread")]
     async fn actual_github_broker_returns_private_core_permission_fault() {
-        use crate::network_policy::{DecisionToml, NetworkPolicy, NetworkPolicyDecider};
+        use codewhale_net::network_policy::{DecisionToml, NetworkPolicy, NetworkPolicyDecider};
         let _home = crate::test_support::SealedHome::new();
         let _policy = crate::plugins::activation::TestPolicyGuard::extension_host(false);
         let Some(node) = super::super::tests::node_for_tests("github_private_core_fault") else {
@@ -1600,7 +1601,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let _repo = crate::test_support::EnvVarGuard::set("GH_REPO", "owner/name");
         let manager = Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-            runtime: crate::config::ExtensionHostRuntime::Node,
+            runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
             node_override: Some(node),
             root: Some(temp.path().join("host")),
             ..Default::default()
@@ -1649,7 +1650,7 @@ mod tests {
         };
         let root = tempfile::tempdir().unwrap();
         let manager = Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-            runtime: crate::config::ExtensionHostRuntime::Node,
+            runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
             node_override: Some(node),
             root: Some(root.path().join("host")),
             ..ExtensionHostOptions::default()
@@ -1721,7 +1722,7 @@ mod tests {
         .unwrap();
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
         let manager = Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-            runtime: crate::config::ExtensionHostRuntime::Node,
+            runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
             node_override: Some(node),
             root: Some(root.path().join("host")),
             ..ExtensionHostOptions::default()

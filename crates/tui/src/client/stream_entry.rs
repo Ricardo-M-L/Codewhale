@@ -42,7 +42,8 @@ pub(crate) fn first_byte_timeout_from_env(idle: Duration, value: Option<&str>) -
     if let Some(secs) = value.and_then(|v| v.trim().parse::<u64>().ok()) {
         return Duration::from_secs(secs.clamp(5, 3600));
     }
-    let default_idle = Duration::from_secs(crate::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS);
+    let default_idle =
+        Duration::from_secs(codewhale_runtime::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS);
     if idle == default_idle {
         DEFAULT_STREAM_FIRST_BYTE_TIMEOUT.min(idle)
     } else {
@@ -90,17 +91,15 @@ pub(crate) fn body_timeout_message(
     } else {
         "waiting for the next stream chunk"
     };
-    crate::core::engine::turn_heartbeat::report_stall(
-        &crate::core::engine::turn_heartbeat::StallReport {
-            source: "client",
-            phase: format!("while {phase}"),
-            detail: Some(provider.to_string()),
-            turn_id: None,
-            provider_request: None,
-            since_progress: since_last_chunk,
-            bound: Some(timeout),
-        },
-    );
+    codewhale_runtime::stall_report::report_stall(&codewhale_runtime::stall_report::StallReport {
+        source: "client",
+        phase: format!("while {phase}"),
+        detail: Some(provider.to_string()),
+        turn_id: None,
+        provider_request: None,
+        since_progress: since_last_chunk,
+        bound: Some(timeout),
+    });
     message
 }
 
@@ -475,7 +474,7 @@ mod tests {
             .build()
             .unwrap();
         for pinned in [true, false] {
-            let config: crate::config::Config = toml::from_str(&format!(
+            let config: codewhale_runtime::config::Config = toml::from_str(&format!(
                 r#"
 provider = "zai"
 [providers.zai]
@@ -860,7 +859,8 @@ force_http1 = {pinned}
 
     #[test]
     fn stall_first_byte_timeout_is_well_under_default_idle_budget() {
-        let default_idle = Duration::from_secs(crate::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS);
+        let default_idle =
+            Duration::from_secs(codewhale_runtime::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS);
         let first_byte = first_byte_timeout_from_env(default_idle, None);
         assert_eq!(first_byte, DEFAULT_STREAM_FIRST_BYTE_TIMEOUT);
         assert!(

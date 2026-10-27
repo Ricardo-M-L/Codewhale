@@ -15,7 +15,10 @@
 //! - `CODEWHALE_MODELS_DEV_PATH` — local file path; skips the network.
 //! - `CODEWHALE_DISABLE_MODELS_DEV_FETCH` — when truthy, never hits the network.
 
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use codewhale_runtime::catalog_cache::CACHE_FILE;
+use codewhale_runtime::catalog_cache::cache_path;
+use std::path::Path;
 use std::sync::RwLock;
 use std::time::Duration;
 
@@ -34,9 +37,6 @@ pub const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Explicit user-agent; no credentials, no session cookies.
 pub const USER_AGENT: &str = concat!("CodeWhale/", env!("CARGO_PKG_VERSION"), " (+models-dev)");
-
-/// Filename under the CodeWhale `catalog` state dir.
-pub const CACHE_FILE: &str = "models-dev-catalog.json";
 
 /// Env: override Models.dev base URL or full catalog URL.
 pub const ENV_MODELS_DEV_URL: &str = "CODEWHALE_MODELS_DEV_URL";
@@ -167,31 +167,6 @@ impl std::fmt::Display for ModelsDevRefreshError {
             Self::Io(msg) => write!(f, "io: {msg}"),
         }
     }
-}
-
-/// Resolve the on-disk cache path under the CodeWhale `catalog` state dir.
-///
-/// Under `cfg(test)` this is confined the same way settings and config paths
-/// are: `resolve_state_dir` lives in `codewhale-config`, which is compiled as a
-/// plain dependency here and so has no view of this crate's isolated test root.
-/// Without this shield a test that never asked for the developer's catalog read
-/// their real `~/.codewhale/catalog` and rendered against whatever models they
-/// last fetched (#5359).
-#[must_use]
-pub fn cache_path() -> Option<PathBuf> {
-    #[cfg(test)]
-    {
-        if !crate::test_support::guarded_environment_provides_state_paths() {
-            return Some(
-                crate::test_support::unsealed_test_state_root()
-                    .join("catalog")
-                    .join(CACHE_FILE),
-            );
-        }
-    }
-    codewhale_config::resolve_state_dir("catalog")
-        .ok()
-        .map(|dir| dir.join(CACHE_FILE))
 }
 
 /// Current quiet status (for UI / slash-command feedback).

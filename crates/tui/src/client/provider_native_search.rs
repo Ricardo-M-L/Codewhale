@@ -733,7 +733,7 @@ fn joined_answer(parts: Vec<String>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, ProviderConfig, ProvidersConfig};
+    use codewhale_runtime::config::{Config, ProviderConfig, ProvidersConfig};
     use wiremock::matchers::{body_partial_json, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -767,9 +767,9 @@ mod tests {
         isolated: bool,
         unrelated: bool,
     ) -> ProviderNativeSearchClient {
-        let config = Config {
-            provider: Some("xai".to_string()),
-            providers: Some(ProvidersConfig {
+        let config = {
+            let __cw_config_init_0_0 = Some("xai".to_string());
+            let __cw_config_init_0_1 = Some(ProvidersConfig {
                 xai: ProviderConfig {
                     api_key: Some("xai-test-key".to_string()),
                     base_url: Some(format!("{}/v1", server.uri())),
@@ -777,10 +777,15 @@ mod tests {
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            runtime_chat_isolated: isolated,
-            runtime_thread_inference_unrelated: unrelated,
-            ..Config::default()
+            });
+            let __cw_config_init_0_2 = isolated;
+            let __cw_config_init_0_3 = unrelated;
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value.runtime_chat_isolated = __cw_config_init_0_2;
+            __cw_config_init_0_value.runtime_thread_inference_unrelated = __cw_config_init_0_3;
+            __cw_config_init_0_value
         };
         ProviderNativeSearchClient::new(CodewhaleClient::new(&config).expect("test xAI client"))
             .expect("xAI native adapter")
@@ -850,9 +855,9 @@ mod tests {
     }
 
     fn anthropic_client(model: &str) -> ProviderNativeSearchClient {
-        let config = Config {
-            provider: Some("anthropic".to_string()),
-            providers: Some(ProvidersConfig {
+        let config = {
+            let __cw_config_init_1_0 = Some("anthropic".to_string());
+            let __cw_config_init_1_1 = Some(ProvidersConfig {
                 anthropic: ProviderConfig {
                     api_key: Some("anthropic-test-key".to_string()),
                     base_url: Some("https://api.anthropic.com".to_string()),
@@ -860,8 +865,11 @@ mod tests {
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_1_value: Config = Config::default();
+            __cw_config_init_1_value.provider = __cw_config_init_1_0;
+            __cw_config_init_1_value.providers = __cw_config_init_1_1;
+            __cw_config_init_1_value
         };
         ProviderNativeSearchClient::new(CodewhaleClient::new(&config).expect("Anthropic client"))
             .expect("Anthropic native adapter")
@@ -1145,9 +1153,9 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let config = Config {
-            provider: Some("xai".to_string()),
-            providers: Some(ProvidersConfig {
+        let config = {
+            let __cw_config_init_2_0 = Some("xai".to_string());
+            let __cw_config_init_2_1 = Some(ProvidersConfig {
                 xai: ProviderConfig {
                     api_key: Some("xai-test-key".to_string()),
                     base_url: Some(format!("{}/v1", server.uri())),
@@ -1155,8 +1163,11 @@ mod tests {
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_2_value: Config = Config::default();
+            __cw_config_init_2_value.provider = __cw_config_init_2_0;
+            __cw_config_init_2_value.providers = __cw_config_init_2_1;
+            __cw_config_init_2_value
         };
         let inner = CodewhaleClient::new(&config).expect("test xAI client");
         let client = ProviderNativeSearchClient::new(inner).expect("xAI native adapter");
@@ -1197,9 +1208,9 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let config = Config {
-            provider: Some("modelstudio-token-plan".to_string()),
-            providers: Some(ProvidersConfig {
+        let config = {
+            let __cw_config_init_3_0 = Some("modelstudio-token-plan".to_string());
+            let __cw_config_init_3_1 = Some(ProvidersConfig {
                 modelstudio_token_plan: ProviderConfig {
                     api_key: Some("modelstudio-test-key".to_string()),
                     base_url: Some(format!("{}/v1", server.uri())),
@@ -1207,8 +1218,11 @@ mod tests {
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_3_value: Config = Config::default();
+            __cw_config_init_3_value.provider = __cw_config_init_3_0;
+            __cw_config_init_3_value.providers = __cw_config_init_3_1;
+            __cw_config_init_3_value
         };
         let inner = CodewhaleClient::new(&config).expect("test ModelStudio client");
         let client = ProviderNativeSearchClient::new(inner).expect("Qwen native adapter");
@@ -1251,9 +1265,9 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let config = Config {
-            provider: Some("deepseek".to_string()),
-            providers: Some(ProvidersConfig {
+        let config = {
+            let __cw_config_init_4_0 = Some("deepseek".to_string());
+            let __cw_config_init_4_1 = Some(ProvidersConfig {
                 deepseek: ProviderConfig {
                     api_key: Some("deepseek-test-key".to_string()),
                     base_url: Some(format!("{}/v1", server.uri())),
@@ -1261,8 +1275,11 @@ mod tests {
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_4_value: Config = Config::default();
+            __cw_config_init_4_value.provider = __cw_config_init_4_0;
+            __cw_config_init_4_value.providers = __cw_config_init_4_1;
+            __cw_config_init_4_value
         };
         let inner = CodewhaleClient::new(&config).expect("test DeepSeek client");
         let client = ProviderNativeSearchClient::new(inner).expect("DeepSeek native adapter");

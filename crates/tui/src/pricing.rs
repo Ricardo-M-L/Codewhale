@@ -11,7 +11,6 @@ use codewhale_config::pricing::{
     PricingQuoteError, TokenClass, TokenUsage,
 };
 
-use crate::config::{DEEPSEEK_ALIAS_RETIREMENT_UTC, canonical_model_id_for_provider};
 use codewhale_config::ProviderKind;
 #[cfg(test)]
 use codewhale_config::descriptors::defaults::DEFAULT_STEPFUN_MODEL;
@@ -20,6 +19,7 @@ use codewhale_config::descriptors::defaults::{
 };
 use codewhale_config::pricing::CostCurrency;
 use codewhale_models::{Usage, has_date_snapshot_suffix};
+use codewhale_runtime::config::{DEEPSEEK_ALIAS_RETIREMENT_UTC, canonical_model_id_for_provider};
 
 /// Cost estimate in displayable currencies.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -2843,14 +2843,14 @@ mod tests {
         // rate.
         let stepfun = pricing_for_billing_surface(
             ProviderKind::Stepfun,
-            DEFAULT_STEPFUN_MODEL,
+            "step-3.7-flash",
             Some(STEPFUN_PAYG_BILLING_SURFACE),
         )
         .expect("StepFun PAYG row");
         assert_eq!(stepfun.usd.cache_write, CacheWritePolicy::Unpublished);
         let failed = audit_turn_cost_for_route_at(
             ProviderKind::Stepfun,
-            DEFAULT_STEPFUN_MODEL,
+            "step-3.7-flash",
             Some(STEPFUN_PAYG_BILLING_SURFACE),
             &write_heavy,
             now,
@@ -2871,7 +2871,7 @@ mod tests {
         assert!(
             audit_turn_cost_for_route_at(
                 ProviderKind::Stepfun,
-                DEFAULT_STEPFUN_MODEL,
+                "step-3.7-flash",
                 Some(STEPFUN_PAYG_BILLING_SURFACE),
                 &no_write,
                 now,
@@ -2951,7 +2951,7 @@ mod tests {
             ),
             (
                 ProviderKind::XiaomiMimo,
-                crate::config::XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL,
+                codewhale_runtime::config::XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL,
                 XIAOMI_PAYG_BILLING_SURFACE,
                 EndpointMetering::Money,
             ),
@@ -3499,7 +3499,7 @@ mod tests {
         };
         let payg = calculate_turn_cost_estimate_for_billing_surface(
             ProviderKind::Stepfun,
-            DEFAULT_STEPFUN_MODEL,
+            "step-3.7-flash",
             Some(STEPFUN_PAYG_BILLING_SURFACE),
             &usage,
         )
@@ -3512,7 +3512,7 @@ mod tests {
         assert!(
             calculate_turn_cost_estimate_for_provider(
                 ProviderKind::Stepfun,
-                DEFAULT_STEPFUN_MODEL,
+                "step-3.7-flash",
                 &usage,
             )
             .is_none()
@@ -3520,7 +3520,7 @@ mod tests {
         assert!(
             calculate_turn_cost_estimate_for_provider_at(
                 ProviderKind::Stepfun,
-                DEFAULT_STEPFUN_MODEL,
+                "step-3.7-flash",
                 &usage,
                 Utc::now(),
             )
@@ -3528,14 +3528,14 @@ mod tests {
         );
         assert!(!has_pricing_for_provider(
             ProviderKind::Stepfun,
-            DEFAULT_STEPFUN_MODEL
+            "step-3.7-flash"
         ));
 
         for surface in [None, Some(STEPFUN_PLAN_BILLING_SURFACE)] {
             assert!(
                 calculate_turn_cost_estimate_for_billing_surface(
                     ProviderKind::Stepfun,
-                    DEFAULT_STEPFUN_MODEL,
+                    "step-3.7-flash",
                     surface,
                     &usage,
                 )
@@ -3559,7 +3559,7 @@ mod tests {
             assert!(
                 calculate_turn_cost_estimate_for_billing_surface(
                     provider,
-                    DEFAULT_STEPFUN_MODEL,
+                    "step-3.7-flash",
                     Some(STEPFUN_PAYG_BILLING_SURFACE),
                     &usage,
                 )
@@ -3567,14 +3567,14 @@ mod tests {
                 "{provider:?}"
             );
             assert!(
-                calculate_turn_cost_estimate_for_provider(provider, DEFAULT_STEPFUN_MODEL, &usage,)
+                calculate_turn_cost_estimate_for_provider(provider, "step-3.7-flash", &usage,)
                     .is_none(),
                 "{provider:?}"
             );
             assert!(
                 calculate_turn_cost_estimate_for_provider_at(
                     provider,
-                    DEFAULT_STEPFUN_MODEL,
+                    "step-3.7-flash",
                     &usage,
                     Utc::now(),
                 )
@@ -3582,14 +3582,14 @@ mod tests {
                 "{provider:?}"
             );
             assert!(
-                !has_pricing_for_provider(provider, DEFAULT_STEPFUN_MODEL),
+                !has_pricing_for_provider(provider, "step-3.7-flash"),
                 "{provider:?}"
             );
         }
 
         let recorded = calculate_turn_cost_estimate_for_route_at(
             ProviderKind::Stepfun,
-            DEFAULT_STEPFUN_MODEL,
+            "step-3.7-flash",
             Some(STEPFUN_PAYG_BILLING_SURFACE),
             &usage,
             Utc::now(),

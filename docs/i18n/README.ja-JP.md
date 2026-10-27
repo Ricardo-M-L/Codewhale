@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -167,8 +167,8 @@ Codewhale は `AGENTS.md` を自動で読み込みます。
 [MCP サーバー](../MCP.md)を接続し、[スキル](../SKILLS.md)や[プラグイン](../PLUGINS.md)を追加し、セッションやツールのイベントで[フック](../HOOKS.md)を実行できます。
 コードモード（実験的、既定で有効）では、モデルが複数の MCP ツールやプラグインツールを呼び出す 1 つの `execute_tools` プログラムを書けます。
 個々の呼び出しは引き続き承認ルールに従い、それぞれのレシートも残ります。
-同梱の Computer Use プラグイン（実験的、macOS のみ）は、他のアプリを観察・操作できます。
-アクセス範囲を確認して有効にするまではオフのままです（[ガイド](../../crates/tui/plugins/computer-use/README.md)）。
+個別にインストールする Computer Use プラグイン（実験的、macOS のみ）は、他のアプリを観察・操作できます。
+アクセス範囲を確認して有効にするまではオフのままです（[ガイド](https://github.com/codewhale-hq/codewhale-cu-plugin)）。
 
 ## 実行方法
 

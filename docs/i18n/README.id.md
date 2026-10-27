@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -202,10 +202,10 @@ Hubungkan [server MCP](../MCP.md), tambahkan [skill](../SKILLS.md) dan
 dan alat. Mode kode (eksperimental, aktif secara default) memungkinkan model
 menulis satu program `execute_tools` yang memanggil beberapa alat MCP dan
 plugin; setiap panggilan tetap tunduk pada aturan persetujuan Anda dan tetap
-memiliki receipt-nya. Plugin Computer Use bawaan (eksperimental, hanya macOS) dapat
+memiliki receipt-nya. Plugin Computer Use yang dipasang terpisah (eksperimental, hanya macOS) dapat
 mengamati dan mengoperasikan aplikasi lain. Plugin ini tetap nonaktif sampai
 Anda meninjau aksesnya dan mengaktifkannya
-([panduan](../../crates/tui/plugins/computer-use/README.md)).
+([panduan](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## Cara menjalankannya
 

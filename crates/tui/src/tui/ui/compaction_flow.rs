@@ -556,7 +556,7 @@ mod config_update_tests {
             image_input: crate::model_profile::SupportState::Unknown,
             summary_instructions: None,
             retained_user_message_tokens:
-                crate::config::DEFAULT_COMPACTION_RETAINED_USER_MESSAGE_TOKENS,
+                codewhale_runtime::config::DEFAULT_COMPACTION_RETAINED_USER_MESSAGE_TOKENS,
         };
 
         assert!(try_apply_model_and_compaction_update(

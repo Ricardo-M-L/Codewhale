@@ -139,9 +139,8 @@ selection you made last is the one on disk — a burst of Tab presses cannot end
 up persisting whichever write happened to finish last — and a mode write never
 rolls back an unrelated key such as `default_model`.
 
-Two paths deliberately do **not** rewrite the startup default: restoring a saved
-session (which re-installs the mode that session was in) and a mode change
-refused because a turn is in flight. The legacy `yolo` entry point installs Work
+Restoring a saved session deliberately does **not** rewrite the startup
+default: it re-installs the mode that session was in. The legacy `yolo` entry point installs Work
 plus Full Access, and `agent` is what it persists — `yolo` is a permission
 alias, never a startup mode.
 
@@ -150,12 +149,21 @@ session the live mode and `default_mode` routinely disagree, so choosing the
 live mode again is how you make it durable; Codewhale confirms with a
 "saved as startup default" receipt rather than reporting "already in that mode".
 
-While a turn is running, every change to the live route is refused — mode,
-model, thinking level, and provider — no matter which surface you use. That
-now includes the slash surfaces (`/mode`, `/model`, `/provider`,
-`/config <key> <value>`, `/config preset`), which are reachable mid-turn. Press
-Esc to interrupt first. The restart-only `default_mode` key is exempt, because
-it does not touch the running turn.
+Mode and permissions can change while a turn is running, from any surface
+(Tab, Shift+Tab, `/mode`, the hotbar, `/config mode …`). The change does not
+restart a response that is already streaming. The engine applies it at its next
+step in the same turn: before the next tool batch, at every approval gate, and
+before the next model request, which carries a new mode notice. A call that was
+still waiting for approval, or that no approval covers, goes back to the model
+to retry under the new posture; a call you already approved runs only if the
+new posture is equal or broader. The status line says the change is pending
+until that step, and the engine reports `Permissions: … · <mode>` once it
+applies.
+
+Model, thinking level, and provider are still refused while a turn runs, on
+every surface (`/model`, `/provider`, `/config <key> <value>`,
+`/config preset`): they change the route the running request is on. Press Esc
+to interrupt first.
 
 Codewhale writes `settings.toml` under a lock that spans processes, and replaces
 the file atomically, so a second Codewhale instance on the same home directory

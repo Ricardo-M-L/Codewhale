@@ -12,11 +12,10 @@ use serde::Serialize;
 use super::adapter::AdapterResult;
 use super::cache::{self, CachedFetch};
 use super::extract::is_js_shell_error;
-use super::guard::{
-    DnsPin, guarded_reqwest_client_builder, validate_fetch_target, validate_network_policy,
-};
+use super::guard::{validate_fetch_target, validate_network_policy};
 use crate::tools::spec::{ToolContext, ToolError};
 use codewhale_agent_contract::worker_profile::ShellPolicy;
+use codewhale_net::guard::{DnsPin, guarded_reqwest_client_builder};
 use codewhale_runtime::features::Feature;
 
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -1366,7 +1365,7 @@ mod tests {
 
     #[tokio::test]
     async fn tightened_network_policy_blocks_an_existing_cache_entry() {
-        use crate::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
+        use codewhale_net::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
 
         let url = reqwest::Url::parse("https://example.com/cached").unwrap();
         cache::insert(
@@ -1409,7 +1408,7 @@ mod tests {
 
     #[tokio::test]
     async fn tightened_network_policy_checks_cached_redirect_destination() {
-        use crate::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
+        use codewhale_net::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
 
         let initial_url = reqwest::Url::parse("https://8.8.8.8/cached").unwrap();
         cache::insert(

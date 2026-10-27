@@ -109,8 +109,8 @@ async fn fixture(mode: &'static str, first_tokens: u64, max_steps: u32) -> Fixtu
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    let config = crate::config::Config {
-        retry: Some(crate::config::RetryConfig {
+    let config = {
+        let __cw_config_init_0_0 = Some(codewhale_runtime::config::RetryConfig {
             enabled: Some(false),
             max_retries: Some(0),
             initial_delay: Some(0.0),
@@ -119,8 +119,10 @@ async fn fixture(mode: &'static str, first_tokens: u64, max_steps: u32) -> Fixtu
             jitter: None,
             jitter_factor: None,
             respect_retry_after: None,
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_0_value: codewhale_runtime::config::Config = Default::default();
+        __cw_config_init_0_value.retry = __cw_config_init_0_0;
+        __cw_config_init_0_value
     }
     .with_legacy_root(
         Some("fixture-key".to_string()),

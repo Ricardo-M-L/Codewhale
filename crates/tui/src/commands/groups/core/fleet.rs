@@ -24,10 +24,10 @@ use codewhale_lane::control::operations_for_domain;
 use codewhale_lane::{ControlDomain, ControlOperation, ControlSurface};
 
 use crate::commands::traits::{CommandInfo, RegisterCommand};
-use crate::config::Config;
 use crate::fleet::control::execute_fleet_control;
 use crate::tui::app::{App, AppAction};
 use codewhale_localization::{Locale, MessageId, tr};
+use codewhale_runtime::config::Config;
 
 use super::CommandResult;
 
@@ -164,7 +164,7 @@ fn provider_id_is_configured(app: &App, config: &Config, provider_id: &str) -> b
     let Ok(identity) = config.resolve_provider_selection_identity(provider_id) else {
         return false;
     };
-    crate::config::provider_is_configured_for_active(config, &identity, active)
+    crate::provider_readiness::provider_is_configured_for_active(config, &identity, active)
 }
 
 /// The localized reason `provider` may not enter the team, or `None` when
@@ -299,8 +299,8 @@ impl RegisterCommand for FleetCmd {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::tui::app::TuiOptions;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     fn test_app() -> App {

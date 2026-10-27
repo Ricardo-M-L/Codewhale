@@ -2,12 +2,12 @@
 
 use crate::commands::CommandResult;
 use crate::commands::groups::core::navigation::voice::VOICE_INFO;
-use crate::config::Config;
 use crate::tui::app::App;
 use crate::voice::{
     is_available, record_audio, resolve_asr_choice, split_send_suffix, transcribe_selected,
 };
 use codewhale_localization::{MessageId, tr};
+use codewhale_runtime::config::Config;
 use std::time::Duration;
 
 pub fn voice(app: &mut App) -> CommandResult {

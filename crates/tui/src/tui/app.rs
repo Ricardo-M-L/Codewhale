@@ -19,14 +19,13 @@ use codewhale_execpolicy::ApprovalMode;
 use crate::artifacts::ArtifactRecord;
 use crate::client::{CacheWarmupKey, PromptInspection};
 use crate::compaction::CompactionConfig;
-use crate::config::{ApprovalPolicyControl, Config, has_api_key, has_api_key_for};
 use crate::core::authority::{ModeSessionPrefs, base_policy_for_mode};
 use crate::core::events::TurnRoute;
-use crate::hooks::{HookContext, HookEvent, HookExecutor};
+use crate::hooks::{HookContext, HookExecutor};
 use crate::pricing::CostEstimate;
+use crate::provider_readiness::{has_api_key, has_api_key_for};
 use crate::reasoning_preference::{EffectiveReasoningEffort, ReasoningEffort};
 use crate::session_manager::{SessionContextReference, SessionMetadata, SessionWorkState};
-use crate::settings::{InlineDiffMode, Settings};
 use crate::tools::plan::{PlanState, SharedPlanState, new_shared_plan_state};
 use crate::tools::shell::new_shared_shell_manager;
 use crate::tools::spec::RuntimeToolServices;
@@ -48,10 +47,13 @@ use crate::tui::transcript::TranscriptViewCache;
 use crate::tui::views::ViewStack;
 use codewhale_config::ProviderKind;
 use codewhale_config::descriptors::defaults::DEFAULT_TEXT_MODEL;
+use codewhale_config::hooks::HookEvent;
 use codewhale_config::pricing::CostCurrency;
 use codewhale_localization::{Locale, MessageId, resolve_locale, tr};
 use codewhale_models::{ContentBlock, Message, SystemPrompt, Tool, Usage};
 use codewhale_palette::{self as palette, UiTheme};
+use codewhale_runtime::config::{ApprovalPolicyControl, Config};
+use codewhale_runtime::settings::{InlineDiffMode, Settings};
 
 mod composer;
 mod init;
@@ -1497,7 +1499,7 @@ pub type DispatchApplyFn = Box<
     dyn FnOnce(
             &mut App,
             &crate::core::engine::EngineHandle,
-            &crate::config::Config,
+            &codewhale_runtime::config::Config,
         ) -> anyhow::Result<()>
         + Send,
 >;
@@ -1521,7 +1523,7 @@ pub struct PendingRouteSave {
 /// launch should open with, and return the line to show the operator.
 fn persist_route_as_startup_default(
     locale: Locale,
-    identity: &crate::config::ProviderIdentity,
+    identity: &codewhale_runtime::config::ProviderIdentity,
     model: &str,
 ) -> String {
     let route = format!("{}/{model}", identity.key);
@@ -1532,12 +1534,12 @@ fn persist_route_as_startup_default(
 }
 
 fn try_persist_route_as_startup_default(
-    identity: &crate::config::ProviderIdentity,
+    identity: &codewhale_runtime::config::ProviderIdentity,
     model: &str,
 ) -> anyhow::Result<()> {
-    let path = crate::config::home_config_path()
+    let path = codewhale_runtime::config::home_config_path()
         .ok_or_else(|| anyhow::anyhow!("Cannot resolve the user-global model configuration."))?;
-    crate::config_persistence::persist_provider_selection(Some(&path), identity, Some(model))
+    crate::route_preferences::persist_provider_selection(Some(&path), identity, Some(model))
         .map(|_| ())
 }
 
@@ -1699,7 +1701,7 @@ pub struct App {
     /// reads this snapshot without reloading credentials on each keystroke.
     pub configured_models: Vec<codewhale_config::catalog::configured::ConfiguredModel>,
     /// Exact provider/model pins loaded from settings, in user order.
-    pub pinned_models: Vec<crate::settings::PinnedModel>,
+    pub pinned_models: Vec<codewhale_runtime::settings::PinnedModel>,
     /// When true, the model is auto-selected rather than using a fixed
     /// model. The `/model auto` command sets this. The flash classifier
     /// picks the per-turn model when available; otherwise the configured
@@ -1735,7 +1737,7 @@ pub struct App {
     /// Exact configured provider key for persistence and route restoration.
     /// Built-ins use their canonical slug; named custom providers retain the
     /// user-owned key instead of collapsing to `custom`.
-    pub(crate) provider_identity: Option<crate::config::ProviderIdentity>,
+    pub(crate) provider_identity: Option<codewhale_runtime::config::ProviderIdentity>,
     /// Primary provider plus configured fallback providers for this session.
     pub provider_chain: Option<ProviderChain>,
     /// Per-provider auth/local readiness snapshot for the fallback chain (#2574).
@@ -1746,7 +1748,7 @@ pub struct App {
     /// providers (Ollama/vLLM/SGLang) are always ready. Stored as `(provider,
     /// ready)` pairs; lookups fall back to "ready" for providers not present so
     /// an unknown entry is tried rather than silently skipped.
-    provider_readiness: Vec<(crate::config::ProviderIdentity, bool)>,
+    provider_readiness: Vec<(codewhale_runtime::config::ProviderIdentity, bool)>,
     /// Session-local evidence from real provider requests and verification
     /// probes. Unlike `provider_readiness` above, this never treats a saved key
     /// as proof that the endpoint is healthy.
@@ -1806,7 +1808,7 @@ pub struct App {
     /// available (Linux with `prefer_bwrap = false` or no working bwrap, and
     /// all Windows), so surfaces must not claim the session is sandboxed
     /// (2026-08-04 audit).
-    pub sandbox_backend: Option<crate::sandbox::SandboxType>,
+    pub sandbox_backend: Option<codewhale_sandbox::SandboxType>,
     /// Off-event-loop worker for durable Lane control writes. `/lane interrupt`
     /// submits here instead of tearing down a Runtime on the composer thread
     /// (#4022).
@@ -1883,6 +1885,7 @@ pub struct App {
     /// Resolved once at startup, so tests and headless runs stay hermetic.
     pub bracketed_paste_trusted: bool,
     pub system_prompt: Option<SystemPrompt>,
+    pub instruction_assembly: Option<std::sync::Arc<crate::project_context::InstructionAssembly>>,
     pub auto_compact: bool,
     pub auto_compact_user_configured: bool,
     pub auto_compact_threshold_percent: f64,
@@ -2246,7 +2249,7 @@ pub struct App {
     /// `[mini_window]` in config.toml at startup and mutated live by
     /// `/config mini_window.keep_*`. The renderer reads this instead of the
     /// parsed Config so runtime changes apply without a restart.
-    pub(crate) mini_window: crate::config::MiniWindowConfig,
+    pub(crate) mini_window: codewhale_runtime::config::MiniWindowConfig,
     /// What the bottom chrome shows. Sourced from `tui.status_items` in
     /// `~/.deepseek/config.toml` at startup; mutated live by `/statusline`.
     ///
@@ -2256,17 +2259,17 @@ pub struct App {
     /// fetch. Every variant in the list paints exactly one of those; the
     /// items that painted nothing were retired in #5950 rather than left as
     /// toggles that lie.
-    pub status_items: Vec<crate::config::StatusItem>,
+    pub status_items: Vec<codewhale_runtime::config::StatusItem>,
     /// How much of the posture bar to paint (`tui.posture_bar`, #5950):
     /// full, compact, or hidden. Sourced from `config.toml` at startup and
     /// mutated live by `/config posture_bar`. `hidden` gives the row to the
     /// transcript; `compact` starts the bar's shed ladder past the clocks,
     /// counts and hints. `status_items` composes the row; this sizes it.
-    pub posture_bar: crate::config::ChromeRowPreset,
+    pub posture_bar: codewhale_runtime::config::ChromeRowPreset,
     /// The same setting for the metrics line (`tui.metrics_line`, #5950).
     /// `compact` keeps the route, context, cost and balance and drops the
     /// telemetry and the help hint.
-    pub metrics_line: crate::config::ChromeRowPreset,
+    pub metrics_line: codewhale_runtime::config::ChromeRowPreset,
     /// Project documentation (AGENTS.md or CLAUDE.md)
     #[expect(dead_code)]
     pub project_doc: Option<String>,
@@ -3482,9 +3485,6 @@ impl App {
     /// permission surface and refuses here; otherwise this behaves like
     /// [`Self::select_mode`] and persists the mode actually installed (Act).
     pub fn select_yolo_compat(&mut self) -> SettingSelection {
-        if self.reject_setting_change_while_busy(MessageId::SettingSubjectMode) {
-            return SettingSelection::Refused;
-        }
         if self.approval_policy_locked() {
             self.push_status_toast(
                 "Permissions are controlled by config or managed requirements".to_string(),
@@ -3559,8 +3559,8 @@ impl App {
     /// What is persisted is `self.mode` — the mode `set_mode` actually
     /// installed — not the requested enum.
     ///
-    /// The outcome is typed, not a bool, because three things can happen and
-    /// only one of them means "nothing was saved":
+    /// The outcome is typed, not a bool, so callers can tell a live change
+    /// from a selection that only saved the startup default:
     ///
     /// - [`SettingSelection::Changed`] — live mode moved *and* the startup
     ///   default was queued.
@@ -3568,19 +3568,12 @@ impl App {
     ///   requested one, but the startup default was still queued. This is a
     ///   real, reportable action: after a session restore the live mode and the
     ///   startup default routinely disagree.
-    /// - [`SettingSelection::Refused`] — the #2982 turn lock rejected it and
-    ///   nothing was written anywhere.
     ///
-    /// A bool collapsed the last two, so every caller (slash `/mode`, the
-    /// Alt+A/P/Y shortcuts, the hotbar mode rows) reported a refusal and a
-    /// successful same-mode save identically — as "already in that mode", with
-    /// no receipt for the write that did happen.
+    /// Mode is not turn-locked: a change during a running turn is sent to the
+    /// engine, which applies it at its next step boundary in that turn.
     ///
     /// [`StartupDefaultsWriter`]: crate::tui::startup_defaults::StartupDefaultsWriter
     pub fn select_mode(&mut self, mode: AppMode) -> SettingSelection {
-        if self.reject_setting_change_while_busy(MessageId::SettingSubjectMode) {
-            return SettingSelection::Refused;
-        }
         let changed = self.set_mode(mode);
         // Persist an explicit selection even when it matches the live mode.
         // A restored session can be Operate while the startup default remains
@@ -3659,14 +3652,14 @@ impl App {
         self.yolo_compat_notified = true;
         // Per-install suppression: check the persisted flag so the toast
         // appears exactly once across sessions, not every launch.
-        if let Ok(settings) = crate::settings::Settings::load()
+        if let Ok(settings) = codewhale_runtime::settings::Settings::load()
             && settings.yolo_deprecation_shown
         {
             return;
         }
         // Persist the flag best-effort; toast still fires even if the write
         // fails (retries on the next attempt).
-        let _ = crate::settings::Settings::transact(|settings| {
+        let _ = codewhale_runtime::settings::Settings::transact(|settings| {
             settings.yolo_deprecation_shown = true;
             Ok(())
         });
@@ -3692,11 +3685,12 @@ impl App {
         );
     }
 
-    /// Whether mode/thinking selection is locked because a turn is in flight.
+    /// Whether a route setting is locked because a turn is in flight.
     ///
-    /// While `is_loading`, the model/permission surface the engine is acting on
-    /// must not shift underneath it, so user-initiated mode and thinking changes
-    /// are refused (#2982). Returns true (and posts a concise status message) if
+    /// While `is_loading`, the model, provider and thinking the engine is
+    /// acting on must not shift underneath it, so those changes are refused
+    /// (#2982). Mode and permissions are not locked: the engine applies them
+    /// at its next step boundary in the same turn. Returns true (and posts a concise status message) if
     /// the change should be rejected — the caller leaves the selection unchanged
     /// so the chip "twitches" back instead of moving.
     ///
@@ -3926,8 +3920,9 @@ impl App {
             return Err("the root approval policy is not editable".to_string());
         }
 
-        let active_config_path = crate::config::resolve_load_config_path(self.config_path.clone())
-            .map_err(|error| error.to_string())?;
+        let active_config_path =
+            codewhale_runtime::config::resolve_load_config_path(self.config_path.clone())
+                .map_err(|error| error.to_string())?;
         // The posture commit, the root-key release, and the rollback are one
         // critical section. Two `Settings::transact` calls would expose the
         // uncommitted middle state — a concurrent writer (a queued startup-default
@@ -3941,7 +3936,7 @@ impl App {
         }
 
         let posture = Self::approval_posture_setting(next).to_string();
-        let outcome = crate::settings::with_settings_transaction(|transaction| {
+        let outcome = codewhale_runtime::settings::with_settings_transaction(|transaction| {
             let mut settings = match transaction.load() {
                 Ok(settings) => settings,
                 Err(err) => {
@@ -3958,7 +3953,7 @@ impl App {
                 )));
             }
 
-            if let Err(err) = crate::config_persistence::persist_unset_root_key(
+            if let Err(err) = codewhale_runtime::config_persistence::persist_unset_root_key(
                 active_config_path.as_deref(),
                 "approval_policy",
             ) {
@@ -3987,9 +3982,6 @@ impl App {
     }
 
     fn next_approval_posture(&mut self, allow_root_policy: bool) -> Option<ApprovalMode> {
-        if self.reject_setting_change_while_busy(MessageId::SettingSubjectPermissions) {
-            return None;
-        }
         // Plan used to refuse the change outright, which welded the two axes
         // together on the keyboard: Tab cycles the mode, Shift+Tab cycles the
         // posture, and in Plan the second key silently did nothing. They are
@@ -4100,9 +4092,6 @@ impl App {
     /// landing on it; Plan stays read-only and only the Act baseline moves.
     /// Shared by `/auto` and the Plan hand-off.
     pub fn apply_agent_posture(&mut self, next: ApprovalMode) -> Result<(), String> {
-        if self.reject_setting_change_while_busy(MessageId::SettingSubjectPermissions) {
-            return Err(self.setting_locked_message(MessageId::SettingSubjectPermissions));
-        }
         if self.approval_policy_locked() {
             return Err("Permissions are controlled by config or managed requirements".to_string());
         }
@@ -6648,6 +6637,10 @@ impl App {
     }
 
     pub fn queue_message(&mut self, message: QueuedMessage) {
+        if message.extension_command.is_some() {
+            self.restore_unsent_message(message);
+            return;
+        }
         self.queued_messages.push_back(message);
     }
 
@@ -7085,8 +7078,8 @@ impl App {
     /// identity: the provider-level default plus its per-model table (#6108).
     pub fn set_active_context_window_override(
         &mut self,
-        config: &crate::config::Config,
-        identity: &crate::config::ProviderIdentity,
+        config: &codewhale_runtime::config::Config,
+        identity: &codewhale_runtime::config::ProviderIdentity,
     ) {
         self.active_context_window_override = config.context_window_for_provider_config(identity);
         self.active_model_context_windows = config.model_context_windows_for(identity).cloned();
@@ -7216,7 +7209,7 @@ impl App {
     pub(crate) fn provider_id_for_persistence(&self) -> Option<&str> {
         self.provider_identity
             .as_ref()
-            .and_then(crate::config::ProviderIdentity::persisted_id)
+            .and_then(codewhale_runtime::config::ProviderIdentity::persisted_id)
     }
 
     #[cfg(test)]
@@ -7228,19 +7221,14 @@ impl App {
         let key: String = identity.into();
         // This fixture helper has no parsed Config proof for an absent ID.
         // Legacy-root tests must install their actually captured record instead.
-        let exact_id = Some(key.clone().into());
-        self.set_provider_identity_record(crate::config::ProviderIdentity {
-            provider,
-            key: key.into(),
-            exact_id,
-            migrated_legacy_ollama_cloud_route: false,
-            legacy_root_custom_generation: None,
-        });
+        self.set_provider_identity_record(
+            codewhale_runtime::config::ProviderIdentity::test_exact_identity(provider, key),
+        );
     }
 
     pub(crate) fn set_provider_identity_record(
         &mut self,
-        identity: crate::config::ProviderIdentity,
+        identity: codewhale_runtime::config::ProviderIdentity,
     ) {
         self.api_provider = identity.provider;
         self.provider_identity = Some(identity);
@@ -7248,14 +7236,14 @@ impl App {
 
     pub(crate) fn admitted_provider_identity(
         &self,
-    ) -> Result<&crate::config::ProviderIdentity, String> {
+    ) -> Result<&codewhale_runtime::config::ProviderIdentity, String> {
         self.provider_identity.as_ref().filter(|identity| identity.provider == self.api_provider)
             .ok_or_else(|| "The active provider route was not admitted; repair its configuration before running a request.".to_string())
     }
 
     pub fn accepts_custom_model_ids(&self) -> bool {
         self.model_ids_passthrough
-            || crate::config::provider_passes_model_through(self.api_provider)
+            || codewhale_runtime::config::provider_passes_model_through(self.api_provider)
     }
 
     pub(crate) fn apply_provider_switch_reasoning_effort(
@@ -7266,7 +7254,9 @@ impl App {
     ) {
         let wire_model = model_override.unwrap_or(&self.model);
         let inferred = model_override.and_then(|model| {
-            crate::config::legacy_deepseek_alias_effort_for_route(provider, base_url, model)
+            codewhale_runtime::config::legacy_deepseek_alias_effort_for_route(
+                provider, base_url, model,
+            )
         });
         self.reasoning_effort = if let Some(requested) = self.reasoning_effort_preference {
             requested.normalize_for_route_identity(

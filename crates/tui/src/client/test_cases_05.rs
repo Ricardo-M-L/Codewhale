@@ -1190,17 +1190,20 @@
     /// Build a client whose OpenRouter base URL points at a mock server.
     pub(super) fn openrouter_client_for(server: &MockServer) -> CodewhaleClient {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        CodewhaleClient::new(&Config {
-            provider: Some("openrouter".to_string()),
-            providers: Some(ProvidersConfig {
+        CodewhaleClient::new(&{
+            let __cw_config_init_0_0 = Some("openrouter".to_string());
+            let __cw_config_init_0_1 = Some(ProvidersConfig {
                 openrouter: ProviderConfig {
                     api_key: Some("test-key".to_string()),
                     base_url: Some(server.uri()),
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value
         })
         .expect("openrouter client")
     }
@@ -1221,61 +1224,73 @@
                 ..ProviderConfig::default()
             },
         );
-        CodewhaleClient::new(&Config {
-            provider: Some(identity.to_string()),
-            providers: Some(providers),
-            ..Config::default()
+        CodewhaleClient::new(&{
+            let __cw_config_init_1_0 = Some(identity.to_string());
+            let __cw_config_init_1_1 = Some(providers);
+            let mut __cw_config_init_1_value: Config = Config::default();
+            __cw_config_init_1_value.provider = __cw_config_init_1_0;
+            __cw_config_init_1_value.providers = __cw_config_init_1_1;
+            __cw_config_init_1_value
         })
         .expect("Baseten client")
     }
 
     pub(super) fn opencode_go_client_for(server: &MockServer) -> CodewhaleClient {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        CodewhaleClient::new(&Config {
-            provider: Some("opencode-go".to_string()),
-            providers: Some(ProvidersConfig {
+        CodewhaleClient::new(&{
+            let __cw_config_init_2_0 = Some("opencode-go".to_string());
+            let __cw_config_init_2_1 = Some(ProvidersConfig {
                 opencode_go: ProviderConfig {
                     api_key: Some("test-key".to_string()),
                     base_url: Some(server.uri()),
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_2_value: Config = Config::default();
+            __cw_config_init_2_value.provider = __cw_config_init_2_0;
+            __cw_config_init_2_value.providers = __cw_config_init_2_1;
+            __cw_config_init_2_value
         })
         .expect("OpenCode Go client")
     }
 
     fn telecomjs_client_for(server: &MockServer) -> CodewhaleClient {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        CodewhaleClient::new(&Config {
-            provider: Some("telecomjs".to_string()),
-            providers: Some(ProvidersConfig {
+        CodewhaleClient::new(&{
+            let __cw_config_init_3_0 = Some("telecomjs".to_string());
+            let __cw_config_init_3_1 = Some(ProvidersConfig {
                 telecomjs: ProviderConfig {
                     api_key: Some("test-key".to_string()),
                     base_url: Some(server.uri()),
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_3_value: Config = Config::default();
+            __cw_config_init_3_value.provider = __cw_config_init_3_0;
+            __cw_config_init_3_value.providers = __cw_config_init_3_1;
+            __cw_config_init_3_value
         })
         .expect("TelecomJS client")
     }
 
     fn edenai_client_for(server: &MockServer) -> CodewhaleClient {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        CodewhaleClient::new(&Config {
-            provider: Some("edenai".to_string()),
-            providers: Some(ProvidersConfig {
+        CodewhaleClient::new(&{
+            let __cw_config_init_4_0 = Some("edenai".to_string());
+            let __cw_config_init_4_1 = Some(ProvidersConfig {
                 edenai: ProviderConfig {
                     api_key: Some("test-key".to_string()),
                     base_url: Some(format!("{}/v3", server.uri())),
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_4_value: Config = Config::default();
+            __cw_config_init_4_value.provider = __cw_config_init_4_0;
+            __cw_config_init_4_value.providers = __cw_config_init_4_1;
+            __cw_config_init_4_value
         })
         .expect("Eden AI client")
     }
@@ -1327,17 +1342,20 @@
     fn opencode_go_client_rejects_unknown_protocol_models() {
         let _ = rustls::crypto::ring::default_provider().install_default();
         for model in ["claude-unproven", "gpt-unlisted"] {
-            let config = Config {
-                provider: Some("opencode-go".to_string()),
-                providers: Some(ProvidersConfig {
+            let config = {
+                let __cw_config_init_5_0 = Some("opencode-go".to_string());
+                let __cw_config_init_5_1 = Some(ProvidersConfig {
                     opencode_go: ProviderConfig {
                         api_key: Some("test-key".to_string()),
                         model: Some(model.to_string()),
                         ..ProviderConfig::default()
                     },
                     ..ProvidersConfig::default()
-                }),
-                ..Config::default()
+                });
+                let mut __cw_config_init_5_value: Config = Config::default();
+                __cw_config_init_5_value.provider = __cw_config_init_5_0;
+                __cw_config_init_5_value.providers = __cw_config_init_5_1;
+                __cw_config_init_5_value
             };
             let err = CodewhaleClient::new(&config)
                 .err()

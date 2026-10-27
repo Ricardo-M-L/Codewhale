@@ -1,5 +1,3 @@
-
-
 #[test]
 fn agent_mode_elevates_writes_without_granting_network() {
     // #273 elevated Agent mode's sandbox so `curl`, package managers, and
@@ -45,7 +43,7 @@ fn agent_mode_elevates_writes_without_granting_network() {
     assert!(
         matches!(
             full_access_policy,
-            crate::sandbox::SandboxPolicy::DangerFullAccess
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess
         ),
         "Full Access must use DangerFullAccess (no sandbox); got {full_access_policy:?}",
     );
@@ -63,7 +61,7 @@ fn agent_mode_elevates_writes_without_granting_network() {
         .as_ref()
         .expect("Plan mode should make the shell sandbox policy explicit");
     assert!(
-        matches!(plan_policy, crate::sandbox::SandboxPolicy::ReadOnly { .. }),
+        matches!(plan_policy, codewhale_sandbox::SandboxPolicy::ReadOnly { .. }),
         "Plan mode must use ReadOnly sandbox to deny workspace writes (#1077); got {plan_policy:?}",
     );
     assert!(!plan_policy.has_network_access());
@@ -85,7 +83,7 @@ fn agent_mode_elevates_writes_without_granting_network() {
 #[test]
 fn sandbox_policy_for_turn_returns_correct_default_policy_per_mode() {
     use crate::core::authority::{SandboxNetworkAccess, sandbox_policy_for_turn};
-    use crate::sandbox::SandboxPolicy;
+    use codewhale_sandbox::SandboxPolicy;
     use ApprovalMode;
 
     let workspace = PathBuf::from("/tmp/example-workspace");
@@ -344,7 +342,7 @@ async fn posture_change_status_uses_permissions_and_work() {
 
 #[tokio::test]
 async fn live_runtime_authority_applies_latest_posture_and_sandbox_before_tools() {
-    use crate::sandbox::SandboxPolicy;
+    use codewhale_sandbox::SandboxPolicy;
     use ApprovalMode;
 
     let tmp = tempdir().expect("tempdir");
@@ -601,9 +599,7 @@ async fn provider_request_bodies_never_carry_the_todo_list() {
         .mount(&server)
         .await;
 
-    let api_config = Config {
-        ..Config::default()
-    }
+    let api_config = Config::default()
     .with_legacy_root(Some("test-key".to_string()), Some(server.uri()));
     let todos = crate::tools::todo::new_shared_todo_list();
     let plan = crate::tools::plan::new_shared_plan_state();
@@ -1265,7 +1261,9 @@ async fn sync_session_without_prompt_repins_full_system_prompt_on_next_turn() {
     );
     let established_context = engine.installed_next_turn_prompt_context();
     assert_eq!(
-        engine.refresh_pinned_header_for_turn(&established_context),
+        engine
+            .refresh_pinned_header_for_turn(&established_context)
+            .unwrap(),
         None
     );
     assert_eq!(

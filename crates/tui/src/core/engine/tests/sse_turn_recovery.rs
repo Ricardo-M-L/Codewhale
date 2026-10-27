@@ -220,12 +220,14 @@ fn retry_status_count(events: &[Event]) -> usize {
 async fn verify_next_user_turn_after_loss(failure: Failure) {
     let server = LoopbackSse::start(failure).await;
     let workspace = tempdir().unwrap();
-    let config = Config {
-        provider: Some("custom".to_string()),
-        default_text_model: Some(
-            codewhale_config::descriptors::defaults::DEFAULT_TEXT_MODEL.to_string(),
-        ),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_0_0 = Some("custom".to_string());
+        let __cw_config_init_0_1 =
+            Some(codewhale_config::descriptors::defaults::DEFAULT_TEXT_MODEL.to_string());
+        let mut __cw_config_init_0_value: Config = Config::default();
+        __cw_config_init_0_value.provider = __cw_config_init_0_0;
+        __cw_config_init_0_value.default_text_model = __cw_config_init_0_1;
+        __cw_config_init_0_value
     }
     .with_legacy_root(
         Some("synthetic-loopback-key".to_string()),
@@ -347,6 +349,7 @@ async fn verify_next_user_turn_after_loss(failure: Failure) {
                 Event::ApprovalRequired { .. }
                     | Event::ElevationRequired { .. }
                     | Event::UserInputRequired { .. }
+                    | Event::UserInputClosed { .. }
             ),
             "this regression has no pending approval or user-input gate: {event:?}"
         );

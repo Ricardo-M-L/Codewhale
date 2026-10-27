@@ -29,7 +29,6 @@ use super::profile::{
     AgentProfile, FleetDelegationHints, FleetLoadout, FleetProfile, FleetProfilePermissions,
     FleetSlot, ProfileOrigin, canonical_public_role_name,
 };
-use crate::config::Config;
 use crate::route_runtime::resolve_route_candidate;
 use crate::tools::subagent::{AgentWorkerSpec, AgentWorkerToolProfile};
 use codewhale_agent_contract::role::FleetRole;
@@ -38,6 +37,7 @@ use codewhale_agent_contract::worker_profile::{
     ChildLaunchManifest, ModelRoute, ToolScope, WorkerRuntimeProfile,
 };
 use codewhale_config::ProviderKind;
+use codewhale_runtime::config::Config;
 
 /// Reserved durable task metadata written after author input is validated.
 ///
@@ -1631,9 +1631,11 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     fn explicit_deepseek_config() -> Config {
-        Config {
-            provider: Some("deepseek".to_string()),
-            ..Config::default()
+        {
+            let __cw_config_init_0_0 = Some("deepseek".to_string());
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value
         }
         .with_legacy_root(Some("test-key".to_string()), None)
     }
@@ -2256,10 +2258,10 @@ mod tests {
     /// one of them into write-capable `custom`.
     #[test]
     fn the_two_fleet_drivers_agree_on_every_member_role_alias() {
-        let session = codewhale_workflow::PermissionCeiling {
+        let session = codewhale_protocol::fleet::PermissionCeiling {
             write: true,
             network_tool: true,
-            shell: codewhale_workflow::ShellCeiling::Full,
+            shell: codewhale_protocol::fleet::ShellCeiling::Full,
             delegation_depth: 2,
             tools: true,
         };
@@ -2962,12 +2964,15 @@ mod tests {
 
     #[test]
     fn validate_fleet_task_routes_rejects_known_foreign_providerless_pin() {
-        let mut providers = crate::config::ProvidersConfig::default();
+        let mut providers = codewhale_runtime::config::ProvidersConfig::default();
         providers.moonshot.api_key = Some("test-key".to_string());
-        let config = Config {
-            provider: Some("moonshot".to_string()),
-            providers: Some(providers),
-            ..Config::default()
+        let config = {
+            let __cw_config_init_1_0 = Some("moonshot".to_string());
+            let __cw_config_init_1_1 = Some(providers);
+            let mut __cw_config_init_1_value: Config = Config::default();
+            __cw_config_init_1_value.provider = __cw_config_init_1_0;
+            __cw_config_init_1_value.providers = __cw_config_init_1_1;
+            __cw_config_init_1_value
         };
         let mut profile = agent_profile(
             "moonshot-builder",
@@ -3305,12 +3310,12 @@ mod tests {
             resolve_fleet_route(&task, &[profile.clone()], Some("deepseek-v4-pro")).is_none(),
             "a profile string alone is not proof that a named custom route exists"
         );
-        let config = Config {
-            provider: Some("lm-studio".to_string()),
-            providers: Some(crate::config::ProvidersConfig {
+        let config = {
+            let __cw_config_init_2_0 = Some("lm-studio".to_string());
+            let __cw_config_init_2_1 = Some(codewhale_runtime::config::ProvidersConfig {
                 custom: std::collections::HashMap::from([(
                     "lm-studio".to_string(),
-                    crate::config::ProviderConfig {
+                    codewhale_runtime::config::ProviderConfig {
                         kind: Some("openai-compatible".to_string()),
                         base_url: Some("http://127.0.0.1:1234/v1".to_string()),
                         model: Some("qwen-2.5-7b".to_string()),
@@ -3319,8 +3324,11 @@ mod tests {
                     },
                 )]),
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_2_value: Config = Default::default();
+            __cw_config_init_2_value.provider = __cw_config_init_2_0;
+            __cw_config_init_2_value.providers = __cw_config_init_2_1;
+            __cw_config_init_2_value
         };
         let route = resolve_fleet_route_with_config(
             &task,
@@ -3391,12 +3399,12 @@ mod tests {
                 vec![],
             )),
         );
-        let config = Config {
-            provider: Some("CUSTOM".to_string()),
-            providers: Some(crate::config::ProvidersConfig {
+        let config = {
+            let __cw_config_init_3_0 = Some("CUSTOM".to_string());
+            let __cw_config_init_3_1 = Some(codewhale_runtime::config::ProvidersConfig {
                 custom: std::collections::HashMap::from([(
                     "CUSTOM".to_string(),
-                    crate::config::ProviderConfig {
+                    codewhale_runtime::config::ProviderConfig {
                         kind: Some("openai-compatible".to_string()),
                         base_url: Some("http://127.0.0.1:5678/v1".to_string()),
                         model: Some("case-model".to_string()),
@@ -3404,8 +3412,11 @@ mod tests {
                     },
                 )]),
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_3_value: Config = Default::default();
+            __cw_config_init_3_value.provider = __cw_config_init_3_0;
+            __cw_config_init_3_value.providers = __cw_config_init_3_1;
+            __cw_config_init_3_value
         };
 
         let route = resolve_fleet_route_with_config(
@@ -4576,7 +4587,10 @@ mod tests {
         .expect("worker spec with empty profiles");
 
         assert_eq!(spec.spawn_depth, 0);
-        assert_eq!(spec.max_spawn_depth, codewhale_config::DEFAULT_SPAWN_DEPTH);
+        assert_eq!(
+            spec.max_spawn_depth,
+            codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH
+        );
         assert_eq!(spec.max_spawn_depth, u32::MAX);
 
         let hardened = apply_exec_hardening(spec, &codewhale_config::FleetExecConfig::default());

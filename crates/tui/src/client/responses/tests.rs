@@ -5,10 +5,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use futures_util::StreamExt;
 
-use crate::config::{Config, ProviderConfig, ProvidersConfig, RetryConfig};
 use codewhale_models::Message;
 use codewhale_models::Role;
 use codewhale_models::SystemPrompt;
+use codewhale_runtime::config::{Config, ProviderConfig, ProvidersConfig, RetryConfig};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
@@ -74,9 +74,9 @@ fn minimal_responses_request() -> MessageRequest {
 }
 
 fn test_codex_config(server: &MockServer) -> Config {
-    Config {
-        provider: Some("openai-codex".to_string()),
-        retry: Some(RetryConfig {
+    {
+        let __cw_config_init_0_0 = Some("openai-codex".to_string());
+        let __cw_config_init_0_1 = Some(RetryConfig {
             enabled: Some(true),
             max_retries: Some(1),
             initial_delay: Some(0.0),
@@ -85,16 +85,20 @@ fn test_codex_config(server: &MockServer) -> Config {
             jitter: None,
             jitter_factor: None,
             respect_retry_after: None,
-        }),
-        providers: Some(ProvidersConfig {
+        });
+        let __cw_config_init_0_2 = Some(ProvidersConfig {
             openai_codex: ProviderConfig {
                 base_url: Some(format!("{}/v1", server.uri())),
                 api_key: Some("test-token".to_string()),
                 ..ProviderConfig::default()
             },
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_0_value: Config = Config::default();
+        __cw_config_init_0_value.provider = __cw_config_init_0_0;
+        __cw_config_init_0_value.retry = __cw_config_init_0_1;
+        __cw_config_init_0_value.providers = __cw_config_init_0_2;
+        __cw_config_init_0_value
     }
 }
 
@@ -1169,17 +1173,20 @@ async fn generic_responses_captures_and_replays_opaque_reasoning() {
                 "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n",
             )))
         .mount(&server).await;
-    let config = Config {
-        provider: Some("openai".into()),
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_1_0 = Some("openai".into());
+        let __cw_config_init_1_1 = Some(ProvidersConfig {
             openai: ProviderConfig {
                 api_key: Some("test-token".into()),
                 base_url: Some(format!("{}/v1", server.uri())),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_1_value: Config = Default::default();
+        __cw_config_init_1_value.provider = __cw_config_init_1_0;
+        __cw_config_init_1_value.providers = __cw_config_init_1_1;
+        __cw_config_init_1_value
     };
     let client = CodewhaleClient::from_parts(
         format!("{}/v1", server.uri()),

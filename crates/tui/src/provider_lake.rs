@@ -6,7 +6,7 @@
 //! Pickers, hotbar route slots, [`crate::model_inventory::ModelInventory`],
 //! slash completions, and subagent validation should read model lists from here.
 //!
-//! [`crate::config::model_completion_names_for_provider`] is retained only as a
+//! [`codewhale_runtime::config::model_completion_names_for_provider`] is retained only as a
 //! compatibility fallback for CodeWhale-only / local providers that Models.dev
 //! does not represent (and for unbundled gateways until the live catalog covers
 //! them).
@@ -23,11 +23,11 @@ use codewhale_config::catalog::{
 use codewhale_config::route::{ProviderModelOffering, RouteResolver, bundled_offerings};
 
 use crate::codex_model_cache;
-use crate::config::{
-    Config, ProviderIdentity, model_completion_names_for_provider, opencode_go_model_id,
-    provider_is_configured_for_active,
-};
+use crate::provider_readiness::provider_is_configured_for_active;
 use codewhale_config::ProviderKind;
+use codewhale_runtime::config::{
+    Config, ProviderIdentity, model_completion_names_for_provider, opencode_go_model_id,
+};
 
 static BUNDLED_SNAPSHOT: std::sync::OnceLock<SharedSnapshot> = std::sync::OnceLock::new();
 
@@ -1227,7 +1227,7 @@ pub fn live_per_provider_models(provider: ProviderKind) -> Vec<String> {
 /// Precedence: live Models.dev rows (when published) override bundled offline
 /// rows on `(provider, wire_model_id)`; if the merged catalog still has no rows
 /// for the provider, fall back to
-/// `crate::config::model_completion_names_for_provider` so CodeWhale-only /
+/// `codewhale_runtime::config::model_completion_names_for_provider` so CodeWhale-only /
 /// local providers (and gateways not yet in the offline seed) keep defaults.
 #[must_use]
 pub fn all_catalog_models_for_provider(provider: ProviderKind) -> Vec<String> {
@@ -1249,7 +1249,7 @@ pub fn all_catalog_models_for_provider_identity(
     // Models.dev catalog is not evidence that a model can be routed through
     // a ChatGPT plan, so this provider owns a registration-scoped source.
     if provider == ProviderKind::OpenaiCodex {
-        return codex_model_cache::model_roster().model_ids();
+        return codewhale_runtime::codex_model_roster::model_roster().model_ids();
     }
 
     let catalog_id = catalog_provider_id_for_identity(provider, provider_identity);
@@ -1417,15 +1417,17 @@ pub(crate) fn configured_catalog_offering_for_route(
     model: &str,
 ) -> Option<CatalogOffering> {
     let lower = catalog_offering_for_route(provider, identity, base_url, model);
-    crate::config::configured_model_for_route(config, provider, identity, base_url, model)
-        .map(|row| {
-            let mut offering = row.to_catalog_offering();
-            if let Some(lower) = lower.as_ref() {
-                offering.complete_from(lower, Some(base_url));
-            }
-            offering
-        })
-        .or(lower)
+    codewhale_runtime::config::configured_model_for_route(
+        config, provider, identity, base_url, model,
+    )
+    .map(|row| {
+        let mut offering = row.to_catalog_offering();
+        if let Some(lower) = lower.as_ref() {
+            offering.complete_from(lower, Some(base_url));
+        }
+        offering
+    })
+    .or(lower)
 }
 
 pub(crate) fn configured_catalog_models_for_route(
@@ -1521,15 +1523,6 @@ pub fn models_for_provider(config: &Config, identity: &ProviderIdentity) -> Vec<
     }
 }
 
-pub(crate) fn valid_catalog_model_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 256
-        && value.bytes().any(|byte| byte.is_ascii_alphanumeric())
-        && value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-' | b'~')
-        })
-}
-
 /// Endpoint-scoped roster for CLI, pickers and inventory. A cached provider
 /// listing is authoritative for the IDs it lists **and for its own omissions**;
 /// the only ID appended after it is one the signed payload explicitly attests
@@ -1543,7 +1536,7 @@ pub(crate) fn catalog_models_for_route(
     base_url: &str,
 ) -> Vec<String> {
     if provider == ProviderKind::OpenaiCodex {
-        return codex_model_cache::model_roster().model_ids();
+        return codewhale_runtime::codex_model_roster::model_roster().model_ids();
     }
     let cached = crate::provider_catalog_live::cached_entry_for_route(provider, identity, base_url)
         .ok()
@@ -1732,9 +1725,10 @@ fn codex_receipt(config: &Config, identity: &ProviderIdentity) -> CatalogUpdateR
 
 fn codex_roster_receipt(
     identity: &ProviderIdentity,
-    roster: &codex_model_cache::CodexModelRoster,
+    roster: &codewhale_runtime::codex_model_roster::CodexModelRoster,
 ) -> CatalogUpdateReceipt {
-    let fresh = roster.freshness == codex_model_cache::CodexModelCacheFreshness::Fresh;
+    let fresh =
+        roster.freshness == codewhale_runtime::codex_model_roster::CodexModelCacheFreshness::Fresh;
     CatalogUpdateReceipt {
         provider: identity.key.to_string(),
         source: roster.source,
@@ -1822,7 +1816,7 @@ pub(crate) async fn update_provider_catalog(
         receipt.error = Some("provider_retired");
         return receipt;
     }
-    if crate::config::explicit_cli_api_key_override().is_some()
+    if codewhale_runtime::config::explicit_cli_api_key_override().is_some()
         && config.active_provider_identity().ok().as_ref() != Some(identity)
     {
         receipt.outcome = "skipped";
@@ -1877,7 +1871,7 @@ pub(crate) async fn update_provider_catalog(
     // Serialize publication with explicit overlay install/remove. Resolve
     // above before taking this guard: the resolver itself reads the overlay.
     let access = route_config.account_model_access.read();
-    let owner = |access: &crate::config::AccountModelAccess| {
+    let owner = |access: &codewhale_runtime::config::AccountModelAccess| {
         (
             access.session_id.clone(),
             access.profile.clone(),
@@ -1937,9 +1931,9 @@ pub(crate) async fn update_provider_catalog(
 }
 
 pub(crate) async fn refresh_local_ollama_catalog(config: &Config, identity: &ProviderIdentity) {
-    #[cfg(test)]
+    #[cfg(any(test, all(feature = "test-thread-scoped-state", debug_assertions)))]
     let _ = (config, identity);
-    #[cfg(not(test))]
+    #[cfg(not(any(test, all(feature = "test-thread-scoped-state", debug_assertions))))]
     {
         if identity.provider != ProviderKind::Ollama {
             return;
@@ -2068,7 +2062,7 @@ pub(crate) async fn run_models(
 ) -> anyhow::Result<()> {
     use codewhale_localization::{MessageId, resolve_locale, tr};
     let locale = resolve_locale(
-        &crate::settings::Settings::load_persisted()
+        &codewhale_runtime::settings::Settings::load_persisted()
             .unwrap_or_default()
             .locale,
     );
@@ -2284,7 +2278,7 @@ pub struct ProviderCapability {
     pub request_payload_mode: RequestPayloadMode,
     /// Deprecation metadata for compatibility aliases that are still accepted.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub alias_deprecation: Option<crate::config::ModelAliasDeprecation>,
+    pub alias_deprecation: Option<codewhale_runtime::config::ModelAliasDeprecation>,
 }
 
 /// Which request-payload dialect the provider speaks.
@@ -2382,7 +2376,7 @@ pub fn provider_capability_with_wire(
         return ProviderCapability {
             provider,
             resolved_model: resolved_model.to_string(),
-            context_window: crate::config::OPENAI_CODEX_EFFECTIVE_CONTEXT_WINDOW_TOKENS,
+            context_window: codewhale_runtime::config::OPENAI_CODEX_EFFECTIVE_CONTEXT_WINDOW_TOKENS,
             // The OAuth cache does not publish an output ceiling. This 4K is a
             // deliberate, long-standing product decision for the Codex route
             // (not a fallback): keep the compatibility capability conservative
@@ -2439,7 +2433,7 @@ pub fn provider_capability_with_wire(
         provider,
         ProviderKind::Deepseek | ProviderKind::DeepseekAnthropic
     ) {
-        crate::config::deepseek_alias_deprecation(&model_lower)
+        codewhale_runtime::config::deepseek_alias_deprecation(&model_lower)
     } else {
         None
     };
@@ -2566,10 +2560,10 @@ mod tests {
     }
 
     fn catalog_test_config(first_url: &str, second_url: &str) -> Config {
-        use crate::config::{ProviderConfig, ProvidersConfig};
-        Config {
-            provider: Some("catalog-first".to_string()),
-            providers: Some(ProvidersConfig {
+        use codewhale_runtime::config::{ProviderConfig, ProvidersConfig};
+        {
+            let __cw_config_init_0_0 = Some("catalog-first".to_string());
+            let __cw_config_init_0_1 = Some(ProvidersConfig {
                 custom: [
                     ("catalog-first", first_url, "first-route-test-key"),
                     ("catalog-second", second_url, "second-route-test-key"),
@@ -2589,8 +2583,11 @@ mod tests {
                 })
                 .collect(),
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_0_value: Config = Default::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value
         }
     }
 
@@ -2819,9 +2816,11 @@ mod tests {
     async fn chatgpt_catalog_refresh_rejects_unregistered_legacy_credentials() {
         let _env = crate::test_support::lock_test_env();
         let _token = crate::test_support::EnvVarGuard::set("CODEX_ACCESS_TOKEN", "legacy-token");
-        let config = Config {
-            provider: Some("openai-codex".to_string()),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_1_0 = Some("openai-codex".to_string());
+            let mut __cw_config_init_1_value: Config = Default::default();
+            __cw_config_init_1_value.provider = __cw_config_init_1_0;
+            __cw_config_init_1_value
         };
         let identity = config.resolve_provider_identity("openai-codex").unwrap();
         let receipt = update_provider_catalog(&config, &identity).await;
@@ -2835,9 +2834,9 @@ mod tests {
         let identity = Config::default()
             .resolve_provider_identity("openai-codex")
             .unwrap();
-        let roster = codex_model_cache::CodexModelRoster {
+        let roster = codewhale_runtime::codex_model_roster::CodexModelRoster {
             models: Vec::new(),
-            freshness: codex_model_cache::CodexModelCacheFreshness::Fresh,
+            freshness: codewhale_runtime::codex_model_roster::CodexModelCacheFreshness::Fresh,
             fetched_at: None,
             observed_at: Some(chrono::Utc::now()),
             source: "chatgpt_plan_api",
@@ -2948,7 +2947,9 @@ mod tests {
             .provider_identities()
             .into_iter()
             .filter(|identity| {
-                crate::config::provider_is_configured_for_active(&config, identity, &active)
+                crate::provider_readiness::provider_is_configured_for_active(
+                    &config, identity, &active,
+                )
             })
             .collect();
         assert_eq!(configured_providers(&config), expected);
@@ -4155,9 +4156,11 @@ mod tests {
         let provider = ProviderKind::Openai;
         let base = provider.provider().default_base_url();
         let model = "cloud-catalog-fixture";
-        let config = Config {
-            provider: Some("openai".into()),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_2_0 = Some("openai".into());
+            let mut __cw_config_init_2_value: Config = Default::default();
+            __cw_config_init_2_value.provider = __cw_config_init_2_0;
+            __cw_config_init_2_value
         };
         let baseline = crate::route_runtime::resolve_runtime_route(&config, provider, None)
             .unwrap()
@@ -4439,9 +4442,11 @@ mod tests {
         );
 
         // The executor reads the same list the picker does.
-        let config = Config {
-            provider: Some("deepseek".into()),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_3_0 = Some("deepseek".into());
+            let mut __cw_config_init_3_value: Config = Default::default();
+            __cw_config_init_3_value.provider = __cw_config_init_3_0;
+            __cw_config_init_3_value
         };
         assert_eq!(
             crate::route_runtime::resolve_runtime_route(&config, provider, Some(unknown))
@@ -4780,9 +4785,11 @@ mod tests {
                 .and_then(|limit| limit.context),
             Some(131_072)
         );
-        let config = Config {
-            provider: Some("deepseek".into()),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_4_0 = Some("deepseek".into());
+            let mut __cw_config_init_4_value: Config = Default::default();
+            __cw_config_init_4_value.provider = __cw_config_init_4_0;
+            __cw_config_init_4_value
         };
         let limits = |model: &str| {
             crate::route_runtime::resolve_runtime_route(&config, provider, Some(model))
@@ -4886,9 +4893,11 @@ mod tests {
         ));
 
         // The executor reads the same correction the picker does.
-        let config = Config {
-            provider: Some("deepseek".into()),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_5_0 = Some("deepseek".into());
+            let mut __cw_config_init_5_value: Config = Default::default();
+            __cw_config_init_5_value.provider = __cw_config_init_5_0;
+            __cw_config_init_5_value
         };
         assert_eq!(
             crate::route_runtime::resolve_runtime_route(&config, provider, Some(model))

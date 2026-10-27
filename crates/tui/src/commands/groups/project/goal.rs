@@ -314,7 +314,7 @@ mod tests {
     /// the `tool_search` activation path.
     #[test]
     fn bare_goal_brief_names_only_callable_tools() {
-        crate::tools::canonical_action::tests::assert_text_names_only_callable_tools(
+        crate::tools::canonical_action_tests::assert_text_names_only_callable_tools(
             "bare /goal brief",
             BARE_GOAL_BRIEF,
         );

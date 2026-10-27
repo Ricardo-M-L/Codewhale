@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -204,10 +204,10 @@ Podłączaj [serwery MCP](../MCP.md), dodawaj [umiejętności](../SKILLS.md) i
 zdarzeniach sesji i narzędzi. Code mode (eksperymentalny, domyślnie włączony)
 pozwala modelowi napisać jeden program `execute_tools`, który wywołuje kilka
 narzędzi MCP i wtyczek; każde wywołanie nadal podlega Twoim regułom
-zatwierdzania i ma własne pokwitowanie. Dołączona wtyczka Computer Use
+zatwierdzania i ma własne pokwitowanie. Osobno instalowana wtyczka Computer Use
 (eksperymentalna, tylko macOS) potrafi obserwować i obsługiwać inne aplikacje.
 Pozostaje wyłączona, dopóki nie sprawdzisz jej dostępu i jej nie włączysz
-([przewodnik](../../crates/tui/plugins/computer-use/README.md)).
+([przewodnik](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## Sposoby uruchamiania
 

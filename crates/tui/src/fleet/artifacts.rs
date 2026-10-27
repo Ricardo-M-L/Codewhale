@@ -7,8 +7,8 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
 
-use super::files::WorkspaceFile;
-pub(crate) use super::files::path_is_confined;
+use codewhale_util::files::WorkspaceFile;
+pub(crate) use codewhale_util::files::path_is_confined;
 
 use anyhow::{Context, Result, ensure};
 use codewhale_protocol::fleet::FleetArtifactRef;

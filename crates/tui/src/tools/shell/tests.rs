@@ -20,7 +20,7 @@ fn shell_catalog_guidance_matches_execution() {
     let command = schema["properties"]["command"]["description"]
         .as_str()
         .unwrap();
-    let dispatcher = crate::shell_dispatcher::global_dispatcher();
+    let dispatcher = codewhale_sandbox::shell_dispatcher::global_dispatcher();
     assert!(command.contains(dispatcher.kind().binary()));
     assert!(
         !tool.description().contains(command),
@@ -79,7 +79,7 @@ fn export_shell_guidance_eval_fixture() {
         "name": tool.name,
         "description": tool.description,
         "input_schema": tool.input_schema,
-        "shell": crate::shell_dispatcher::global_dispatcher().kind().binary(),
+        "shell": codewhale_sandbox::shell_dispatcher::global_dispatcher().kind().binary(),
     });
     std::fs::write(path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
 }
@@ -393,13 +393,13 @@ async fn foreground_shell_results_carry_the_spawned_execution_receipt() {
     );
 
     let hooks = crate::hooks::HookExecutor::new(
-        crate::hooks::HooksConfig {
+        codewhale_config::hooks::HooksConfig {
             enabled: true,
-            hooks: vec![crate::hooks::Hook::new(
-                crate::hooks::HookEvent::ToolCallAfter,
+            hooks: vec![codewhale_config::hooks::Hook::new(
+                codewhale_config::hooks::HookEvent::ToolCallAfter,
                 "true",
             )],
-            ..crate::hooks::HooksConfig::default()
+            ..codewhale_config::hooks::HooksConfig::default()
         },
         workspace.clone(),
     );
@@ -504,13 +504,13 @@ async fn execution_receipt_keeps_spawn_cwd_when_the_command_retargets_the_worksp
         .with_elevated_sandbox_policy(ExecutionSandboxPolicy::DangerFullAccess);
     context.auto_approve = true;
     context.runtime.hook_executor = Some(std::sync::Arc::new(crate::hooks::HookExecutor::new(
-        crate::hooks::HooksConfig {
+        codewhale_config::hooks::HooksConfig {
             enabled: true,
-            hooks: vec![crate::hooks::Hook::new(
-                crate::hooks::HookEvent::ToolCallAfter,
+            hooks: vec![codewhale_config::hooks::Hook::new(
+                codewhale_config::hooks::HookEvent::ToolCallAfter,
                 "true",
             )],
-            ..crate::hooks::HooksConfig::default()
+            ..codewhale_config::hooks::HooksConfig::default()
         },
         workspace.clone(),
     )));
@@ -806,7 +806,7 @@ fn echo_command(message: &str) -> String {
 }
 
 fn sleep_command(seconds: u64) -> String {
-    let dispatcher = crate::shell_dispatcher::global_dispatcher();
+    let dispatcher = codewhale_sandbox::shell_dispatcher::global_dispatcher();
     if dispatcher.kind().is_powershell() {
         return format!("Start-Sleep -Seconds {seconds}");
     }
@@ -822,7 +822,7 @@ fn sleep_command(seconds: u64) -> String {
 }
 
 fn sleep_then_echo_command(seconds: u64, message: &str) -> String {
-    let dispatcher = crate::shell_dispatcher::global_dispatcher();
+    let dispatcher = codewhale_sandbox::shell_dispatcher::global_dispatcher();
     if dispatcher.kind().is_powershell() {
         return format!("Start-Sleep -Seconds {seconds}; echo {message}");
     }
@@ -838,7 +838,7 @@ fn sleep_then_echo_command(seconds: u64, message: &str) -> String {
 }
 
 fn echo_stdin_command() -> String {
-    let dispatcher = crate::shell_dispatcher::global_dispatcher();
+    let dispatcher = codewhale_sandbox::shell_dispatcher::global_dispatcher();
     if dispatcher.kind().is_powershell() {
         return "[Console]::In.ReadToEnd()".to_string();
     }
@@ -1113,17 +1113,17 @@ fn exec_shell_parallel_flags_are_input_aware() {
 async fn readonly_shell_refuses_raw_string_external_backend() {
     struct Backend(std::sync::atomic::AtomicBool);
     #[async_trait::async_trait]
-    impl crate::sandbox::backend::SandboxBackend for Backend {
-        fn kind(&self) -> crate::sandbox::backend::SandboxKind {
-            crate::sandbox::backend::SandboxKind::OpenSandbox
+    impl codewhale_sandbox::backend::SandboxBackend for Backend {
+        fn kind(&self) -> codewhale_sandbox::backend::SandboxKind {
+            codewhale_sandbox::backend::SandboxKind::OpenSandbox
         }
         async fn exec(
             &self,
             _cmd: &str,
             _env: &std::collections::HashMap<String, String>,
-        ) -> anyhow::Result<crate::sandbox::backend::SandboxOutput> {
+        ) -> anyhow::Result<codewhale_sandbox::backend::SandboxOutput> {
             self.0.store(true, std::sync::atomic::Ordering::SeqCst);
-            Ok(crate::sandbox::backend::SandboxOutput {
+            Ok(codewhale_sandbox::backend::SandboxOutput {
                 stdout: String::new(),
                 stderr: String::new(),
                 exit_code: 0,
@@ -1149,15 +1149,15 @@ async fn readonly_shell_refuses_raw_string_external_backend() {
 async fn lowercase_bash_refuses_non_streaming_external_backend() {
     struct Backend(std::sync::atomic::AtomicBool);
     #[async_trait::async_trait]
-    impl crate::sandbox::backend::SandboxBackend for Backend {
-        fn kind(&self) -> crate::sandbox::backend::SandboxKind {
-            crate::sandbox::backend::SandboxKind::OpenSandbox
+    impl codewhale_sandbox::backend::SandboxBackend for Backend {
+        fn kind(&self) -> codewhale_sandbox::backend::SandboxKind {
+            codewhale_sandbox::backend::SandboxKind::OpenSandbox
         }
         async fn exec(
             &self,
             _cmd: &str,
             _env: &std::collections::HashMap<String, String>,
-        ) -> anyhow::Result<crate::sandbox::backend::SandboxOutput> {
+        ) -> anyhow::Result<codewhale_sandbox::backend::SandboxOutput> {
             self.0.store(true, std::sync::atomic::Ordering::SeqCst);
             unreachable!("lowercase bash must fail before external dispatch")
         }
@@ -1228,7 +1228,7 @@ fn readonly_argv_is_shell_free_and_disables_git_helpers() {
 #[cfg(unix)]
 #[tokio::test]
 async fn readonly_git_reads_run_no_clean_filter_or_textconv() {
-    use crate::dependencies::ExternalTool as _;
+    use codewhale_dependencies::ExternalTool as _;
     use std::os::unix::fs::PermissionsExt as _;
     let workspace = tempdir().expect("workspace");
     let outside = tempdir().expect("outside");
@@ -1238,7 +1238,7 @@ async fn readonly_git_reads_run_no_clean_filter_or_textconv() {
     let helper = helper.display().to_string();
     let repo = workspace.path();
     let git = |args: &[&str]| {
-        let status = crate::dependencies::Git::status(args, repo).expect("git should spawn");
+        let status = codewhale_dependencies::Git::status(args, repo).expect("git should spawn");
         assert!(status.success(), "git {args:?} failed");
     };
     git(&["init", "-q"]);
@@ -1464,21 +1464,21 @@ fn readonly_github_shell_calls_obey_the_host_network_policy_before_spawn() {
     let tmp = tempdir().expect("tempdir");
     let context = |default| {
         ToolContext::new(tmp.path()).with_network_policy(
-            crate::network_policy::NetworkPolicyDecider::new(
-                crate::network_policy::NetworkPolicy {
+            codewhale_net::network_policy::NetworkPolicyDecider::new(
+                codewhale_net::network_policy::NetworkPolicy {
                     default,
-                    ..crate::network_policy::NetworkPolicy::default()
+                    ..codewhale_net::network_policy::NetworkPolicy::default()
                 },
                 None,
             ),
         )
     };
 
-    let allow = context(crate::network_policy::DecisionToml::Allow);
+    let allow = context(codewhale_net::network_policy::DecisionToml::Allow);
     enforce_readonly_network_reads("gh issue view 5287", &allow)
         .expect("allowed github.com policy");
 
-    let deny = context(crate::network_policy::DecisionToml::Deny);
+    let deny = context(codewhale_net::network_policy::DecisionToml::Deny);
     let denied = enforce_readonly_network_reads("gh issue list", &deny)
         .expect_err("deny must stop before spawning gh")
         .to_string();
@@ -1486,14 +1486,14 @@ fn readonly_github_shell_calls_obey_the_host_network_policy_before_spawn() {
     enforce_readonly_network_reads("git status", &deny)
         .expect("local reads do not consult the network policy");
 
-    let prompt = context(crate::network_policy::DecisionToml::Prompt);
+    let prompt = context(codewhale_net::network_policy::DecisionToml::Prompt);
     let prompted = enforce_readonly_network_reads("gh issue view 5287", &prompt)
         .expect_err("headless Scout cannot prompt interactively")
         .to_string();
     assert!(prompted.contains("requires network approval"));
 
     // Read-only agents: every admitted network segment is judged.
-    let readonly_deny = context(crate::network_policy::DecisionToml::Deny)
+    let readonly_deny = context(codewhale_net::network_policy::DecisionToml::Deny)
         .with_shell_policy(codewhale_agent_contract::worker_profile::ShellPolicy::ReadOnly);
     for command in ["gh pr view 1 | head", "ls && gh issue list"] {
         let denied = enforce_readonly_network_reads(command, &readonly_deny)
@@ -1722,15 +1722,15 @@ async fn read_only_shell_resolves_operands_from_the_effective_cwd() {
 async fn read_only_shell_skips_shell_env_hooks() {
     let tmp = tempdir().expect("tempdir");
     let marker = tmp.path().join("hook-ran");
-    let hook = crate::hooks::Hook::new(
-        crate::hooks::HookEvent::ShellEnv,
+    let hook = codewhale_config::hooks::Hook::new(
+        codewhale_config::hooks::HookEvent::ShellEnv,
         &format!("printf hit > '{}'", marker.display()),
     );
     let executor = crate::hooks::HookExecutor::new(
-        crate::hooks::HooksConfig {
+        codewhale_config::hooks::HooksConfig {
             enabled: true,
             hooks: vec![hook],
-            ..crate::hooks::HooksConfig::default()
+            ..codewhale_config::hooks::HooksConfig::default()
         },
         tmp.path().to_path_buf(),
     );
@@ -2400,7 +2400,7 @@ fn shell_execution_preserves_custom_windows_sdk_root_env() {
 
     let tmp = tempdir().expect("tempdir");
     let mut manager = ShellManager::new(tmp.path().to_path_buf());
-    let command = if crate::shell_dispatcher::global_dispatcher()
+    let command = if codewhale_sandbox::shell_dispatcher::global_dispatcher()
         .kind()
         .is_powershell()
     {
@@ -3448,7 +3448,7 @@ async fn await_shell_wait_registration(context: &ToolContext) {
 
 fn wait_detach_output_command(marker: &str) -> String {
     let separator = if cfg!(windows)
-        && !crate::shell_dispatcher::global_dispatcher()
+        && !codewhale_sandbox::shell_dispatcher::global_dispatcher()
             .kind()
             .is_powershell()
     {
@@ -4546,7 +4546,7 @@ fn issue_1691_quoted_commit_message_round_trips() {
         Duration::from_secs(5),
     );
 
-    let dispatcher = crate::shell_dispatcher::global_dispatcher();
+    let dispatcher = codewhale_sandbox::shell_dispatcher::global_dispatcher();
     // The whole command (with quotes) is a single argv entry. The actual
     // shell binary can vary by platform — and the dispatcher may wrap the
     // payload (encoding prefix, exit-code capture) — but the payload itself
@@ -5059,7 +5059,7 @@ fn bash_schema_declares_what_each_action_requires() {
 #[test]
 fn bash_required_groups_survive_a_provider_that_drops_root_composition() {
     let mut schema = BashTool::new("Bash").input_schema();
-    let note = crate::tools::schema_sanitize::sanitize_for_responses(&mut schema)
+    let note = codewhale_models::schema_sanitize::sanitize_for_responses(&mut schema)
         .expect("dropped required groups must be restated for the model");
 
     assert!(note.contains("At least one"), "{note}");

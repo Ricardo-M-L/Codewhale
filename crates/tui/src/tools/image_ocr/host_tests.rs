@@ -30,7 +30,7 @@ fn context(path: &Path, host: bool) -> ToolContext {
 }
 fn new_manager(node: PathBuf, path: &Path) -> Arc<ExtensionHostManager> {
     Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-        runtime: crate::config::ExtensionHostRuntime::Node,
+        runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
         node_override: Some(node),
         root: Some(path.join("host")),
         ..ExtensionHostOptions::default()

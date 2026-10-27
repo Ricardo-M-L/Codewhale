@@ -62,7 +62,7 @@ async fn load_from(
         "Your profile could not be loaded (HTTP {}). Sign in again or retry",
         response.status().as_u16()
     );
-    let bytes = crate::utils::read_response_body_capped(response, 256 * 1024).await?;
+    let bytes = codewhale_util::utils::read_response_body_capped(response, 256 * 1024).await?;
     let value: serde_json::Value =
         serde_json::from_slice(&bytes).context("The account profile response is invalid")?;
     ensure!(

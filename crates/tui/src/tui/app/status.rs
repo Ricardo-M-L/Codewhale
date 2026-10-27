@@ -436,7 +436,7 @@ mod tests {
     fn app() -> App {
         App::new(
             crate::tui::test_support::test_tui_options(std::path::PathBuf::from(".")),
-            &crate::config::Config::default(),
+            &codewhale_runtime::config::Config::default(),
         )
     }
 

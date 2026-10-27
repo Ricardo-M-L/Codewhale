@@ -32,6 +32,7 @@
 //! below is a separate route/usage copy (never another money counter), and the
 //! shared test reset clears both stores.
 
+use codewhale_runtime::safe_label::{safe_receipt_field, sanitize_persisted_route_label};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -249,7 +250,7 @@ impl EffectiveRouteEnvelope {
 
     #[cfg(test)]
     pub fn capture(
-        config: Option<&crate::config::Config>,
+        config: Option<&codewhale_runtime::config::Config>,
         provider: ProviderKind,
         provider_identity: impl Into<String>,
         model: impl Into<String>,
@@ -269,8 +270,8 @@ impl EffectiveRouteEnvelope {
 
     #[must_use]
     pub fn from_admitted(
-        config: Option<&crate::config::Config>,
-        identity: &crate::config::ProviderIdentity,
+        config: Option<&codewhale_runtime::config::Config>,
+        identity: &codewhale_runtime::config::ProviderIdentity,
         model: impl Into<String>,
         base_url: Option<&str>,
         dispatched_at: DateTime<Utc>,
@@ -288,7 +289,10 @@ impl EffectiveRouteEnvelope {
     }
 
     fn from_facts(
-        admission: Option<(&crate::config::Config, &crate::config::ProviderIdentity)>,
+        admission: Option<(
+            &codewhale_runtime::config::Config,
+            &codewhale_runtime::config::ProviderIdentity,
+        )>,
         facts: (ProviderKind, &str),
         model: impl Into<String>,
         base_url: Option<&str>,
@@ -1192,7 +1196,7 @@ pub struct RuntimeDecisionReceipt {
     pub usage_complete: bool,
     pub shadow: bool,
     pub valid_answers: bool,
-    pub evidence: crate::model_routing::AutoRouteDecisionEvidence,
+    pub evidence: codewhale_models::auto_route_evidence::AutoRouteDecisionEvidence,
 }
 
 impl RuntimeDecisionReceipt {
@@ -1299,7 +1303,7 @@ pub(crate) fn decision_receipt_fixture(source_id: &str) -> RuntimeDecisionReceip
         usage_complete: true,
         shadow: true,
         valid_answers: false,
-        evidence: crate::model_routing::AutoRouteDecisionEvidence {
+        evidence: codewhale_models::auto_route_evidence::AutoRouteDecisionEvidence {
             choice: "invalid".to_string(),
             probabilities_bp: Default::default(),
             confidence_bp: 0,
@@ -1625,7 +1629,7 @@ fn record_runtime_decision(owner: &str, record: &RuntimeDecisionReceipt) {
     });
 }
 
-fn report_interactive_decision(scope: CostScopeToken, receipt: &RuntimeDecisionReceipt) {
+pub(crate) fn report_interactive_decision(scope: CostScopeToken, receipt: &RuntimeDecisionReceipt) {
     if !receipt.is_bounded() {
         return;
     }
@@ -1678,120 +1682,6 @@ pub(crate) fn register_interactive_runtime_usage_sink(owner: &str, scope: CostSc
         Some(Arc::new(move |record| {
             record_interactive_runtime_usage_drop(scope, record)
         })),
-    );
-}
-
-/// Install an interactive sink whose stale-scope fallback is an origin-session
-/// sidecar. `/new` may close the foreground pool while a detached provider call
-/// is still running; the sidecar keeps that exact response with the old saved
-/// session instead of either dropping it or contaminating the new one.
-pub(crate) fn register_persistent_interactive_runtime_usage_sink(
-    owner: &str,
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-) {
-    let Ok(manager) = crate::session_manager::SessionManager::default_location() else {
-        // With no durable origin gate, leave the owner on the bounded journal
-        // fallback. An in-memory-only sink could keep accepting a deleted
-        // session's responses after its directory becomes available again.
-        return;
-    };
-    register_persistent_interactive_runtime_usage_sink_at(
-        owner,
-        scope,
-        session_id,
-        turn_id,
-        manager.sessions_dir().to_path_buf(),
-    );
-}
-
-fn register_persistent_interactive_runtime_usage_sink_at(
-    owner: &str,
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    sessions_dir: std::path::PathBuf,
-) {
-    let usage_session_id = session_id.to_string();
-    let usage_turn_id = turn_id.to_string();
-    let drop_session_id = usage_session_id.clone();
-    let drop_turn_id = usage_turn_id.clone();
-    let usage_sessions_dir = sessions_dir.clone();
-    let decision_sessions_dir = sessions_dir.clone();
-    let decision_session_id = session_id.to_string();
-    let decision_turn_id = turn_id.to_string();
-    register_runtime_usage_sink_with_drop(
-        owner,
-        Arc::new(move |record| {
-            crate::session_manager::SessionManager::new(usage_sessions_dir.clone())
-                .map(|manager| {
-                    report_effective_route_for_interactive_origin_with_manager(
-                        scope,
-                        &usage_session_id,
-                        &usage_turn_id,
-                        &record.source_id,
-                        &record.usage.route,
-                        &record.usage.usage,
-                        &manager,
-                    )
-                })
-                .unwrap_or(false)
-        }),
-        Some(Arc::new(move |record| {
-            crate::session_manager::SessionManager::new(sessions_dir.clone())
-                .map(|manager| {
-                    report_missing_usage_for_interactive_origin_with_manager(
-                        scope,
-                        &drop_session_id,
-                        &drop_turn_id,
-                        &record.source_id,
-                        &record.route,
-                        record.reason,
-                        &manager,
-                    )
-                })
-                .unwrap_or(false)
-        })),
-    );
-    register_runtime_decision_sink(
-        owner,
-        Arc::new(move |receipt| {
-            let Ok(manager) =
-                crate::session_manager::SessionManager::new(decision_sessions_dir.clone())
-            else {
-                return false;
-            };
-            let accepted = manager
-                .persist_late_decision_receipt(&decision_session_id, &decision_turn_id, &receipt)
-                .unwrap_or(false);
-            if accepted {
-                // The append may have been handled by a deletion tombstone. Only
-                // a live origin may enter the foreground diagnostic projection.
-                let _ = manager.with_live_session_origin(&decision_session_id, || {
-                    report_interactive_decision(scope, &receipt);
-                    true
-                });
-            }
-            accepted
-        }),
-    );
-}
-
-#[cfg(test)]
-pub(crate) fn register_persistent_interactive_runtime_usage_sink_for_test(
-    owner: &str,
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    manager: &crate::session_manager::SessionManager,
-) {
-    register_persistent_interactive_runtime_usage_sink_at(
-        owner,
-        scope,
-        session_id,
-        turn_id,
-        manager.sessions_dir().to_path_buf(),
     );
 }
 
@@ -1970,7 +1860,7 @@ pub(crate) fn restore_usage_source_ledger(
 /// Mark a deleted origin's response handled in its original live generation.
 /// This suppresses legacy mailbox fallback without putting deleted usage or
 /// even its fingerprint into the pending pool or a durable session snapshot.
-fn acknowledge_retired_usage_source(scope: CostScopeToken, source_id: &str) {
+pub(crate) fn acknowledge_retired_usage_source(scope: CostScopeToken, source_id: &str) {
     with_pending_state_mut(|state| {
         if state.generation == scope.0 {
             state
@@ -2105,166 +1995,6 @@ pub fn route_receipt(
     )
 }
 
-const MAX_RECEIPT_FIELD_CHARS: usize = 96;
-
-fn safe_receipt_field(raw: &str) -> String {
-    let sanitized = sanitize_persisted_route_label(raw);
-    let mut out = String::with_capacity(raw.len().min(MAX_RECEIPT_FIELD_CHARS));
-    let mut previous_separator = false;
-    for ch in sanitized.chars() {
-        if out.chars().count() >= MAX_RECEIPT_FIELD_CHARS {
-            break;
-        }
-        let safe = if ch.is_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | ':' | '+') {
-            ch
-        } else {
-            '_'
-        };
-        let separator = safe == '_';
-        if separator && previous_separator {
-            continue;
-        }
-        out.push(safe);
-        previous_separator = separator;
-    }
-    if out.is_empty() { "-".to_string() } else { out }
-}
-
-pub(crate) fn sanitize_persisted_route_label(raw: &str) -> String {
-    const MAX_PERSISTED_ROUTE_LABEL_CHARS: usize = 256;
-    let value = raw.trim();
-    let lower = value.to_ascii_lowercase();
-
-    if value.is_empty() {
-        return "-".to_string();
-    }
-
-    // URLs are not route labels. Endpoints have a dedicated, validated hash
-    // field; persisting a URL here risks leaking userinfo, query credentials,
-    // or fragments through a custom provider/model name.
-    if value.contains("://") {
-        return "redacted-url".to_string();
-    }
-
-    let authorization_value = ["bearer ", "basic ", "digest ", "token ", "apikey "]
-        .iter()
-        .any(|scheme| lower.starts_with(scheme))
-        || lower.contains("authorization:")
-        || lower.contains("proxy-authorization:");
-    if authorization_value {
-        return "redacted-credential".to_string();
-    }
-
-    // Reject credential assignments regardless of common casing or separator:
-    // FOO_API_KEY=..., access-token:..., password = ....
-    for (index, ch) in value.char_indices() {
-        if !matches!(ch, '=' | ':') {
-            continue;
-        }
-        let name = lower[..index]
-            .trim()
-            .trim_matches(|ch: char| matches!(ch, '"' | '\'' | '{' | '[' | ','));
-        let name = name.rsplit([' ', ',', ';']).next().unwrap_or(name);
-        let normalized = name.replace('-', "_");
-        if normalized.ends_with("api_key")
-            || normalized.ends_with("token")
-            || normalized.ends_with("secret")
-            || normalized.ends_with("password")
-            || normalized.ends_with("passwd")
-        {
-            return "redacted-credential".to_string();
-        }
-    }
-
-    // Common credential token prefixes. These are intentionally checked at
-    // word boundaries so model ids containing an incidental "sk" survive.
-    let credential_prefix = lower
-        .split(|ch: char| ch.is_whitespace() || matches!(ch, '=' | ':' | ',' | ';' | '"' | '\''))
-        .filter(|part| !part.is_empty())
-        .any(|part| {
-            [
-                "sk-",
-                "sk_",
-                "rk-",
-                "pk-",
-                "ghp_",
-                "gho_",
-                "ghu_",
-                "ghs_",
-                "github_pat_",
-                "hf_",
-                "glpat-",
-                "xoxb-",
-                "xoxp-",
-                "xoxa-",
-                "akia",
-                "aiza",
-                "eyj",
-            ]
-            .iter()
-            .any(|prefix| part.starts_with(prefix))
-        });
-    if credential_prefix {
-        return "redacted-credential".to_string();
-    }
-
-    let windows_absolute = value.as_bytes().get(1) == Some(&b':')
-        && value
-            .as_bytes()
-            .get(2)
-            .is_some_and(|separator| matches!(separator, b'/' | b'\\'));
-    let contains_local_root = [
-        "/users/",
-        "/volumes/",
-        "/home/",
-        "/private/",
-        "\\users\\",
-        "file://",
-        "/.ssh/",
-        "\\.ssh\\",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle));
-    let looks_like_relative_path = value.contains('\\')
-        || lower.starts_with(".ssh/")
-        || lower.starts_with(".ssh\\")
-        || lower.split('/').any(|segment| {
-            matches!(
-                segment,
-                "." | ".."
-                    | ".ssh"
-                    | ".config"
-                    | "secrets"
-                    | "secret"
-                    | "credentials"
-                    | "credential"
-                    | "relative"
-                    | "workspace"
-                    | "tmp"
-            )
-        });
-    if std::path::Path::new(value).is_absolute()
-        || windows_absolute
-        || value.starts_with("~/")
-        || value.starts_with("./")
-        || value.starts_with("../")
-        || contains_local_root
-        || looks_like_relative_path
-    {
-        return "redacted-local-path".to_string();
-    }
-    let bounded: String = value
-        .chars()
-        .filter(|ch| !ch.is_control())
-        .take(MAX_PERSISTED_ROUTE_LABEL_CHARS)
-        .collect();
-    if bounded.is_empty() {
-        "-".to_string()
-    } else {
-        bounded
-    }
-}
-
 /// Validate and canonicalize an endpoint before producing the cryptographic
 /// fingerprint persisted in a receipt. Secret-bearing/malformed URLs receive
 /// no fingerprint at all; userinfo, query strings, and fragments are never fed
@@ -2351,147 +2081,6 @@ pub fn report_effective_route_for_runtime(
             },
         );
     }
-}
-
-/// Report an interactive auxiliary response against its immutable origin.
-/// A stale foreground scope is not an error: it means `/new` or session load
-/// already moved on, so the exact receipt is appended to the old session's
-/// durable sidecar instead of being redirected to the active session.
-pub(crate) fn report_effective_route_for_interactive_origin(
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    source_id: &str,
-    route: &EffectiveRouteEnvelope,
-    usage: &Usage,
-) {
-    let persisted =
-        crate::session_manager::SessionManager::default_location().is_ok_and(|manager| {
-            report_effective_route_for_interactive_origin_with_manager(
-                scope, session_id, turn_id, source_id, route, usage, &manager,
-            )
-        });
-    if !persisted {
-        tracing::warn!("late interactive usage could not be persisted for its origin session");
-    }
-}
-
-fn report_effective_route_for_interactive_origin_with_manager(
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    source_id: &str,
-    route: &EffectiveRouteEnvelope,
-    usage: &Usage,
-    manager: &crate::session_manager::SessionManager,
-) -> bool {
-    let record = RuntimeUsageRecord {
-        source_id: source_id.to_string(),
-        usage: EffectiveRouteUsage {
-            route: route.sanitized_for_persistence(),
-            usage: usage.clone(),
-        },
-    };
-    match manager.with_live_session_origin(session_id, || {
-        record_interactive_runtime_usage(scope, record.clone())
-    }) {
-        Ok(None) => {
-            acknowledge_retired_usage_source(scope, source_id);
-            return true;
-        }
-        Ok(Some(true)) => return true,
-        Ok(Some(false)) => {}
-        Err(_) => return false,
-    }
-    manager
-        .persist_late_runtime_usage(session_id, turn_id, &record)
-        .unwrap_or(false)
-}
-
-pub(crate) fn report_unreceipted_for_interactive_origin(
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    source_id: &str,
-    route: &EffectiveRouteEnvelope,
-) {
-    report_missing_usage_for_interactive_origin(
-        scope,
-        session_id,
-        turn_id,
-        source_id,
-        route,
-        RuntimeUsageMissingReason::SuccessWithoutUsage,
-    );
-}
-pub(crate) fn report_missing_usage_for_interactive_origin(
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    source_id: &str,
-    route: &EffectiveRouteEnvelope,
-    reason: RuntimeUsageMissingReason,
-) {
-    let persisted =
-        crate::session_manager::SessionManager::default_location().is_ok_and(|manager| {
-            report_missing_usage_for_interactive_origin_with_manager(
-                scope, session_id, turn_id, source_id, route, reason, &manager,
-            )
-        });
-    if !persisted {
-        tracing::warn!(
-            "late interactive missing-usage receipt could not be persisted for its origin session"
-        );
-    }
-}
-
-#[cfg(test)]
-fn report_unreceipted_for_interactive_origin_with_manager(
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    source_id: &str,
-    route: &EffectiveRouteEnvelope,
-    manager: &crate::session_manager::SessionManager,
-) -> bool {
-    report_missing_usage_for_interactive_origin_with_manager(
-        scope,
-        session_id,
-        turn_id,
-        source_id,
-        route,
-        RuntimeUsageMissingReason::SuccessWithoutUsage,
-        manager,
-    )
-}
-fn report_missing_usage_for_interactive_origin_with_manager(
-    scope: CostScopeToken,
-    session_id: &str,
-    turn_id: &str,
-    source_id: &str,
-    route: &EffectiveRouteEnvelope,
-    reason: RuntimeUsageMissingReason,
-    manager: &crate::session_manager::SessionManager,
-) -> bool {
-    let record = RuntimeUsageDropRecord {
-        reason,
-        source_id: source_id.to_string(),
-        route: route.sanitized_for_persistence(),
-    };
-    match manager.with_live_session_origin(session_id, || {
-        record_interactive_runtime_usage_drop(scope, record.clone())
-    }) {
-        Ok(None) => {
-            acknowledge_retired_usage_source(scope, source_id);
-            return true;
-        }
-        Ok(Some(true)) => return true,
-        Ok(Some(false)) => {}
-        Err(_) => return false,
-    }
-    manager
-        .persist_late_runtime_drop(session_id, turn_id, &record)
-        .unwrap_or(false)
 }
 
 /// Record one provider-success response whose usage payload was absent.
@@ -2724,7 +2313,10 @@ fn record(scope: CostScopeToken, route_receipt: String, audit: &TurnCostAudit, u
     });
 }
 
-fn record_interactive_runtime_usage(scope: CostScopeToken, record: RuntimeUsageRecord) -> bool {
+pub(crate) fn record_interactive_runtime_usage(
+    scope: CostScopeToken,
+    record: RuntimeUsageRecord,
+) -> bool {
     if record.usage.usage == Usage::default() {
         return record_interactive_runtime_usage_drop(
             scope,
@@ -2779,7 +2371,7 @@ fn record_interactive_runtime_usage(scope: CostScopeToken, record: RuntimeUsageR
         true
     })
 }
-fn record_interactive_runtime_usage_drop(
+pub(crate) fn record_interactive_runtime_usage_drop(
     scope: CostScopeToken,
     record: RuntimeUsageDropRecord,
 ) -> bool {
@@ -2977,8 +2569,13 @@ pub(crate) fn test_scope() -> TestCostScope {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::usage_persistence::*;
 
-    fn configured_fixture_receipt() -> (crate::config::Config, EffectiveRouteEnvelope, Usage) {
+    fn configured_fixture_receipt() -> (
+        codewhale_runtime::config::Config,
+        EffectiveRouteEnvelope,
+        Usage,
+    ) {
         let config = toml::from_str(include_str!(
             "../../config/tests/fixtures/custom_models.toml"
         ))
@@ -3095,7 +2692,10 @@ mod tests {
 
     /// An OpenRouter config on the official endpoint with one
     /// `[[custom_models]]` row; `extra` adds fields such as `cost`.
-    fn openrouter_declared_config(extra: &str, vendor: Option<&str>) -> crate::config::Config {
+    fn openrouter_declared_config(
+        extra: &str,
+        vendor: Option<&str>,
+    ) -> codewhale_runtime::config::Config {
         let vendor = vendor.map_or_else(String::new, |vendor| format!("vendor = \"{vendor}\"\n"));
         toml::from_str(&format!(
             "provider = \"openrouter\"\ntelemetry = false\n\n\
@@ -3109,7 +2709,7 @@ mod tests {
     }
 
     fn declared_openrouter_client(
-        config: &crate::config::Config,
+        config: &codewhale_runtime::config::Config,
     ) -> crate::client::CodewhaleClient {
         let route = crate::route_runtime::resolve_runtime_route(
             config,
@@ -4089,7 +3689,7 @@ mod tests {
     }
 
     fn deepseek_envelope() -> EffectiveRouteEnvelope {
-        let config = crate::config::Config::default();
+        let config = codewhale_runtime::config::Config::default();
         let identity = config
             .active_provider_identity()
             .expect("captured DeepSeek identity");
@@ -4368,9 +3968,12 @@ mod tests {
 
     #[test]
     fn openrouter_vendor_pin_survives_envelope_and_child_metadata_persistence() {
-        let mut config = crate::config::Config {
-            provider: Some("openrouter".to_string()),
-            ..Default::default()
+        let mut config = {
+            let __cw_config_init_0_0 = Some("openrouter".to_string());
+            let mut __cw_config_init_0_value: codewhale_runtime::config::Config =
+                Default::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value
         };
         config
             .provider_config_for_mut(&config.test_identity_for_kind(ProviderKind::Openrouter))

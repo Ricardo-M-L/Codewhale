@@ -5,10 +5,10 @@
 //! keeps the v0.6.6 CLI form for muscle-memory + scripted use.
 
 use crate::commands::traits::{CommandInfo, RegisterCommand};
-use crate::config::{canonical_model_id_for_provider, provider_passes_model_through};
 use crate::tui::app::{App, AppAction};
 use codewhale_config::ProviderKind;
 use codewhale_localization::MessageId;
+use codewhale_runtime::config::{canonical_model_id_for_provider, provider_passes_model_through};
 
 use super::CommandResult;
 
@@ -60,7 +60,7 @@ pub fn provider(app: &mut App, args: Option<&str>) -> CommandResult {
         };
     }
 
-    if crate::config::is_legacy_antigravity_identity(name) {
+    if codewhale_runtime::config::is_legacy_antigravity_identity(name) {
         return CommandResult::error(
             codewhale_config::LEGACY_ANTIGRAVITY_TOMBSTONE_MESSAGE.to_string(),
         );
@@ -123,7 +123,7 @@ pub fn provider(app: &mut App, args: Option<&str>) -> CommandResult {
 }
 
 pub(in crate::commands) fn provider_setup_action_for_name(raw: &str) -> Result<AppAction, String> {
-    if crate::config::is_legacy_antigravity_identity(raw) {
+    if codewhale_runtime::config::is_legacy_antigravity_identity(raw) {
         return Err(codewhale_config::LEGACY_ANTIGRAVITY_TOMBSTONE_MESSAGE.to_string());
     }
     if raw.eq_ignore_ascii_case("ds4") || raw.eq_ignore_ascii_case("dwarfstar") {
@@ -238,9 +238,9 @@ fn expand_model_alias_for_provider(provider: ProviderKind, name: &str) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::test_support::lock_test_env;
     use crate::tui::app::TuiOptions;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     fn create_test_app() -> App {
@@ -718,7 +718,7 @@ mod tests {
                         let official_base_url = row.base_url;
                         let intrinsic = row.kind;
                         assert_eq!(
-                            crate::config::wire_model_for_provider_route(
+                            codewhale_runtime::config::wire_model_for_provider_route(
                                 intrinsic,
                                 official_base_url,
                                 model.as_deref().expect("command model"),
@@ -771,7 +771,7 @@ mod tests {
         assert_eq!(provider.as_str(), ProviderKind::Deepseek.as_str());
         assert_eq!(model, "deepseek-reasoner");
         assert_eq!(
-            crate::config::wire_model_for_provider_route(
+            codewhale_runtime::config::wire_model_for_provider_route(
                 ProviderKind::Deepseek,
                 "https://models.example/v1",
                 &model,
@@ -837,13 +837,18 @@ mod tests {
     #[test]
     fn provider_fallback_reset_targets_primary_even_when_on_fallback() {
         let _lock = lock_test_env();
-        let mut providers = crate::config::ProvidersConfig::default();
+        let mut providers = codewhale_runtime::config::ProvidersConfig::default();
         providers.openrouter.api_key = Some("fixture-fallback-key".to_string());
-        let config = crate::config::Config {
-            provider: Some("deepseek".to_string()),
-            fallback_providers: vec![ProviderKind::Openrouter],
-            providers: Some(providers),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_0_0 = Some("deepseek".to_string());
+            let __cw_config_init_0_1 = vec![ProviderKind::Openrouter];
+            let __cw_config_init_0_2 = Some(providers);
+            let mut __cw_config_init_0_value: codewhale_runtime::config::Config =
+                Default::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.fallback_providers = __cw_config_init_0_1;
+            __cw_config_init_0_value.providers = __cw_config_init_0_2;
+            __cw_config_init_0_value
         };
         let mut app = App::new(
             crate::tui::test_support::test_tui_options(std::path::PathBuf::from(".")),

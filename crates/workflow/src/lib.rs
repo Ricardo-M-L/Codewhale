@@ -36,9 +36,8 @@ pub use elevation::{
 };
 pub use fleet_exact::{
     EXACT_FLEET_SCHEMA_KIND, EXACT_FLEET_SCHEMA_REVISION, ExactFleet, ExactFleetError, ExactMember,
-    FrozenRoute, LEGACY_FLEET_SCHEMA_KIND, PermissionCeiling, ROLE_ALIASES, ROUTER_PUBLIC_ID,
-    ROUTER_PUBLIC_ROLE, ReasoningTier, RequestedReasoning, RouterMember, ShellCeiling,
-    canonical_member_key, canonical_role_key,
+    FrozenRoute, LEGACY_FLEET_SCHEMA_KIND, ROLE_ALIASES, ROUTER_PUBLIC_ID, ROUTER_PUBLIC_ROLE,
+    ReasoningTier, RequestedReasoning, RouterMember, canonical_member_key, canonical_role_key,
 };
 pub use fleet_preflight::{
     CredentialReadiness, EndpointIdentity, PreflightError, PreflightedRoute, RoutePreflight,

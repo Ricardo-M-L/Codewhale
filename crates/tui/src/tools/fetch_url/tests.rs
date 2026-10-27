@@ -153,7 +153,7 @@ async fn fetched_pdf_host_text_matches_default_and_raw_bypasses_host() {
     std::fs::write(&binary, "#!/bin/sh\nprintf 'page one\\fpage two\\n'\n").unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
     let manager = Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-        runtime: crate::config::ExtensionHostRuntime::Node,
+        runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
         node_override: Some(node),
         root: Some(root.path().join("host")),
         ..ExtensionHostOptions::default()
@@ -200,7 +200,7 @@ async fn fetched_pdf_host_text_matches_default_and_raw_bypasses_host() {
     // A signed raw response deliberately has no extraction consumer, even with
     // the Host flag selected and an unusable runtime/parser.
     let unavailable = Arc::new(ExtensionHostManager::new(ExtensionHostOptions {
-        runtime: crate::config::ExtensionHostRuntime::Node,
+        runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
         node_override: Some(root.path().join("missing-node")),
         root: Some(root.path().join("absent-host")),
         ..ExtensionHostOptions::default()
@@ -230,7 +230,7 @@ async fn raw_and_non_success_catches_do_not_hide_a_selected_host_failure() {
     let root = tempfile::tempdir().unwrap();
     let manager = std::sync::Arc::new(crate::extension_host::ExtensionHostManager::new(
         crate::extension_host::ExtensionHostOptions {
-            runtime: crate::config::ExtensionHostRuntime::Node,
+            runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
             node_override: Some(root.path().join("missing-node")),
             root: Some(root.path().join("host")),
             ..crate::extension_host::ExtensionHostOptions::default()

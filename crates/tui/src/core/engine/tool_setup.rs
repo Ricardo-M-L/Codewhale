@@ -40,7 +40,7 @@ impl Engine {
     /// to every mode's surface and is inherited by child agents.
     fn request_plugin_install_allowed(&self) -> bool {
         self.config.terminal_chrome_enabled
-            && crate::settings::Settings::load_read_only()
+            && codewhale_runtime::settings::Settings::load_read_only()
                 .map(|settings| settings.contextual_tips)
                 .unwrap_or(true)
     }

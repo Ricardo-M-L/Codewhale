@@ -34,9 +34,9 @@
 //!   all left untouched. Everything a turn would *install before* building its
 //!   request — the command-scoped tool gate, the effective mode and approval
 //!   posture, the policy-narrowing event, the observed working set — is passed
-//!   as a value or snapshotted onto a clone. There is no write-then-restore
-//!   anywhere in this module: a restore is not atomic across an `.await`, and
-//!   it does not survive a cancellation or a panic.
+//!   as a value or snapshotted onto a clone. The git-metadata cache is saved
+//!   and restored around synchronous message construction; no `.await` occurs
+//!   while the hypothetical value is installed.
 //! - **Never claim exactness the runtime would break.** Mutable
 //!   `message_submit` hooks, background-shell completions, running or
 //!   terminal-undelivered sub-agent completions,
@@ -374,13 +374,110 @@ impl Engine {
         // The header is pinned for the session: with unchanged explicit
         // inputs a real turn reuses the pinned bytes (workspace drift arrives
         // as a `<context_update>` message instead), so preview mirrors that.
-        let system_prompt = if self.session.system_prompt_override
+        let effective_reasoning_effort = super::turn_loop::resolve_auto_effort(
+            reasoning_effort.as_deref(),
+            provider,
+            &base_url,
+            &model,
+        );
+        let planned_output_tokens = crate::route_budget::effective_max_output_tokens_for_turn(
+            provider,
+            &model,
+            limits,
+            None,
+            effective_reasoning_effort.as_deref(),
+        );
+        let (system_prompt, preview_raw, preview_assembly) = if self.session.system_prompt_override
             || self.session.pinned_prompt_context.as_ref() == Some(&prompt_context)
         {
-            self.session.system_prompt.clone()
+            (
+                self.session.system_prompt.clone(),
+                self.session.project_context.clone(),
+                self.session.instruction_assembly.as_deref().cloned(),
+            )
         } else {
-            self.compose_stable_system_prompt(&prompt_context)
+            self.compose_preview_prefix(&prompt_context)
         };
+        let instruction_budgets = crate::project_context::InstructionBudgets::resolve_or_default(
+            &self.instruction_settings.budget,
+            route.context_window.instruction_budget_tokens(),
+            Some(planned_output_tokens as usize),
+        );
+        let pre_guard_system_prompt = system_prompt.clone();
+        let guarded = match self.instruction_budget_error.as_deref() {
+            Some(error) => Err(format!("invalid [instruction_budget]: {error}")),
+            None => crate::prompts::guard_instruction_prefix(
+                system_prompt,
+                preview_raw.as_ref(),
+                preview_assembly,
+                instruction_budgets,
+                &active_tools,
+            )
+            .map_err(|refusal| refusal.render(&self.config.locale_tag)),
+        };
+        let (system_prompt, preview_notice) = match guarded {
+            Ok((system_prompt, guarded_assembly, unowned_notices)) => {
+                let notices = guarded_assembly
+                    .as_ref()
+                    .map_or(unowned_notices.as_slice(), |assembly| {
+                        assembly.notices.as_slice()
+                    });
+                let notice =
+                    crate::project_context::render_notice_body(notices, &self.config.locale_tag);
+                (system_prompt, notice)
+            }
+            Err(detail) => {
+                return RequestManifest::build(ManifestDraft {
+                    session,
+                    route: Availability::unavailable_with(
+                        UnavailableReason::RequestPreparationFailed,
+                        detail.clone(),
+                    ),
+                    tools,
+                    body: Availability::unavailable_with(
+                        UnavailableReason::RequestPreparationFailed,
+                        detail,
+                    ),
+                });
+            }
+        };
+
+        let mut context_update_pending = false;
+        if !self.session.system_prompt_override
+            && self.host_owned_system_prompt().is_none()
+            && self.session.pinned_prompt_context.as_ref() == Some(&prompt_context)
+        {
+            let memory = codewhale_runtime::native_memory::native_prompt_block(
+                self.config.memory_enabled,
+                &self.config.memory_path,
+                &self.config.workspace,
+            );
+            match self.observe_context_update(&prompt_context, memory.as_deref()) {
+                Ok(observed) => {
+                    context_update_pending = observed.message.is_some()
+                        || observed
+                            .notice
+                            .filter(|body| preview_notice.as_ref() != Some(body))
+                            .is_some_and(|body| {
+                                !self.instruction_notice_in_history(&body, &self.session.messages)
+                            });
+                }
+                Err(detail) => {
+                    return RequestManifest::build(ManifestDraft {
+                        session,
+                        route: Availability::unavailable_with(
+                            UnavailableReason::RequestPreparationFailed,
+                            detail.clone(),
+                        ),
+                        tools,
+                        body: Availability::unavailable_with(
+                            UnavailableReason::RequestPreparationFailed,
+                            detail,
+                        ),
+                    });
+                }
+            }
+        }
 
         // The hypothetical user message goes through the same constructor
         // production uses — turn metadata, route stamp, and provenance — so
@@ -392,8 +489,7 @@ impl Engine {
         // writes `<turn_meta>`, so the block reflects files the new message
         // mentions. The preview observes the message on a **clone** of the
         // working set and builds the block from that snapshot: same bytes, no
-        // session write. Nothing here restores state, because nothing here
-        // changes any.
+        // working-set write.
         let mut previewed_working_set = self.session.working_set.clone();
         previewed_working_set.observe_user_message(&hypothetical_content, &self.session.workspace);
         // #5187: the git-snapshot line is emitted on change only, tracked in a
@@ -405,6 +501,7 @@ impl Engine {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
+        let mut messages = self.messages_with_turn_metadata();
         let hypothetical_user_message = self.user_text_message_from_snapshot(
             hypothetical_content.clone(),
             &model,
@@ -414,12 +511,35 @@ impl Engine {
             inputs.provenance,
             TurnMetadataSnapshot {
                 prompt_context: &prompt_context,
-                system_prompt: system_prompt.as_ref(),
+                system_prompt: pre_guard_system_prompt.as_ref(),
                 approval_mode: input_policy.approval_mode_for_session(),
                 working_set: &previewed_working_set,
                 policy_narrowing: input_policy.narrowing.as_ref(),
+                messages: &messages,
             },
         );
+        messages.push(hypothetical_user_message);
+        if let Some(body) =
+            preview_notice.filter(|body| !self.instruction_notice_in_history(body, &messages))
+        {
+            let notice = self.user_text_message_from_snapshot(
+                body,
+                &model,
+                inputs.auto_model,
+                reasoning_effort.as_deref(),
+                reasoning_effort_auto,
+                crate::core::ops::UserInputProvenance::Runtime,
+                TurnMetadataSnapshot {
+                    prompt_context: &prompt_context,
+                    system_prompt: system_prompt.as_ref(),
+                    approval_mode: input_policy.approval_mode_for_session(),
+                    working_set: &previewed_working_set,
+                    policy_narrowing: input_policy.narrowing.as_ref(),
+                    messages: &messages,
+                },
+            );
+            messages.push(notice);
+        }
         *self
             .last_turn_meta_git_snapshot
             .lock()
@@ -429,26 +549,15 @@ impl Engine {
         let system_prompt_text =
             codewhale_core::prefix_cache::system_prompt_text(system_prompt.as_ref());
 
-        let mut messages = self.messages_with_turn_metadata();
-        messages.push(hypothetical_user_message);
-
         // Transforms the turn loop would apply to this conversation between
         // dispatch and the wire. Detected read-only; nothing pending is
         // consumed, drained, or flushed by looking.
         let mut runtime_transforms = self
             .preview_runtime_transforms(&messages, system_prompt.as_ref(), &planned_compaction)
             .await;
-
-        // The turn loop resolves an `auto` sentinel tier to its declared
-        // policy value, *after* the planner normalized it. Skipping that step
-        // described a request carrying a literal `auto`, which no route
-        // receives.
-        let effective_reasoning_effort = super::turn_loop::resolve_auto_effort(
-            reasoning_effort.as_deref(),
-            provider,
-            &base_url,
-            &model,
-        );
+        if context_update_pending {
+            runtime_transforms.push("workspace context or instruction notices would be appended");
+        }
 
         // Production sends stored history and nothing else — no synthetic
         // To-do block, on any step — so the previewed outbound message list is
@@ -468,7 +577,7 @@ impl Engine {
         let mut request = prepare_primary_turn_request(PrimaryTurnRequest {
             model: model.clone(),
             messages: outbound_messages,
-            max_tokens: effective_max_output_tokens_for_route(provider, &model, limits),
+            max_tokens: planned_output_tokens,
             system: system_prompt,
             tools: surface.active.clone(),
             tool_choice: tool_choice.clone(),
@@ -485,7 +594,7 @@ impl Engine {
             &model,
         );
         if let Some(cap) = image_cap {
-            crate::image_attach::cap_request_images(&mut request.messages, cap);
+            codewhale_models::image_window::cap_request_images(&mut request.messages, cap);
         }
 
         let prepared = match route.client.prepare_outbound_request(request, true) {
@@ -740,8 +849,8 @@ impl Engine {
 /// Typed billing facts for the planned route, from the same helper the footer
 /// and sidebar read. Every label is a compile-time constant.
 fn preview_billing_facts(
-    config: &crate::config::Config,
-    identity: &crate::config::ProviderIdentity,
+    config: &codewhale_runtime::config::Config,
+    identity: &codewhale_runtime::config::ProviderIdentity,
     base_url: &str,
 ) -> BillingFacts {
     if let Some(surface) =

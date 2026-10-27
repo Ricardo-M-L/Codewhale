@@ -1486,11 +1486,11 @@ fn tools_command_rejects_unknown_formats_without_mutating_state() {
 mod cost_breakdown_tests {
     use super::*;
     use crate::commands::contract::DebugCostComponents as CostComponents;
-    use crate::config::Config;
     use crate::pricing::{CostEstimate, TurnCostAudit};
     use crate::tui::app::App;
     use crate::tui::app::{TuiOptions, TurnCacheRecord};
     use codewhale_config::pricing::CostCurrency;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
     use std::time::Instant;
 
@@ -1709,7 +1709,7 @@ mod route_tests {
 #[cfg(test)]
 mod zones_tests {
     use super::*;
-    use crate::config::Config;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     #[test]
@@ -1752,7 +1752,7 @@ Cache Zones (#2264 three-zone contract)
 #[cfg(test)]
 mod arg_tests {
     use super::*;
-    use crate::config::Config;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     fn app() -> App {
@@ -1800,8 +1800,8 @@ mod arg_tests {
 
 mod preview_host_tests {
     use super::*;
-    use crate::config::Config;
     use codewhale_models::Role;
+    use codewhale_runtime::config::Config;
 
     #[test]
     fn unknown_argument_is_rejected_without_touching_state() {

@@ -235,10 +235,7 @@ mod tests {
 
         let server = MockServer::start().await;
         let client = crate::client::CodewhaleClient::new(
-            &crate::config::Config {
-                ..Default::default()
-            }
-            .with_legacy_root(
+            &<codewhale_runtime::config::Config as Default>::default().with_legacy_root(
                 Some("test-guardian-cache-key".to_string()),
                 Some(server.uri()),
             ),

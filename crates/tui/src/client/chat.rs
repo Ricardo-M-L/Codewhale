@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::time::timeout as tokio_timeout;
 
-use crate::config::{
+use codewhale_config::catalog::reviewed::constants::TOGETHER_INKLING_MODEL;
+use codewhale_runtime::config::{
     is_exact_direct_moonshot_k3_route, is_exact_kimi_code_k3_route, is_exact_zai_chat_route,
     is_exact_zai_forced_thinking_route, is_exact_zai_tiered_effort_route,
     is_kimi_code_membership_model, minimax_m3_route_uses_max_completion_tokens,
     moonshot_base_url_is_exact_kimi_code, wire_model_for_provider_route,
 };
-use codewhale_config::catalog::reviewed::constants::TOGETHER_INKLING_MODEL;
 
 use crate::llm_client::StreamEventBox;
 use codewhale_config::ProviderKind;
@@ -31,15 +31,16 @@ use codewhale_models::{
 };
 use codewhale_runtime::logging;
 
+use super::CodewhaleClient;
 use super::prepared::WireDialect;
+use super::reasoning_effort::apply_reasoning_effort;
 use super::role_placement::{RolePlacement, role_placement};
-use super::wire::{extract_sse_data_value, flush_sse_line, push_sse_event_data, take_sse_line};
-use super::{
-    CodewhaleClient, ERROR_BODY_MAX_BYTES, SSE_BACKPRESSURE_HIGH_WATERMARK,
-    SSE_BACKPRESSURE_SLEEP_MS, SSE_MAX_LINES_PER_CHUNK, acquire_stream_buffer,
-    apply_reasoning_effort, bounded_error_text, from_api_tool_name, parse_usage,
-    release_stream_buffer, system_to_instructions, to_api_tool_name,
+use super::wire::{
+    ERROR_BODY_MAX_BYTES, SSE_BACKPRESSURE_HIGH_WATERMARK, SSE_BACKPRESSURE_SLEEP_MS,
+    SSE_MAX_LINES_PER_CHUNK, acquire_stream_buffer, bounded_error_text, from_api_tool_name,
+    parse_usage, release_stream_buffer, system_to_instructions, to_api_tool_name,
 };
+use super::wire::{extract_sse_data_value, flush_sse_line, push_sse_event_data, take_sse_line};
 use codewhale_config::route::RouteLimits;
 use codewhale_models::Role;
 
@@ -279,7 +280,7 @@ fn apply_zai_route_reasoning_controls(
             return;
         }
     }
-    if !crate::config::is_exact_known_zai_reasoning_route(provider, base_url, model) {
+    if !codewhale_runtime::config::is_exact_known_zai_reasoning_route(provider, base_url, model) {
         if let Some(object) = body.as_object_mut() {
             object.remove("thinking");
         }
@@ -357,7 +358,7 @@ fn apply_minimax_route_reasoning_controls(
         object.remove("reasoning_split");
         object.remove("thinking");
     }
-    if !crate::config::is_exact_minimax_m3_route(provider, base_url, model) {
+    if !codewhale_runtime::config::is_exact_minimax_m3_route(provider, base_url, model) {
         return;
     }
 
@@ -1110,7 +1111,7 @@ fn sanitize_moonshot_chat_tools(chat_tools: &mut Vec<Value>) -> Vec<String> {
         let Some(parameters) = function.get_mut("parameters") else {
             return true;
         };
-        match crate::tools::schema_sanitize::sanitize_for_kimi_parameters(parameters) {
+        match codewhale_models::schema_sanitize::sanitize_for_kimi_parameters(parameters) {
             Ok(note) => {
                 if let Some(note) = note {
                     let description = function
@@ -1244,7 +1245,7 @@ pub(crate) fn build_chat_wire_body(
                     continue;
                 };
                 let note = function.get_mut("parameters").and_then(|parameters| {
-                    crate::tools::schema_sanitize::sanitize_for_xai_parameters(parameters)
+                    codewhale_models::schema_sanitize::sanitize_for_xai_parameters(parameters)
                 });
                 if let Some(note) = note
                     && let Some(description) = function
@@ -1409,34 +1410,30 @@ impl CodewhaleClient {
 
     pub(super) async fn handle_chat_completion_stream(
         &self,
-        prepared: super::PreparedOutboundRequest,
+        prepared: &super::PreparedOutboundRequest,
     ) -> Result<StreamEventBox> {
         // Try true SSE streaming via chat completions (widely supported).
         // Body and endpoint both come from the shared prepared-request seam,
         // so a preview or a non-stream call can never diverge from the
         // streamed request.
-        let super::PreparedOutboundRequest {
-            body,
-            wire_model: model,
-            replay_input_tokens,
-            endpoint,
-            ..
-        } = prepared;
-        let url = endpoint.url;
+        let body = &prepared.body;
+        let model = prepared.wire_model.clone();
+        let replay_input_tokens = prepared.replay_input_tokens;
+        let url = &prepared.endpoint.url;
 
-        let (response, stream_idle_timeout) =
-            match self.open_chat_stream_response(&url, &body).await {
-                Ok(opened) => opened,
-                Err(error) => {
-                    // If DeepSeek rejected for missing reasoning_content despite the
-                    // sanitizer, dump the offending indices so we can diagnose where
-                    // they came from on the next failure.
-                    if format!("{error:#}").contains("reasoning_content") {
-                        log_thinking_mode_violations(&body);
-                    }
-                    return Err(error);
+        let (response, stream_idle_timeout) = match self.open_chat_stream_response(url, body).await
+        {
+            Ok(opened) => opened,
+            Err(error) => {
+                // If DeepSeek rejected for missing reasoning_content despite the
+                // sanitizer, dump the offending indices so we can diagnose where
+                // they came from on the next failure.
+                if format!("{error:#}").contains("reasoning_content") {
+                    log_thinking_mode_violations(&body);
                 }
-            };
+                return Err(error);
+            }
+        };
 
         let status = response.status();
         crate::client::record_provider_response(self.api_provider, status.as_u16());
@@ -2766,7 +2763,7 @@ fn build_chat_messages_with_reasoning(
         .rev()
         .find_map(|(index, message)| {
             (index > 0
-                && crate::compaction::is_wire_compaction_checkpoint_message(message)
+                && codewhale_models::turn_classify::is_wire_compaction_checkpoint_message(message)
                 && messages[index - 1]
                     .content
                     .iter()
@@ -2777,8 +2774,8 @@ fn build_chat_messages_with_reasoning(
         messages[..summary_index]
             .iter()
             .rposition(|message| {
-                crate::runtime_handoff::classify_user_turn_prompt(message)
-                    != crate::runtime_handoff::UserTurnPromptKind::NotPrompt
+                codewhale_models::turn_classify::classify_user_turn_prompt(message)
+                    != codewhale_models::turn_classify::UserTurnPromptKind::NotPrompt
             })
             .or_else(|| {
                 messages[..summary_index]
@@ -3003,7 +3000,9 @@ fn build_chat_messages_with_reasoning(
                 }
                 if (Some(message_index) == summary_index
                     || Some(message_index) == summary_target
-                    || crate::compaction::is_wire_compaction_checkpoint_message(message)
+                    || codewhale_models::turn_classify::is_wire_compaction_checkpoint_message(
+                        message,
+                    )
                     || crate::runtime_handoff::is_agent_topology_checkpoint(message)
                     || crate::runtime_handoff::is_restored_agent_topology_checkpoint(message))
                     && let Some(previous) = out.last_mut()
@@ -3048,7 +3047,9 @@ fn build_chat_messages_with_reasoning(
                             Some(&content_blocks),
                         );
                         let content =
-                            crate::image_attach::tool_result_text_with_omission(&content, omitted);
+                            codewhale_models::image_window::tool_result_text_with_omission(
+                                &content, omitted,
+                            );
                         let wire_result = compact_tool_result_for_wire(
                             &tool_info.tool_name,
                             &tool_info.input,
@@ -6752,8 +6753,8 @@ mod image_block_wire_tests {
     fn quoted_compaction_marker_does_not_reorder_user_wire_messages() {
         // The current marker, and the legacy one older sessions still carry.
         for marker in [
-            crate::compaction::COMPACTION_SUMMARY_MARKER,
-            crate::compaction::LEGACY_V2_COMPACTION_SUMMARY_MARKER,
+            codewhale_models::turn_classify::COMPACTION_SUMMARY_MARKER,
+            codewhale_models::turn_classify::LEGACY_V2_COMPACTION_SUMMARY_MARKER,
         ] {
             let quote = format!("Please explain: {marker}");
             let messages: Vec<Message> = serde_json::from_value(serde_json::json!([
@@ -7938,18 +7939,22 @@ mod google_thought_signature_tests {
                     .mount(&server)
                     .await;
 
-                let mut client = CodewhaleClient::new(&crate::config::Config {
-                    provider: Some("openai".to_string()),
-                    providers: Some(crate::config::ProvidersConfig {
-                        openai: crate::config::ProviderConfig {
+                let mut client = CodewhaleClient::new(&{
+                    let __cw_config_init_0_0 = Some("openai".to_string());
+                    let __cw_config_init_0_1 = Some(codewhale_runtime::config::ProvidersConfig {
+                        openai: codewhale_runtime::config::ProviderConfig {
                             api_key: Some("gateway-test-key".to_string()),
                             base_url: Some(format!("{}/v1", server.uri())),
                             model: Some("gemini-3.1-pro-preview".to_string()),
-                            ..crate::config::ProviderConfig::default()
+                            ..codewhale_runtime::config::ProviderConfig::default()
                         },
-                        ..crate::config::ProvidersConfig::default()
-                    }),
-                    ..crate::config::Config::default()
+                        ..codewhale_runtime::config::ProvidersConfig::default()
+                    });
+                    let mut __cw_config_init_0_value: codewhale_runtime::config::Config =
+                        codewhale_runtime::config::Config::default();
+                    __cw_config_init_0_value.provider = __cw_config_init_0_0;
+                    __cw_config_init_0_value.providers = __cw_config_init_0_1;
+                    __cw_config_init_0_value
                 })
                 .expect("gateway client");
                 client.isolated_request_state = true;

@@ -12,7 +12,6 @@ use super::task_projection::{
     shell_exec_live_update,
 };
 use super::*;
-use crate::config::{Config, ProviderConfig, ProvidersConfig};
 use crate::core::engine::mock_engine_handle;
 use crate::core::ops::TurnSpec;
 use crate::reasoning_preference::ReasoningEffort;
@@ -41,6 +40,7 @@ use codewhale_config::ProviderKind;
 use codewhale_config::descriptors::defaults::{
     DEFAULT_OPENROUTER_MODEL, DEFAULT_TEXT_MODEL, DEFAULT_ZAI_MODEL,
 };
+use codewhale_runtime::config::{Config, ProviderConfig, ProvidersConfig};
 use crossterm::event::{KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
     Terminal,
@@ -883,7 +883,7 @@ fn bracketed_paste_returns_dock_focus_to_the_visible_composer() {
     handle_bracketed_paste(&mut app, "/pet status");
     assert_eq!(app.input, "/pet status");
     assert!(!app.work_surface.focused);
-    assert!(app.composer_enter_would_submit());
+    assert!(app.composer_enter_would_submit(true));
 }
 
 /// One representative terminal encoding per shell binding.
@@ -1837,7 +1837,10 @@ fn scroll_test_question_view() -> UserInputView {
     UserInputView::new(
         "question-scroll",
         UserInputRequest {
+                require_typed_answers: false,
             questions: vec![UserInputQuestion {
+                detail: None,
+                intent: None,
                 header: "Choose".into(),
                 id: "choice".into(),
                 question: "Review the transcript before choosing a path.".into(),
@@ -2717,7 +2720,7 @@ impl SettingsHomeGuard {
 }
 
 fn assert_saved_startup_route(provider: &str, provider_key: &str, model: &str) -> toml::Value {
-    let path = crate::config::home_config_path().expect("isolated global config path");
+    let path = codewhale_runtime::config::home_config_path().expect("isolated global config path");
     let saved: toml::Value =
         toml::from_str(&std::fs::read_to_string(path).expect("read canonical startup config"))
             .expect("parse canonical startup config");
@@ -2727,7 +2730,8 @@ fn assert_saved_startup_route(provider: &str, provider_key: &str, model: &str) -
         saved["providers"][provider_key]["model"].as_str(),
         Some(model)
     );
-    let settings = crate::settings::Settings::load().expect("unchanged settings archive");
+    let settings =
+        codewhale_runtime::settings::Settings::load().expect("unchanged settings archive");
     assert_eq!(settings.default_provider, None);
     assert_eq!(settings.default_model, None);
     assert_eq!(settings.provider_models, None);
@@ -3352,9 +3356,11 @@ async fn mcp_login_background_handshake_preserves_network_default_deny() {
         None,
     )
     .unwrap();
-    let config = Config {
-        network: Some(toml::from_str("default = \"deny\"").unwrap()),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_0_0 = Some(toml::from_str("default = \"deny\"").unwrap());
+        let mut __cw_config_init_0_value: Config = Config::default();
+        __cw_config_init_0_value.network = __cw_config_init_0_0;
+        __cw_config_init_0_value
     };
     let mock = mock_engine_handle();
     handle_mcp_ui_action(
@@ -3855,7 +3861,7 @@ fn composer_newline_shortcuts_do_not_steal_ctrl_enter() {
 }
 
 #[test]
-fn multiline_mode_inverts_only_enter_and_shift_enter() {
+fn multiline_mode_uses_modified_enter_to_send() {
     assert!(is_composer_newline_key(
         KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         true,
@@ -3864,15 +3870,14 @@ fn multiline_mode_inverts_only_enter_and_shift_enter() {
         KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT),
         true,
     ));
-    for (code, modifiers) in [
-        (KeyCode::Char('j'), KeyModifiers::CONTROL),
-        (KeyCode::Enter, KeyModifiers::ALT),
-    ] {
-        assert!(is_composer_newline_key(
-            KeyEvent::new(code, modifiers),
-            true,
-        ));
-    }
+    assert!(is_composer_newline_key(
+        KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL),
+        true,
+    ));
+    assert!(!is_composer_newline_key(
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::ALT),
+        true,
+    ));
 }
 
 #[test]
@@ -3931,10 +3936,12 @@ fn composer_key_events_map_to_portable_submit_chords() {
         composer_submit_chord(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), true),
         None
     );
-    assert_eq!(
-        composer_submit_chord(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT), true),
-        Some(ComposerSubmitChord::Enter)
-    );
+    for modifiers in [KeyModifiers::SHIFT, KeyModifiers::ALT] {
+        assert_eq!(
+            composer_submit_chord(KeyEvent::new(KeyCode::Enter, modifiers), true),
+            Some(ComposerSubmitChord::Enter)
+        );
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -6068,17 +6075,20 @@ fn ordinary_bracketed_paste_keeps_content_but_logs_only_metadata() {
 
 #[test]
 fn cache_warmup_resolves_the_last_concrete_auto_route() {
-    let config = Config {
-        provider: Some("deepseek".to_string()),
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_1_0 = Some("deepseek".to_string());
+        let __cw_config_init_1_1 = Some(ProvidersConfig {
             vllm: ProviderConfig {
                 base_url: Some("http://127.0.0.1:18191/v1".to_string()),
                 model: Some("auto-cache-model".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_1_value: Config = Default::default();
+        __cw_config_init_1_value.provider = __cw_config_init_1_0;
+        __cw_config_init_1_value.providers = __cw_config_init_1_1;
+        __cw_config_init_1_value
     };
     let mut app = create_test_app();
     app.model = "auto".to_string();
@@ -6108,17 +6118,20 @@ fn cache_warmup_resolves_the_last_concrete_auto_route() {
 
 #[test]
 fn cache_warmup_rejects_an_auto_route_whose_endpoint_changed() {
-    let config = Config {
-        provider: Some("deepseek".to_string()),
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_2_0 = Some("deepseek".to_string());
+        let __cw_config_init_2_1 = Some(ProvidersConfig {
             vllm: ProviderConfig {
                 base_url: Some("http://127.0.0.1:18192/v1".to_string()),
                 model: Some("auto-cache-model".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_2_value: Config = Default::default();
+        __cw_config_init_2_value.provider = __cw_config_init_2_0;
+        __cw_config_init_2_value.providers = __cw_config_init_2_1;
+        __cw_config_init_2_value
     };
     let mut app = create_test_app();
     app.model = "auto".to_string();
@@ -6166,7 +6179,8 @@ api_key = "test-key"
 
     let mut app = create_test_app();
     app.config_path = Some(config_path.clone());
-    let mut config = Config::load(Some(config_path.clone()), None).expect("load config");
+    let mut config = crate::plugins::providers::load_config(Some(config_path.clone()), None)
+        .expect("load config");
     let bindings = vec![codewhale_config::HotbarBindingToml {
         slot: 1,
         action: "mode.agent".to_string(),
@@ -6209,9 +6223,11 @@ fn hotbar_setup_save_error_leaves_live_config_and_file_unchanged() {
         action: "mode.plan".to_string(),
         label: None,
     }];
-    let mut config = Config {
-        hotbar: Some(original_bindings.clone()),
-        ..Default::default()
+    let mut config = {
+        let __cw_config_init_3_0 = Some(original_bindings.clone());
+        let mut __cw_config_init_3_value: Config = Default::default();
+        __cw_config_init_3_value.hotbar = __cw_config_init_3_0;
+        __cw_config_init_3_value
     };
     let attempted_bindings = vec![codewhale_config::HotbarBindingToml {
         slot: 1,
@@ -6252,15 +6268,17 @@ fn app_system_prompt_includes_configured_instructions() {
 
     let mut app = create_test_app();
     app.workspace = tmp.path().to_path_buf();
-    let config = Config {
-        instructions: Some(vec![instructions.display().to_string()]),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_4_0 = Some(vec![instructions.display().to_string()]);
+        let mut __cw_config_init_4_value: Config = Config::default();
+        __cw_config_init_4_value.instructions = __cw_config_init_4_0;
+        __cw_config_init_4_value
     };
 
     let prompt = crate::prompts::system_prompt_flat_text(&build_app_system_prompt(&app, &config));
 
     assert!(prompt.contains("CONFIGURED_INSTRUCTIONS_MARKER"));
-    assert!(prompt.contains(&instructions.display().to_string()));
+    assert!(prompt.contains(r#"<instructions source="extra-instructions.md">"#));
 }
 
 #[test]
@@ -7300,7 +7318,7 @@ fn paste_safety_window_keeps_the_submit_cue_steady_while_routing_waits() {
     app.insert_str("/mcp");
     let now = Instant::now();
     app.paste_burst.extend_window(now);
-    assert!(!app.composer_enter_would_submit());
+    assert!(!app.composer_enter_would_submit(true));
     assert!(app.composer_draft_is_submittable());
     let waiting = render_underwater_test_app(&mut app, 80, 24);
     assert!(waiting.contains("[↵]"), "{waiting}");
@@ -7311,7 +7329,7 @@ fn paste_safety_window_keeps_the_submit_cue_steady_while_routing_waits() {
         now + Duration::from_millis(121)
     ));
     assert!(app.needs_redraw);
-    assert!(app.composer_enter_would_submit());
+    assert!(app.composer_enter_would_submit(true));
     let ready = render_underwater_test_app(&mut app, 80, 24);
     assert!(ready.contains("[↵]"), "{ready}");
     assert_eq!(app.input, "/mcp");
@@ -7440,7 +7458,7 @@ fn lone_letters_remain_composer_input_after_transcript_selection() {
         ));
         assert_eq!(app.input, ch.to_string());
         assert!(app.view_stack.is_empty());
-        assert!(app.composer_enter_would_submit());
+        assert!(app.composer_enter_would_submit(true));
     }
 }
 
@@ -8471,7 +8489,7 @@ fn child_session_grant_auto_approves_next_child_call() {
         &child_exact,
         &child_grouping,
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
     let mut view = app.view_stack.pop().expect("approval view");
@@ -8534,7 +8552,7 @@ fn child_approval_card_hides_always_allow_in_repo() {
         "approval-key",
         "",
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
     push_approval_request_view(
@@ -8546,7 +8564,7 @@ fn child_approval_card_hides_always_allow_in_repo() {
         "approval-key",
         "",
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
     for expect_repo_rule in [false, true] {
@@ -8595,7 +8613,7 @@ fn file_edit_card_says_when_it_asks_for_lack_of_a_git_repository() {
             "approval-key",
             "",
             None,
-            crate::config::ApprovalDefaultSelection::Deny,
+            codewhale_runtime::config::ApprovalDefaultSelection::Deny,
             None,
         );
         let mut view = app.view_stack.pop().expect("approval view");
@@ -8692,7 +8710,8 @@ fn setup_checkpoint_waits_for_onboarding_and_skip_flag() {
 #[test]
 fn setup_runtime_preset_apply_persists_settings_config_and_state() {
     let _home = SettingsHomeGuard::new();
-    let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+    let config_path =
+        codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
     std::fs::create_dir_all(config_path.parent().expect("config parent"))
         .expect("config parent exists");
     std::fs::write(
@@ -8778,7 +8797,8 @@ fn setup_runtime_presets_preserve_environment_authority_and_state() {
         "CODEWHALE_REQUIREMENTS_PATH",
         home._tmp.path().join("absent-requirements.toml"),
     );
-    let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+    let config_path =
+        codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
     std::fs::create_dir_all(config_path.parent().expect("config parent"))
         .expect("config directory");
     std::fs::write(
@@ -8786,10 +8806,13 @@ fn setup_runtime_presets_preserve_environment_authority_and_state() {
         "# preserve root defaults\napproval_policy = \"auto\"\nallow_shell = true\nsandbox_mode = \"workspace-write\"\n",
     )
     .expect("seed config");
-    Settings {
-        default_mode: "plan".to_string(),
-        permission_posture: Some("ask".to_string()),
-        ..Settings::default()
+    {
+        let __cw_config_init_5_0 = "plan".to_string();
+        let __cw_config_init_5_1 = Some("ask".to_string());
+        let mut __cw_config_init_5_value: Settings = Settings::default();
+        __cw_config_init_5_value.default_mode = __cw_config_init_5_0;
+        __cw_config_init_5_value.permission_posture = __cw_config_init_5_1;
+        __cw_config_init_5_value
     }
     .save()
     .expect("seed settings");
@@ -8849,8 +8872,9 @@ fn setup_runtime_presets_preserve_environment_authority_and_state() {
                 || EnvVarGuard::remove(legacy),
                 |value| EnvVarGuard::set(legacy, value),
             );
-            let mut config = Config::load(Some(config_path.clone()), None)
-                .expect("load the real environment-controlled config");
+            let mut config =
+                crate::plugins::providers::load_config(Some(config_path.clone()), None)
+                    .expect("load the real environment-controlled config");
             let effective = match canonical {
                 "CODEWHALE_APPROVAL_POLICY" => config.approval_policy.clone(),
                 "CODEWHALE_ALLOW_SHELL" => config.allow_shell.map(|value| value.to_string()),
@@ -8912,7 +8936,8 @@ fn setup_runtime_presets_preserve_environment_authority_and_state() {
 #[test]
 fn setup_runtime_preset_rolls_back_durable_and_live_state_when_state_save_fails() {
     let _home = SettingsHomeGuard::new();
-    let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+    let config_path =
+        codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
     std::fs::create_dir_all(config_path.parent().expect("config parent"))
         .expect("config parent exists");
     std::fs::write(
@@ -8920,10 +8945,13 @@ fn setup_runtime_preset_rolls_back_durable_and_live_state_when_state_save_fails(
         "# keep exact bytes\napproval_policy = \"auto\"\nallow_shell = true\nsandbox_mode = \"workspace-write\"\n",
     )
     .expect("seed config");
-    let original_settings = Settings {
-        default_mode: "agent".to_string(),
-        permission_posture: Some("auto-review".to_string()),
-        ..Settings::default()
+    let original_settings = {
+        let __cw_config_init_6_0 = "agent".to_string();
+        let __cw_config_init_6_1 = Some("auto-review".to_string());
+        let mut __cw_config_init_6_value: Settings = Settings::default();
+        __cw_config_init_6_value.default_mode = __cw_config_init_6_0;
+        __cw_config_init_6_value.permission_posture = __cw_config_init_6_1;
+        __cw_config_init_6_value
     };
     original_settings.save().expect("seed settings");
 
@@ -8942,11 +8970,15 @@ fn setup_runtime_preset_rolls_back_durable_and_live_state_when_state_save_fails(
         app.approval_mode,
         app.approval_policy_locked(),
     );
-    let mut config = Config {
-        approval_policy: Some("auto".to_string()),
-        allow_shell: Some(true),
-        sandbox_mode: Some("workspace-write".to_string()),
-        ..Config::default()
+    let mut config = {
+        let __cw_config_init_7_0 = Some("auto".to_string());
+        let __cw_config_init_7_1 = Some(true);
+        let __cw_config_init_7_2 = Some("workspace-write".to_string());
+        let mut __cw_config_init_7_value: Config = Config::default();
+        __cw_config_init_7_value.approval_policy = __cw_config_init_7_0;
+        __cw_config_init_7_value.allow_shell = __cw_config_init_7_1;
+        __cw_config_init_7_value.sandbox_mode = __cw_config_init_7_2;
+        __cw_config_init_7_value
     };
     let config_before_live = (
         config.approval_policy.clone(),
@@ -8997,7 +9029,8 @@ fn setup_runtime_preset_rolls_back_durable_and_live_state_when_state_save_fails(
 #[test]
 fn setup_high_trust_persists_full_access_without_legacy_yolo_mode() {
     let _home = SettingsHomeGuard::new();
-    let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+    let config_path =
+        codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
     std::fs::create_dir_all(config_path.parent().expect("config parent"))
         .expect("config parent exists");
     std::fs::write(
@@ -9008,9 +9041,11 @@ fn setup_high_trust_persists_full_access_without_legacy_yolo_mode() {
 
     let mut app = create_test_app();
     app.config_path = Some(config_path.clone());
-    let mut config = Config {
-        approval_policy: Some("on-request".to_string()),
-        ..Config::default()
+    let mut config = {
+        let __cw_config_init_8_0 = Some("on-request".to_string());
+        let mut __cw_config_init_8_value: Config = Config::default();
+        __cw_config_init_8_value.approval_policy = __cw_config_init_8_0;
+        __cw_config_init_8_value
     };
     let preset = crate::tui::setup::SetupRuntimePreset::HighTrustLocal;
 
@@ -9054,7 +9089,8 @@ fn setup_high_trust_persists_full_access_without_legacy_yolo_mode() {
 #[test]
 fn setup_high_trust_cannot_override_project_approval_policy() {
     let _home = SettingsHomeGuard::new();
-    let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+    let config_path =
+        codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
     std::fs::create_dir_all(config_path.parent().expect("config parent"))
         .expect("config parent exists");
     std::fs::write(&config_path, "approval_policy = \"on-request\"\n").expect("root config");
@@ -9074,9 +9110,11 @@ fn setup_high_trust_cannot_override_project_approval_policy() {
     let mut app = create_test_app();
     app.workspace = workspace;
     app.config_path = Some(config_path.clone());
-    let mut config = Config {
-        approval_policy: Some("never".to_string()),
-        ..Config::default()
+    let mut config = {
+        let __cw_config_init_9_0 = Some("never".to_string());
+        let mut __cw_config_init_9_value: Config = Config::default();
+        __cw_config_init_9_value.approval_policy = __cw_config_init_9_0;
+        __cw_config_init_9_value
     };
 
     let error = apply_setup_runtime_preset(
@@ -9102,9 +9140,11 @@ fn setup_high_trust_cannot_override_project_approval_policy() {
 #[test]
 fn project_runtime_provenance_only_blocks_values_startup_would_accept() {
     let _home = SettingsHomeGuard::new();
-    let settings = Settings {
-        permission_posture: Some("ask".to_string()),
-        ..Settings::default()
+    let settings = {
+        let __cw_config_init_10_0 = Some("ask".to_string());
+        let mut __cw_config_init_10_value: Settings = Settings::default();
+        __cw_config_init_10_value.permission_posture = __cw_config_init_10_0;
+        __cw_config_init_10_value
     };
     settings.save().expect("save settings");
 
@@ -9124,18 +9164,20 @@ fn project_runtime_provenance_only_blocks_values_startup_would_accept() {
     )
     .expect("project config");
 
-    let config = Config {
-        sandbox_mode: Some("read-only".to_string()),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_11_0 = Some("read-only".to_string());
+        let mut __cw_config_init_11_value: Config = Config::default();
+        __cw_config_init_11_value.sandbox_mode = __cw_config_init_11_0;
+        __cw_config_init_11_value
     };
     assert_eq!(
         config.approval_policy_control(None, None, &workspace),
-        crate::config::ApprovalPolicyControl::Unset,
+        codewhale_runtime::config::ApprovalPolicyControl::Unset,
         "project Auto would loosen saved Ask and must not claim provenance"
     );
     assert_eq!(
         config.allow_shell_control(None, None, &workspace),
-        crate::config::ShellAccessControl::Unset,
+        codewhale_runtime::config::ShellAccessControl::Unset,
         "project allow_shell=true is ignored by startup"
     );
     assert_eq!(
@@ -9151,11 +9193,11 @@ fn project_runtime_provenance_only_blocks_values_startup_would_accept() {
     .expect("tightening project config");
     assert_eq!(
         config.approval_policy_control(None, None, &workspace),
-        crate::config::ApprovalPolicyControl::ProjectConfig
+        codewhale_runtime::config::ApprovalPolicyControl::ProjectConfig
     );
     assert_eq!(
         config.allow_shell_control(None, None, &workspace),
-        crate::config::ShellAccessControl::ProjectConfig
+        codewhale_runtime::config::ShellAccessControl::ProjectConfig
     );
     assert_eq!(
         config.runtime_preset_blocker(None, None, &workspace),
@@ -9166,9 +9208,11 @@ fn project_runtime_provenance_only_blocks_values_startup_would_accept() {
 #[test]
 fn saved_full_access_baseline_allows_project_approval_tightening() {
     let _home = SettingsHomeGuard::new();
-    let settings = Settings {
-        permission_posture: Some("full-access".to_string()),
-        ..Settings::default()
+    let settings = {
+        let __cw_config_init_12_0 = Some("full-access".to_string());
+        let mut __cw_config_init_12_value: Settings = Settings::default();
+        __cw_config_init_12_value.permission_posture = __cw_config_init_12_0;
+        __cw_config_init_12_value
     };
     settings.save().expect("save settings");
 
@@ -9189,7 +9233,7 @@ fn saved_full_access_baseline_allows_project_approval_tightening() {
 
     assert_eq!(
         Config::default().approval_policy_control(None, None, &workspace),
-        crate::config::ApprovalPolicyControl::ProjectConfig,
+        codewhale_runtime::config::ApprovalPolicyControl::ProjectConfig,
         "Ask is a tightening from saved Full Access and owns the effective policy"
     );
 }
@@ -9197,7 +9241,8 @@ fn saved_full_access_baseline_allows_project_approval_tightening() {
 #[test]
 fn setup_presets_cannot_override_managed_runtime_requirements() {
     let _home = SettingsHomeGuard::new();
-    let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+    let config_path =
+        codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
     std::fs::create_dir_all(config_path.parent().expect("config parent"))
         .expect("config parent exists");
     std::fs::write(&config_path, "# managed posture stays intact\n").expect("root config");
@@ -9215,12 +9260,17 @@ fn setup_presets_cannot_override_managed_runtime_requirements() {
     app.config_path = Some(config_path.clone());
     app.allow_shell = false;
     app.approval_mode = ApprovalMode::Never;
-    let mut config = Config {
-        approval_policy: Some("never".to_string()),
-        sandbox_mode: Some("read-only".to_string()),
-        allow_shell: Some(false),
-        requirements_path: Some(requirements_path.to_string_lossy().into_owned()),
-        ..Config::default()
+    let mut config = {
+        let __cw_config_init_13_0 = Some("never".to_string());
+        let __cw_config_init_13_1 = Some("read-only".to_string());
+        let __cw_config_init_13_2 = Some(false);
+        let __cw_config_init_13_3 = Some(requirements_path.to_string_lossy().into_owned());
+        let mut __cw_config_init_13_value: Config = Config::default();
+        __cw_config_init_13_value.approval_policy = __cw_config_init_13_0;
+        __cw_config_init_13_value.sandbox_mode = __cw_config_init_13_1;
+        __cw_config_init_13_value.allow_shell = __cw_config_init_13_2;
+        __cw_config_init_13_value.requirements_path = __cw_config_init_13_3;
+        __cw_config_init_13_value
     };
 
     for preset in [
@@ -9369,13 +9419,16 @@ fn named_custom_session_config(name: &str, base_url: &str, model: &str) -> Confi
             ..ProviderConfig::default()
         },
     );
-    Config {
-        provider: Some(name.to_string()),
-        providers: Some(ProvidersConfig {
+    {
+        let __cw_config_init_14_0 = Some(name.to_string());
+        let __cw_config_init_14_1 = Some(ProvidersConfig {
             custom,
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_14_value: Config = Config::default();
+        __cw_config_init_14_value.provider = __cw_config_init_14_0;
+        __cw_config_init_14_value.providers = __cw_config_init_14_1;
+        __cw_config_init_14_value
     }
 }
 
@@ -9638,7 +9691,7 @@ XML unless the user explicitly asks to debug sub-agent internals.\n\n\
                 matches!(block, ContentBlock::Text { text, .. } if text == "Fix the resume regression")
             })
     }));
-    let restored = crate::runtime_handoff::restored_subagent_checkpoint_display(
+    let restored = codewhale_models::turn_classify::restored_subagent_checkpoint_display(
         app.api_messages.last().expect("restored handoff"),
     )
     .expect("projected handoff");
@@ -10470,17 +10523,86 @@ fn persisted_queued_plugin_skill_is_denied_after_cross_process_revocation() {
         Some("Do the queued work.".to_string()),
     )
     .with_skill_provenance(Some(authority.into()));
-    let serialized = serde_json::to_string(&queued_ui_to_session(&queued)).unwrap();
+    let serialized = serde_json::to_string(&queued_ui_to_session(&queued).unwrap()).unwrap();
     let persisted: QueuedSessionMessage = serde_json::from_str(&serialized).unwrap();
     let restored = queued_session_to_ui(persisted);
     let mut app = create_test_app();
     app.workspace = workspace;
+    app.plugin_registry = std::sync::Arc::new(registry);
     assert!(
         queued_message_content_for_app(
             &app,
             &restored,
             None,
             &mut crate::tui::git_mention::GitMentionCache::default(),
+        )
+        .is_ok()
+    );
+
+    for replacement in [Some(tmpdir.path().join("absent-policy.json")), None] {
+        let mut value: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        let receipt = value["skill_provenance"].as_object_mut().unwrap();
+        match replacement {
+            Some(path) => {
+                receipt.insert(
+                    "managed_policy_path".into(),
+                    serde_json::to_value(path).unwrap(),
+                );
+            }
+            None => {
+                receipt.remove("managed_policy_path");
+            }
+        }
+        let untrusted: QueuedSessionMessage = serde_json::from_value(value).unwrap();
+        assert!(
+            untrusted
+                .skill_provenance
+                .as_ref()
+                .unwrap()
+                .authority()
+                .managed_policy_source
+                .is_none()
+        );
+        let untrusted = queued_session_to_ui(untrusted);
+        let error = queued_message_content_for_app(
+            &app,
+            &untrusted,
+            None,
+            &mut crate::tui::git_mention::GitMentionCache::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("trusted discovery authority"));
+    }
+    let policy_path = app.plugin_registry.managed_policy_path().unwrap();
+    std::fs::write(
+        policy_path,
+        r#"{"schema_version":1,"allow_unlisted":false}"#,
+    )
+    .unwrap();
+    let error = queued_message_content_for_app(
+        &app,
+        &restored,
+        None,
+        &mut crate::tui::git_mention::GitMentionCache::default(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("managed plugin policy"));
+    std::fs::write(policy_path, "malformed").unwrap();
+    let error = queued_message_content_for_app(
+        &app,
+        &restored,
+        None,
+        &mut crate::tui::git_mention::GitMentionCache::default(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("policy is invalid"));
+    std::fs::write(policy_path, r#"{"schema_version":1,"allow_unlisted":true}"#).unwrap();
+    assert!(
+        queued_message_content_for_app(
+            &app,
+            &restored,
+            None,
+            &mut crate::tui::git_mention::GitMentionCache::default()
         )
         .is_ok()
     );
@@ -10569,7 +10691,12 @@ async fn mode_change_update_notifies_engine() {
     let mut engine = crate::core::engine::mock_engine_handle();
 
     assert!(
-        apply_yolo_compat_update(&mut app, &engine.handle, &crate::config::Config::default()).await
+        apply_yolo_compat_update(
+            &mut app,
+            &engine.handle,
+            &codewhale_runtime::config::Config::default()
+        )
+        .await
     );
 
     match engine.rx_op.recv().await.expect("change mode op") {
@@ -10607,7 +10734,7 @@ async fn mode_change_update_sends_restored_agent_policy() {
         apply_mode_update(
             &mut app,
             &engine.handle,
-            &crate::config::Config::default(),
+            &codewhale_runtime::config::Config::default(),
             AppMode::Agent
         )
         .await
@@ -10828,9 +10955,12 @@ async fn operate_mode_entry_attaches_to_recorded_operation() {
 #[test]
 fn saved_default_provider_syncs_back_to_runtime_config() {
     let _home = SettingsHomeGuard::new();
-    let settings = crate::settings::Settings {
-        default_provider: Some("ollama".to_string()),
-        ..Default::default()
+    let settings = {
+        let __cw_config_init_15_0 = Some("ollama".to_string());
+        let mut __cw_config_init_15_value: codewhale_runtime::settings::Settings =
+            Default::default();
+        __cw_config_init_15_value.default_provider = __cw_config_init_15_0;
+        __cw_config_init_15_value
     };
     settings.save().expect("save settings");
 
@@ -10856,9 +10986,11 @@ fn provider_picker_reselecting_active_provider_preserves_current_model() {
     let mut app = create_test_app();
     app.set_provider_identity(ProviderKind::Ollama, "ollama");
     app.model = "deepseek-coder-v2:16b".to_string();
-    let config = Config {
-        provider: Some("ollama".to_string()),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_16_0 = Some("ollama".to_string());
+        let mut __cw_config_init_16_value: Config = Config::default();
+        __cw_config_init_16_value.provider = __cw_config_init_16_0;
+        __cw_config_init_16_value
     };
 
     assert_eq!(
@@ -10931,9 +11063,11 @@ async fn reselecting_the_same_provider_says_connected_not_switched() {
     let mut app = create_test_app();
     app.api_provider = ProviderKind::Deepseek;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("deepseek".to_string()),
-        ..Default::default()
+    let mut config = {
+        let __cw_config_init_17_0 = Some("deepseek".to_string());
+        let mut __cw_config_init_17_value: Config = Default::default();
+        __cw_config_init_17_value.provider = __cw_config_init_17_0;
+        __cw_config_init_17_value
     }
     .with_legacy_root(Some("test-key".to_string()), None);
 
@@ -11030,7 +11164,7 @@ fn first_run_route_starts_with_configured_provider_and_model() {
         .into_iter()
         .map(EnvVarGuard::remove)
         .collect();
-        let path = crate::config::home_config_path().unwrap();
+        let path = codewhale_runtime::config::home_config_path().unwrap();
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let route = if from_env {
             ""
@@ -11040,7 +11174,8 @@ fn first_run_route_starts_with_configured_provider_and_model() {
         std::fs::write(&path, format!("{route}[providers.openai]\napi_key = 'fixture-key'\nbase_url = 'http://127.0.0.1:9/v1'\n")).unwrap();
         let _provider = from_env.then(|| EnvVarGuard::set("CODEWHALE_PROVIDER", "openai"));
         let _model = from_env.then(|| EnvVarGuard::set("CODEWHALE_MODEL", "gpui-fixture"));
-        let config = Config::load(None, None).expect("load fresh home config");
+        let config =
+            crate::plugins::providers::load_config(None, None).expect("load fresh home config");
         assert_eq!(
             config.active_provider_identity().unwrap().provider,
             ProviderKind::Openai
@@ -11056,7 +11191,9 @@ fn first_run_route_starts_with_configured_provider_and_model() {
         assert!(!app.should_adopt_live_local_ollama());
         assert!(codewhale_config::SetupState::load().unwrap().is_none());
         assert_eq!(
-            Config::load(None, None).unwrap().default_model(),
+            crate::plugins::providers::load_config(None, None)
+                .unwrap()
+                .default_model(),
             "gpui-fixture"
         );
     }
@@ -11187,7 +11324,7 @@ fn first_run_route_catalog() -> crate::local_ollama::LiveLocalOllamaCatalog {
 async fn first_run_route_generated_config_restart_keeps_local_discovery() {
     let _home = SettingsHomeGuard::new();
     let _env = first_run_route_env_guards();
-    let created = crate::config::ensure_config_file_exists(None)
+    let created = codewhale_runtime::config::ensure_config_file_exists(None)
         .unwrap()
         .expect("first launch writes the template");
     assert!(
@@ -11197,7 +11334,8 @@ async fn first_run_route_generated_config_restart_keeps_local_discovery() {
     );
     // Launch 0: no daemon answers. Launch 1 (restart): Ollama is up.
     for launch in 0..2 {
-        let mut config = Config::load(None, None).expect("load generated config");
+        let mut config =
+            crate::plugins::providers::load_config(None, None).expect("load generated config");
         let mut options = create_test_options();
         options.model = config.default_model();
         let mut app = App::new(options, &config);
@@ -11238,10 +11376,11 @@ async fn first_run_route_endpoint_only_keeps_route_when_credentials_are_missing(
         let _home = SettingsHomeGuard::new();
         let _env = first_run_route_env_guards();
         let _url = env_url.map(|url| EnvVarGuard::set("DEEPSEEK_BASE_URL", url));
-        let path = crate::config::home_config_path().unwrap();
+        let path = codewhale_runtime::config::home_config_path().unwrap();
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, document).unwrap();
-        let mut config = Config::load(None, None).expect("load endpoint-only config");
+        let mut config =
+            crate::plugins::providers::load_config(None, None).expect("load endpoint-only config");
         assert!(config.active_route_endpoint_configured(), "{document:?}");
         let provider = config.active_provider_identity().unwrap().provider;
         let mut options = create_test_options();
@@ -11282,7 +11421,7 @@ async fn first_run_switch_to_keyed_route_clears_launch_missing_key_state() {
     let _env = first_run_route_env_guards();
     let _provider = EnvVarGuard::set("CODEWHALE_PROVIDER", "deepseek");
     let _model = EnvVarGuard::set("CODEWHALE_MODEL", "deepseek-v4-flash");
-    let path = crate::config::home_config_path().unwrap();
+    let path = codewhale_runtime::config::home_config_path().unwrap();
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(
         &path,
@@ -11293,7 +11432,8 @@ async fn first_run_switch_to_keyed_route_clears_launch_missing_key_state() {
          base_url = \"http://127.0.0.1:4880/v1\"\n",
     )
     .unwrap();
-    let mut config = Config::load(None, None).expect("load configured route");
+    let mut config =
+        crate::plugins::providers::load_config(None, None).expect("load configured route");
     let mut options = create_test_options();
     options.model = config.default_model();
     let mut app = App::new(options, &config);
@@ -11332,10 +11472,10 @@ fn first_run_route_env_key_only_is_not_replaced() {
     let _home = SettingsHomeGuard::new();
     let _env = first_run_route_env_guards();
     let _key = EnvVarGuard::set("DEEPSEEK_API_KEY", "fixture-key");
-    crate::config::ensure_config_file_exists(None)
+    codewhale_runtime::config::ensure_config_file_exists(None)
         .unwrap()
         .expect("first launch writes the template");
-    let config = Config::load(None, None).expect("load generated config");
+    let config = crate::plugins::providers::load_config(None, None).expect("load generated config");
     let mut options = create_test_options();
     options.model = config.default_model();
     let mut app = App::new(options, &config);
@@ -11352,10 +11492,13 @@ async fn provider_switch_to_deepseek_canonicalizes_openrouter_default_model() {
     app.api_provider = ProviderKind::Openrouter;
     app.model = DEFAULT_OPENROUTER_MODEL.to_string();
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("openrouter".to_string()),
-        default_text_model: Some(DEFAULT_OPENROUTER_MODEL.to_string()),
-        ..Default::default()
+    let mut config = {
+        let __cw_config_init_18_0 = Some("openrouter".to_string());
+        let __cw_config_init_18_1 = Some(DEFAULT_OPENROUTER_MODEL.to_string());
+        let mut __cw_config_init_18_value: Config = Default::default();
+        __cw_config_init_18_value.provider = __cw_config_init_18_0;
+        __cw_config_init_18_value.default_text_model = __cw_config_init_18_1;
+        __cw_config_init_18_value
     }
     .with_legacy_root(Some("test-key".to_string()), None);
 
@@ -11384,18 +11527,22 @@ async fn provider_switch_to_deepseek_drops_stale_xiaomi_root_base_url() {
     app.model = "mimo-v2.5-pro".to_string();
     app.model_ids_passthrough = true;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("xiaomi-mimo".to_string()),
-        default_text_model: Some("mimo-v2.5-pro".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_19_0 = Some("xiaomi-mimo".to_string());
+        let __cw_config_init_19_1 = Some("mimo-v2.5-pro".to_string());
+        let __cw_config_init_19_2 = Some(ProvidersConfig {
             xiaomi_mimo: ProviderConfig {
                 api_key: Some("mimo-key".to_string()),
                 model: Some("mimo-v2.5-pro".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_19_value: Config = Default::default();
+        __cw_config_init_19_value.provider = __cw_config_init_19_0;
+        __cw_config_init_19_value.default_text_model = __cw_config_init_19_1;
+        __cw_config_init_19_value.providers = __cw_config_init_19_2;
+        __cw_config_init_19_value
     }
     .with_legacy_root(
         Some("deepseek-key".to_string()),
@@ -11430,18 +11577,22 @@ async fn provider_switch_from_mimo_to_openrouter_without_key_fails_before_dispat
     app.model = "mimo-v2.5-pro".to_string();
     app.model_ids_passthrough = true;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("xiaomi-mimo".to_string()),
-        default_text_model: Some("mimo-v2.5-pro".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_20_0 = Some("xiaomi-mimo".to_string());
+        let __cw_config_init_20_1 = Some("mimo-v2.5-pro".to_string());
+        let __cw_config_init_20_2 = Some(ProvidersConfig {
             xiaomi_mimo: ProviderConfig {
                 api_key: Some("mimo-key".to_string()),
                 model: Some("mimo-v2.5-pro".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_20_value: Config = Default::default();
+        __cw_config_init_20_value.provider = __cw_config_init_20_0;
+        __cw_config_init_20_value.default_text_model = __cw_config_init_20_1;
+        __cw_config_init_20_value.providers = __cw_config_init_20_2;
+        __cw_config_init_20_value
     }
     .with_legacy_root(
         Some("deepseek-key".to_string()),
@@ -11493,7 +11644,7 @@ async fn provider_switch_from_mimo_to_openrouter_without_key_fails_before_dispat
 async fn successful_custom_provider_activation_completes_onboarding() {
     let config_env = ConfigPathEnvGuard::new();
     let mut app = create_test_app();
-    app.config_path = crate::config::home_config_path();
+    app.config_path = codewhale_runtime::config::home_config_path();
     app.onboarding = OnboardingState::Provider;
     app.onboarding_needs_api_key = true;
     app.onboarding_missing_key_recovery = true;
@@ -11521,7 +11672,10 @@ async fn successful_custom_provider_activation_completes_onboarding() {
         .parent()
         .unwrap()
         .join("settings.toml");
-    assert_eq!(crate::settings::Settings::path().unwrap(), fixture_settings);
+    assert_eq!(
+        codewhale_runtime::settings::Settings::path().unwrap(),
+        fixture_settings
+    );
     assert!(fixture_home.join("config.toml").is_file());
     assert!(fixture_home.join("setup_state.json").is_file());
     assert_ne!(
@@ -11535,7 +11689,7 @@ async fn successful_custom_provider_activation_completes_onboarding() {
 #[tokio::test]
 async fn failed_custom_provider_activation_stays_in_onboarding_recovery() {
     let config_env = ConfigPathEnvGuard::new();
-    let global_config = crate::config::home_config_path().expect("global config path");
+    let global_config = codewhale_runtime::config::home_config_path().expect("global config path");
     let startup_before = std::fs::read(&global_config).ok();
     let blocked_parent = config_env._tmp.path().join("not-a-directory");
     std::fs::write(&blocked_parent, "fixture").expect("create blocking file");
@@ -11563,7 +11717,7 @@ async fn failed_custom_provider_activation_stays_in_onboarding_recovery() {
     assert_eq!(app.api_provider, ProviderKind::Deepseek);
     assert_eq!(std::fs::read(global_config).ok(), startup_before);
     assert_eq!(
-        crate::settings::Settings::load()
+        codewhale_runtime::settings::Settings::load()
             .expect("reload failed custom setup settings")
             .default_provider,
         None,
@@ -11589,8 +11743,8 @@ async fn successful_native_xai_oauth_activation_completes_onboarding() {
     app.trust_mode = true;
     let mut engine = mock_engine_handle();
     let mut config = Config::default();
-    let pending = crate::oauth::pending_login_for_test(
-        crate::oauth::OAuthProvider::Xai,
+    let pending = codewhale_runtime::oauth::pending_login_for_test(
+        codewhale_runtime::oauth::OAuthProvider::Xai,
         "fixture-access",
         "fixture-refresh",
     );
@@ -11641,8 +11795,8 @@ async fn failed_native_xai_oauth_activation_stays_in_onboarding_recovery() {
     app.onboarding_needs_api_key = true;
     let mut engine = mock_engine_handle();
     let mut config = Config::default();
-    let pending = crate::oauth::pending_login_for_test(
-        crate::oauth::OAuthProvider::Xai,
+    let pending = codewhale_runtime::oauth::pending_login_for_test(
+        codewhale_runtime::oauth::OAuthProvider::Xai,
         "",
         "fixture-refresh",
     );
@@ -11777,7 +11931,7 @@ fn setup_confirm_toast_names_secret_store_and_global_scope() {
 #[tokio::test]
 async fn provider_switch_is_session_local_until_explicitly_saved() {
     let _home = SettingsHomeGuard::new();
-    let global_config = crate::config::home_config_path().expect("global config path");
+    let global_config = codewhale_runtime::config::home_config_path().expect("global config path");
     let startup_before = std::fs::read(&global_config).ok();
     let tmp = TempDir::new().expect("config tempdir");
     let config_path = tmp.path().join("config.toml");
@@ -11802,7 +11956,8 @@ api_key = "arcee-key"
     app.config_path = Some(config_path.clone());
 
     let mut engine = mock_engine_handle();
-    let mut config = Config::load(Some(config_path.clone()), None).expect("load config");
+    let mut config = crate::plugins::providers::load_config(Some(config_path.clone()), None)
+        .expect("load config");
 
     {
         let captured_fixture_identity = (config).test_identity_for_kind(ProviderKind::XiaomiMimo);
@@ -11823,7 +11978,8 @@ api_key = "arcee-key"
     // disk still selects the old provider and the startup default is
     // untouched. A switch made in one folder must never rewrite a config
     // another folder (or restart) will read.
-    let reloaded = Config::load(Some(config_path.clone()), None).expect("reload config");
+    let reloaded = crate::plugins::providers::load_config(Some(config_path.clone()), None)
+        .expect("reload config");
     // The on-disk config still resolves to the OLD provider's endpoint —
     // nothing changed for a restart or another folder.
     assert_eq!(
@@ -11835,7 +11991,7 @@ api_key = "arcee-key"
         "https://api.arcee.ai/api/v1"
     );
 
-    let settings = crate::settings::Settings::load().expect("load settings");
+    let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
     assert_eq!(settings.default_provider.as_deref(), None);
     assert_eq!(std::fs::read(global_config).ok(), startup_before);
 
@@ -11891,7 +12047,8 @@ fn first_run_ollama_choice_survives_restart_from_canonical_config() {
     let original_config = "default_text_model = \"deepseek-v4-pro\"\n";
     std::fs::write(&config_path, original_config).expect("seed compatibility config");
 
-    let config = Config::load(Some(config_path.clone()), None).expect("load first-run config");
+    let config = crate::plugins::providers::load_config(Some(config_path.clone()), None)
+        .expect("load first-run config");
     let mut app = Box::new(App::new(create_test_options(), &config));
     app.onboarding = OnboardingState::Provider;
     app.onboarding_needs_api_key = true;
@@ -11968,7 +12125,8 @@ fn first_run_ollama_choice_survives_restart_from_canonical_config() {
     // this deliberately large state object on one thread stack at once.
     app.finish_onboarding_without_feature_intro();
     drop(app);
-    let restart_config = Config::load(Some(config_path), None).expect("reload restart config");
+    let restart_config = crate::plugins::providers::load_config(Some(config_path), None)
+        .expect("reload restart config");
     // A launch derives its startup model from the config it just read
     // (`run_interactive`: `TuiOptions.model = config.default_model()`). The
     // shared fixture options hard-code a DeepSeek id no launch would supply
@@ -12051,18 +12209,22 @@ async fn provider_switch_model_override_updates_target_provider_model_slot() {
     app.api_provider = ProviderKind::XiaomiMimo;
     app.model = "mimo-v2.5-pro".to_string();
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("xiaomi-mimo".to_string()),
-        default_text_model: Some("mimo-v2.5-pro".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_21_0 = Some("xiaomi-mimo".to_string());
+        let __cw_config_init_21_1 = Some("mimo-v2.5-pro".to_string());
+        let __cw_config_init_21_2 = Some(ProvidersConfig {
             xiaomi_mimo: ProviderConfig {
                 api_key: Some("mimo-key".to_string()),
                 model: Some("mimo-v2.5-pro".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_21_value: Config = Default::default();
+        __cw_config_init_21_value.provider = __cw_config_init_21_0;
+        __cw_config_init_21_value.default_text_model = __cw_config_init_21_1;
+        __cw_config_init_21_value.providers = __cw_config_init_21_2;
+        __cw_config_init_21_value
     }
     .with_legacy_root(Some("deepseek-key".to_string()), None);
 
@@ -12123,18 +12285,22 @@ async fn provider_switch_succeeds_without_writing_when_config_is_unwritable() {
     app.model = "mimo-v2.5-pro".to_string();
     app.config_path = Some(tmp.path().to_path_buf());
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("xiaomi-mimo".to_string()),
-        default_text_model: Some("mimo-v2.5-pro".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_22_0 = Some("xiaomi-mimo".to_string());
+        let __cw_config_init_22_1 = Some("mimo-v2.5-pro".to_string());
+        let __cw_config_init_22_2 = Some(ProvidersConfig {
             xiaomi_mimo: ProviderConfig {
                 api_key: Some("mimo-key".to_string()),
                 model: Some("mimo-v2.5-pro".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_22_value: Config = Default::default();
+        __cw_config_init_22_value.provider = __cw_config_init_22_0;
+        __cw_config_init_22_value.default_text_model = __cw_config_init_22_1;
+        __cw_config_init_22_value.providers = __cw_config_init_22_2;
+        __cw_config_init_22_value
     }
     .with_legacy_root(Some("deepseek-key".to_string()), None);
 
@@ -12186,9 +12352,9 @@ async fn provider_switch_without_model_uses_target_default_not_previous_provider
     app.model = "deepseek/deepseek-v4-pro".to_string();
     app.model_ids_passthrough = true;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("openrouter".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_23_0 = Some("openrouter".to_string());
+        let __cw_config_init_23_1 = Some(ProvidersConfig {
             openrouter: ProviderConfig {
                 api_key: Some("openrouter-key".to_string()),
                 model: Some("deepseek/deepseek-v4-pro".to_string()),
@@ -12199,8 +12365,11 @@ async fn provider_switch_without_model_uses_target_default_not_previous_provider
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_23_value: Config = Default::default();
+        __cw_config_init_23_value.provider = __cw_config_init_23_0;
+        __cw_config_init_23_value.providers = __cw_config_init_23_1;
+        __cw_config_init_23_value
     }
     .with_legacy_root(Some("deepseek-key".to_string()), None);
 
@@ -12242,9 +12411,9 @@ async fn provider_switch_foreign_direct_model_rejected_before_mutation() {
     app.api_provider = ProviderKind::Deepseek;
     app.model = DEFAULT_TEXT_MODEL.to_string();
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("deepseek".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_24_0 = Some("deepseek".to_string());
+        let __cw_config_init_24_1 = Some(ProvidersConfig {
             deepseek: ProviderConfig {
                 api_key: Some("deepseek-key".to_string()),
                 model: Some(DEFAULT_TEXT_MODEL.to_string()),
@@ -12255,8 +12424,11 @@ async fn provider_switch_foreign_direct_model_rejected_before_mutation() {
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_24_value: Config = Default::default();
+        __cw_config_init_24_value.provider = __cw_config_init_24_0;
+        __cw_config_init_24_value.providers = __cw_config_init_24_1;
+        __cw_config_init_24_value
     }
     .with_legacy_root(Some("deepseek-key".to_string()), None);
 
@@ -12301,10 +12473,10 @@ async fn provider_switch_to_openai_codex_normalizes_deepseek_off_effort() {
     app.reasoning_effort = ReasoningEffort::Off;
     app.reasoning_effort_preference = Some(ReasoningEffort::Off);
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("deepseek".to_string()),
-        default_text_model: Some(DEFAULT_TEXT_MODEL.to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_25_0 = Some("deepseek".to_string());
+        let __cw_config_init_25_1 = Some(DEFAULT_TEXT_MODEL.to_string());
+        let __cw_config_init_25_2 = Some(ProvidersConfig {
             openai_codex: ProviderConfig {
                 model: Some(
                     codewhale_config::descriptors::defaults::DEFAULT_OPENAI_CODEX_MODEL.to_string(),
@@ -12312,12 +12484,16 @@ async fn provider_switch_to_openai_codex_normalizes_deepseek_off_effort() {
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_25_value: Config = Default::default();
+        __cw_config_init_25_value.provider = __cw_config_init_25_0;
+        __cw_config_init_25_value.default_text_model = __cw_config_init_25_1;
+        __cw_config_init_25_value.providers = __cw_config_init_25_2;
+        __cw_config_init_25_value
     };
 
-    crate::oauth::install_test_chatgpt_registration(&mut config).unwrap();
-    crate::codex_model_cache::install_test_chatgpt_roster(
+    codewhale_runtime::oauth::install_test_chatgpt_registration(&mut config).unwrap();
+    codewhale_runtime::codex_model_roster::install_test_chatgpt_roster(
         &config,
         &[codewhale_config::descriptors::defaults::DEFAULT_OPENAI_CODEX_MODEL],
     )
@@ -12351,17 +12527,21 @@ async fn provider_switch_to_openrouter_canonicalizes_deepseek_default_model() {
     app.api_provider = ProviderKind::Deepseek;
     app.model = DEFAULT_TEXT_MODEL.to_string();
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("deepseek".to_string()),
-        default_text_model: Some(DEFAULT_TEXT_MODEL.to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_26_0 = Some("deepseek".to_string());
+        let __cw_config_init_26_1 = Some(DEFAULT_TEXT_MODEL.to_string());
+        let __cw_config_init_26_2 = Some(ProvidersConfig {
             openrouter: ProviderConfig {
                 api_key: Some("test-key".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_26_value: Config = Default::default();
+        __cw_config_init_26_value.provider = __cw_config_init_26_0;
+        __cw_config_init_26_value.default_text_model = __cw_config_init_26_1;
+        __cw_config_init_26_value.providers = __cw_config_init_26_2;
+        __cw_config_init_26_value
     };
 
     {
@@ -12422,10 +12602,13 @@ async fn auto_dispatch_keeps_last_and_pending_receipts_aligned() {
     app.reasoning_effort = ReasoningEffort::Low;
     app.reasoning_effort_preference = Some(ReasoningEffort::Low);
     app.set_model_selection("auto".to_string());
-    let config = Config {
-        provider: Some("zai".to_string()),
-        default_text_model: Some("auto".to_string()),
-        ..Default::default()
+    let config = {
+        let __cw_config_init_27_0 = Some("zai".to_string());
+        let __cw_config_init_27_1 = Some("auto".to_string());
+        let mut __cw_config_init_27_value: Config = Default::default();
+        __cw_config_init_27_value.provider = __cw_config_init_27_0;
+        __cw_config_init_27_value.default_text_model = __cw_config_init_27_1;
+        __cw_config_init_27_value
     };
     let engine = mock_engine_handle();
 
@@ -12622,7 +12805,7 @@ async fn immediate_submit_closed_mailbox_restores_composer_and_skill() {
     app.cursor_position = app.input.chars().count();
     app.active_skill = Some("keep the selected skill".to_string());
     let input = app
-        .handle_composer_enter()
+        .handle_composer_enter(true)
         .expect("non-empty composer should submit");
     let queued = build_queued_message(&mut app, input);
     assert!(app.input.is_empty());
@@ -12677,7 +12860,7 @@ async fn immediate_submit_custom_provider_preflight_restores_exact_message() {
     app.input = "preserve 用户 input".to_string();
     app.cursor_position = app.input.chars().count();
     let input = app
-        .handle_composer_enter()
+        .handle_composer_enter(true)
         .expect("non-empty composer should submit");
     let queued = build_queued_message(&mut app, input);
     let (_engine, handle) = crate::core::engine::Engine::new(EngineConfig::default(), &config);
@@ -12790,7 +12973,7 @@ async fn immediate_submit_custom_provider_missing_key_preflight_shows_auth_next_
     app.input = "preserve 用户 input".to_string();
     app.cursor_position = app.input.chars().count();
     let input = app
-        .handle_composer_enter()
+        .handle_composer_enter(true)
         .expect("non-empty composer should submit");
     let queued = build_queued_message(&mut app, input);
     let (_engine, handle) = crate::core::engine::Engine::new(EngineConfig::default(), &config);
@@ -12865,15 +13048,18 @@ async fn dispatch_uses_app_owned_exact_custom_identity_when_config_selector_drif
             },
         );
     }
-    let config = Config {
+    let config = {
         // Simulate a picker/config overlay that has moved ahead to B while
         // App and the active engine still own A.
-        provider: Some("custom-b".to_string()),
-        providers: Some(ProvidersConfig {
+        let __cw_config_init_28_0 = Some("custom-b".to_string());
+        let __cw_config_init_28_1 = Some(ProvidersConfig {
             custom,
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_28_value: Config = Default::default();
+        __cw_config_init_28_value.provider = __cw_config_init_28_0;
+        __cw_config_init_28_value.providers = __cw_config_init_28_1;
+        __cw_config_init_28_value
     };
     let mut app = create_test_app();
     app.set_provider_identity(ProviderKind::Custom, "custom-a");
@@ -12963,10 +13149,10 @@ async fn dispatch_captured_root_identity_keeps_absent_id_and_rejects_replaced_ta
 
 #[tokio::test]
 async fn dispatch_requires_exact_selection_when_root_conflicts_with_table() {
-    let config = Config {
-        provider: Some("custom".to_string()),
-        default_text_model: Some("legacy-root-model".to_string()),
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_29_0 = Some("custom".to_string());
+        let __cw_config_init_29_1 = Some("legacy-root-model".to_string());
+        let __cw_config_init_29_2 = Some(ProvidersConfig {
             custom: HashMap::from([(
                 "custom".to_string(),
                 ProviderConfig {
@@ -12978,8 +13164,12 @@ async fn dispatch_requires_exact_selection_when_root_conflicts_with_table() {
                 },
             )]),
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_29_value: Config = Default::default();
+        __cw_config_init_29_value.provider = __cw_config_init_29_0;
+        __cw_config_init_29_value.default_text_model = __cw_config_init_29_1;
+        __cw_config_init_29_value.providers = __cw_config_init_29_2;
+        __cw_config_init_29_value
     }
     .with_legacy_root(
         Some("legacy-root-test-key".to_string()),
@@ -13073,9 +13263,9 @@ async fn failed_real_preflight_preserves_paused_command_state_and_engine_gate() 
 fn logout_memory_clear_respects_named_and_legacy_custom_scopes() {
     let mut named_app = create_test_app();
     named_app.set_provider_identity(ProviderKind::Custom, "lm-studio");
-    let mut named_config = Config {
-        provider: Some("lm-studio".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut named_config = {
+        let __cw_config_init_30_0 = Some("lm-studio".to_string());
+        let __cw_config_init_30_1 = Some(ProvidersConfig {
             custom: HashMap::from([(
                 "lm-studio".to_string(),
                 ProviderConfig {
@@ -13087,8 +13277,11 @@ fn logout_memory_clear_respects_named_and_legacy_custom_scopes() {
                 },
             )]),
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_30_value: Config = Default::default();
+        __cw_config_init_30_value.provider = __cw_config_init_30_0;
+        __cw_config_init_30_value.providers = __cw_config_init_30_1;
+        __cw_config_init_30_value
     }
     .with_legacy_root(Some("deepseek-root-key".to_string()), None);
 
@@ -13111,10 +13304,13 @@ fn logout_memory_clear_respects_named_and_legacy_custom_scopes() {
 
     let mut legacy_app = create_test_app();
     legacy_app.set_provider_identity(ProviderKind::Custom, "custom");
-    let mut legacy_config = Config {
-        provider: Some("custom".to_string()),
-        default_text_model: Some("legacy-model".to_string()),
-        ..Default::default()
+    let mut legacy_config = {
+        let __cw_config_init_31_0 = Some("custom".to_string());
+        let __cw_config_init_31_1 = Some("legacy-model".to_string());
+        let mut __cw_config_init_31_value: Config = Default::default();
+        __cw_config_init_31_value.provider = __cw_config_init_31_0;
+        __cw_config_init_31_value.default_text_model = __cw_config_init_31_1;
+        __cw_config_init_31_value
     }
     .with_legacy_root(
         Some("legacy-key".to_string()),
@@ -13150,9 +13346,9 @@ fn auto_routed_turn_compaction_uses_selected_route_not_stale_app_route() {
     });
     app.auto_compact_threshold_percent = 75.0;
 
-    let config = Config {
-        provider: Some("openrouter".to_string()),
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_32_0 = Some("openrouter".to_string());
+        let __cw_config_init_32_1 = Some(ProvidersConfig {
             openrouter: ProviderConfig {
                 api_key: Some("test-openrouter-key".to_string()),
                 model: Some("vendor/model-b".to_string()),
@@ -13160,8 +13356,11 @@ fn auto_routed_turn_compaction_uses_selected_route_not_stale_app_route() {
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_32_value: Config = Default::default();
+        __cw_config_init_32_value.provider = __cw_config_init_32_0;
+        __cw_config_init_32_value.providers = __cw_config_init_32_1;
+        __cw_config_init_32_value
     };
     let route = resolve_runtime_route(&config, ProviderKind::Openrouter, Some("vendor/model-b"))
         .expect("resolve auto-selected route")
@@ -13206,10 +13405,13 @@ fn auto_routed_turn_compaction_uses_selected_route_not_stale_app_route() {
 fn configure_manual_compaction_test_route(app: &mut App) -> Config {
     app.api_provider = ProviderKind::Deepseek;
     app.model = DEFAULT_TEXT_MODEL.to_string();
-    Config {
-        provider: Some("deepseek".to_string()),
-        default_text_model: Some(DEFAULT_TEXT_MODEL.to_string()),
-        ..Config::default()
+    {
+        let __cw_config_init_33_0 = Some("deepseek".to_string());
+        let __cw_config_init_33_1 = Some(DEFAULT_TEXT_MODEL.to_string());
+        let mut __cw_config_init_33_value: Config = Config::default();
+        __cw_config_init_33_value.provider = __cw_config_init_33_0;
+        __cw_config_init_33_value.default_text_model = __cw_config_init_33_1;
+        __cw_config_init_33_value
     }
     .with_legacy_root(Some("test-key".to_string()), None)
 }
@@ -13448,17 +13650,20 @@ fn manual_compaction_label_and_failure_are_typed() {
 
 #[test]
 fn context_override_drives_compaction_meter_and_preflight_budget() {
-    let config = Config {
-        provider: Some("moonshot".to_string()),
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_34_0 = Some("moonshot".to_string());
+        let __cw_config_init_34_1 = Some(ProvidersConfig {
             moonshot: ProviderConfig {
                 model: Some("kimi-k3".to_string()),
                 context_window: Some(262_144),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_34_value: Config = Config::default();
+        __cw_config_init_34_value.provider = __cw_config_init_34_0;
+        __cw_config_init_34_value.providers = __cw_config_init_34_1;
+        __cw_config_init_34_value
     };
     let route = resolve_runtime_route(&config, ProviderKind::Moonshot, Some("kimi-k3"))
         .expect("resolve configured 256K route");
@@ -13602,16 +13807,19 @@ fn configure_single_message_submit_hook(app: &mut App, dir: &TempDir, command: S
 #[cfg(not(windows))]
 fn configure_message_submit_hooks(app: &mut App, dir: &TempDir, commands: Vec<String>) {
     app.hooks = crate::hooks::HookExecutor::new(
-        crate::hooks::HooksConfig {
+        codewhale_config::hooks::HooksConfig {
             enabled: true,
             hooks: commands
                 .iter()
                 .map(|command| {
-                    crate::hooks::Hook::new(crate::hooks::HookEvent::MessageSubmit, command)
+                    codewhale_config::hooks::Hook::new(
+                        codewhale_config::hooks::HookEvent::MessageSubmit,
+                        command,
+                    )
                 })
                 .collect(),
             working_dir: Some(dir.path().to_path_buf()),
-            ..crate::hooks::HooksConfig::default()
+            ..codewhale_config::hooks::HooksConfig::default()
         },
         dir.path().to_path_buf(),
     );
@@ -13768,12 +13976,14 @@ async fn a_steer_settles_even_though_the_engine_stored_it_trimmed() {
         &mut app,
         &Config::default(),
         EngineEvent::SessionUpdated {
+            checkpoint: None,
             session_id: session,
             messages: std::sync::Arc::new(vec![
                 text_message("user", "original request"),
                 text_message("user", "check the job status"),
             ]),
             system_prompt: None,
+            instruction_assembly: None,
             model,
             workspace,
         }
@@ -13845,6 +14055,7 @@ async fn steer_becomes_the_newest_transcript_entry_only_when_the_engine_records_
         &mut app,
         &Config::default(),
         EngineEvent::SessionUpdated {
+            checkpoint: None,
             session_id: session,
             messages: std::sync::Arc::new(vec![
                 text_message("user", "original request"),
@@ -13852,6 +14063,7 @@ async fn steer_becomes_the_newest_transcript_entry_only_when_the_engine_records_
                 text_message("user", "actually use the other file"),
             ]),
             system_prompt: None,
+            instruction_assembly: None,
             model,
             workspace,
         }
@@ -13962,16 +14174,16 @@ async fn lost_strict_message_submit_executor_keeps_dispatch_atomic_and_recoverab
     app.add_message(HistoryCell::System {
         content: "existing receipt".to_string(),
     });
-    let mut strict = crate::hooks::Hook::new(
-        crate::hooks::HookEvent::MessageSubmit,
+    let mut strict = codewhale_config::hooks::Hook::new(
+        codewhale_config::hooks::HookEvent::MessageSubmit,
         "unused because dispatch loss is injected",
     );
     strict.continue_on_error = false;
     app.hooks = crate::hooks::HookExecutor::new(
-        crate::hooks::HooksConfig {
+        codewhale_config::hooks::HooksConfig {
             enabled: true,
             hooks: vec![strict],
-            ..crate::hooks::HooksConfig::default()
+            ..codewhale_config::hooks::HooksConfig::default()
         },
         app.workspace.clone(),
     );
@@ -14073,11 +14285,150 @@ async fn reserved_dispatch_waits_for_ui_acceptance_before_engine_op() {
     assert!(app.pending_turn_route.is_some());
     assert!(matches!(
         engine.rx_op.try_recv(),
-        Ok(crate::core::ops::Op::SendMessage (TurnSpec { content, .. }))
+        Ok(crate::core::ops::Op::SendMessage (TurnSpec { content, provenance: UserInputProvenance::ExternalUser, .. }))
             if content == "preserve Engine lifecycle"
     ));
     assert!(engine.rx_op.try_recv().is_err(), "one Engine admission");
     assert!(rx.try_recv().is_err(), "no late reset callback remains");
+
+    use crate::extension_host::tests::{FixturePlugins, node_for_tests};
+    let Some(node) = node_for_tests("reserved_dispatch_extension_command") else {
+        return;
+    };
+    let _home = crate::test_support::SealedHome::new();
+    let _policy = crate::plugins::activation::TestPolicyGuard::extension_host(true);
+    let fixture = FixturePlugins::new(&["ext-commands"]).await;
+    let manager = fixture.manager(node);
+    let _manager = crate::extension_host::TestManagerGuard::install(Arc::clone(&manager));
+    let attachment = manager.attach(fixture.registry());
+    attachment.set_identity(Some("extension-dispatch".into()), None);
+    attachment.sync().await.unwrap();
+    let entry = crate::extension_host::live_commands_for_plugins(&attachment.plugin_view())
+        .into_iter()
+        .find(|entry| entry.registration.name == "ext-ask")
+        .unwrap();
+    let mut command_message = QueuedMessage::new("Inspect @private.env; continue".into(), None);
+    command_message.extension_command = Some((entry.reference(), "extension-dispatch".into()));
+    assert!(queued_ui_to_session(&command_message).is_err());
+    let mut app = create_test_app();
+    app.workspace = fixture.workspace().to_path_buf();
+    app.current_session_id = Some("extension-dispatch".into());
+    app.plugin_registry = attachment.plugin_view();
+    app.input = "existing draft".into();
+    app.goal.objective = Some("Owner goal".into());
+    app.goal.token_budget = Some(1234);
+    app.queue_message(command_message.clone());
+    app.restore_unsent_message(command_message.clone());
+    assert!(app.queued_messages.is_empty());
+    assert_eq!(app.input, "existing draft");
+    let prepare = prepare_user_dispatch(&mut app, &config, command_message.clone()).unwrap();
+    assert_eq!(prepare.content, command_message.display);
+    assert!(prepare.references.is_empty());
+    assert_eq!(prepare.provenance, UserInputProvenance::Runtime);
+    assert_eq!(prepare.goal_objective.as_deref(), Some("Owner goal"));
+    assert_eq!(prepare.goal_token_budget, Some(1234));
+    assert!(app.api_messages.is_empty());
+    assert!(
+        app.history
+            .iter()
+            .all(|cell| !matches!(cell, HistoryCell::User { .. }))
+    );
+    assert!(
+        build_dispatch_error_closure(prepare, DispatchRecovery::Immediate, "not admitted".into())(
+            &mut app,
+            &engine.handle,
+            &config,
+        )
+        .is_err()
+    );
+    assert_eq!(app.input, "existing draft");
+    assert!(app.queued_messages.is_empty());
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<crate::tui::app::DispatchApplyFn>(1);
+    app.dispatch_completion_tx = Some(tx);
+    dispatch_composer_message(
+        &mut app,
+        &config,
+        &engine.handle,
+        command_message.clone(),
+        DispatchRecovery::Immediate,
+        ComposerSubmitAction::Submit(SubmitDisposition::Steer),
+    )
+    .await
+    .unwrap();
+    let apply = tokio::time::timeout(Duration::from_secs(3), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(engine.rx_op.try_recv().is_err());
+    apply(&mut app, &engine.handle, &config).unwrap();
+    assert!(
+        matches!(engine.rx_op.try_recv(), Ok(crate::core::ops::Op::SendMessage(TurnSpec {
+        content, provenance: UserInputProvenance::Runtime, goal_objective, goal_token_budget: Some(1234), ..
+    })) if content == command_message.display && goal_objective.as_deref() == Some("Owner goal"))
+    );
+    assert!(engine.rx_steer.try_recv().is_err());
+    assert!(app.last_submitted_prompt.is_none());
+    assert!(app.queued_messages.is_empty());
+    assert!(
+        app.history
+            .iter()
+            .all(|cell| !matches!(cell, HistoryCell::User { .. }))
+    );
+    let stored = Message {
+        role: Role::User,
+        content: vec![
+            ContentBlock::Text {
+                text: command_message.display.clone(),
+                cache_control: None,
+            },
+            ContentBlock::Text {
+                text: "<turn_meta>\nInput provenance: runtime (non-authoritative)\n</turn_meta>"
+                    .into(),
+                cache_control: None,
+            },
+        ],
+    };
+    assert!(
+        matches!(history_cells_from_message(&stored).as_slice(), [HistoryCell::System { content }] if content.contains(&command_message.display))
+    );
+    assert!(matches!(
+        codewhale_models::turn_classify::classify_user_turn_prompt(&stored),
+        codewhale_models::turn_classify::UserTurnPromptKind::NotPrompt
+    ));
+    assert!(
+        dispatch_composer_message(
+            &mut app,
+            &config,
+            &engine.handle,
+            command_message.clone(),
+            DispatchRecovery::Immediate,
+            ComposerSubmitAction::Submit(SubmitDisposition::Queue)
+        )
+        .await
+        .is_err()
+    );
+    assert!(app.queued_messages.is_empty());
+    app.is_loading = false;
+    app.offline_mode = true;
+    assert!(
+        dispatch_user_message(&mut app, &config, &engine.handle, command_message.clone())
+            .await
+            .is_err()
+    );
+    app.offline_mode = false;
+    dispatch_user_message(&mut app, &config, &engine.handle, command_message)
+        .await
+        .unwrap();
+    let apply = tokio::time::timeout(Duration::from_secs(3), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    manager.shutdown().await;
+    assert!(apply(&mut app, &engine.handle, &config).is_err());
+    assert!(engine.rx_op.try_recv().is_err());
+    assert!(engine.rx_steer.try_recv().is_err());
+    assert_eq!(app.input, "existing draft");
+    assert!(app.queued_messages.is_empty());
 }
 
 #[tokio::test]
@@ -14561,13 +14912,19 @@ async fn closed_dispatch_completion_mailbox_restores_message_without_stuck_dispa
 fn subagent_event_handlers_preserve_dispatch_failures_as_separate_toasts() {
     let mut app = create_test_app();
     app.hooks = crate::hooks::HookExecutor::new(
-        crate::hooks::HooksConfig {
+        codewhale_config::hooks::HooksConfig {
             enabled: true,
             hooks: vec![
-                crate::hooks::Hook::new(crate::hooks::HookEvent::SubagentSpawn, "unused"),
-                crate::hooks::Hook::new(crate::hooks::HookEvent::SubagentComplete, "unused"),
+                codewhale_config::hooks::Hook::new(
+                    codewhale_config::hooks::HookEvent::SubagentSpawn,
+                    "unused",
+                ),
+                codewhale_config::hooks::Hook::new(
+                    codewhale_config::hooks::HookEvent::SubagentComplete,
+                    "unused",
+                ),
             ],
-            ..crate::hooks::HooksConfig::default()
+            ..codewhale_config::hooks::HooksConfig::default()
         },
         app.workspace.clone(),
     );
@@ -14627,15 +14984,21 @@ printf '%s\n' '{"text":"after timeout"}'
     );
     let mut app = create_test_app();
     app.hooks = crate::hooks::HookExecutor::new(
-        crate::hooks::HooksConfig {
+        codewhale_config::hooks::HooksConfig {
             enabled: true,
             hooks: vec![
-                crate::hooks::Hook::new(crate::hooks::HookEvent::MessageSubmit, &slow)
-                    .with_timeout(1),
-                crate::hooks::Hook::new(crate::hooks::HookEvent::MessageSubmit, &replacing),
+                codewhale_config::hooks::Hook::new(
+                    codewhale_config::hooks::HookEvent::MessageSubmit,
+                    &slow,
+                )
+                .with_timeout(1),
+                codewhale_config::hooks::Hook::new(
+                    codewhale_config::hooks::HookEvent::MessageSubmit,
+                    &replacing,
+                ),
             ],
             working_dir: Some(dir.path().to_path_buf()),
-            ..crate::hooks::HooksConfig::default()
+            ..codewhale_config::hooks::HooksConfig::default()
         },
         dir.path().to_path_buf(),
     );
@@ -14729,13 +15092,16 @@ async fn dispatch_route_failure_leaves_loading_and_transcript_unchanged() {
             ..ProviderConfig::default()
         },
     );
-    let config = Config {
-        provider: Some("lm-studio".to_string()),
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_35_0 = Some("lm-studio".to_string());
+        let __cw_config_init_35_1 = Some(ProvidersConfig {
             custom,
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_35_value: Config = Config::default();
+        __cw_config_init_35_value.provider = __cw_config_init_35_0;
+        __cw_config_init_35_value.providers = __cw_config_init_35_1;
+        __cw_config_init_35_value
     };
     let mut engine = mock_engine_handle();
 
@@ -15645,7 +16011,7 @@ fn turn_liveness_keeps_max_duration_exec_shell_wait_alive_with_heartbeat() {
 fn stall_heartbeat(
     phase: crate::core::engine::turn_heartbeat::TurnPhase,
     bound: Option<Duration>,
-    stall: Option<crate::core::engine::turn_heartbeat::StallReport>,
+    stall: Option<codewhale_runtime::stall_report::StallReport>,
 ) -> crate::core::engine::turn_heartbeat::HeartbeatSnapshot {
     crate::core::engine::turn_heartbeat::HeartbeatSnapshot {
         phase,
@@ -15655,8 +16021,8 @@ fn stall_heartbeat(
     }
 }
 
-fn stall_report(phase: &str) -> crate::core::engine::turn_heartbeat::StallReport {
-    crate::core::engine::turn_heartbeat::StallReport {
+fn stall_report(phase: &str) -> codewhale_runtime::stall_report::StallReport {
+    codewhale_runtime::stall_report::StallReport {
         source: "engine",
         phase: phase.to_string(),
         detail: Some("mock / model".to_string()),
@@ -15681,8 +16047,9 @@ fn stall_records(dir: &std::path::Path) -> Vec<String> {
 #[test]
 fn stall_ui_watchdog_bound_is_decoupled_from_chunk_timeout() {
     let mut app = create_test_app();
-    app.stream_chunk_timeout_secs = crate::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS;
-    let default_chunk = Duration::from_secs(crate::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS);
+    app.stream_chunk_timeout_secs = codewhale_runtime::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS;
+    let default_chunk =
+        Duration::from_secs(codewhale_runtime::config::DEFAULT_STREAM_CHUNK_TIMEOUT_SECS);
     assert!(turn_stall_watchdog_timeout(&app) < default_chunk);
     let bound = turn_stall_watchdog_timeout(&app);
     app.stream_chunk_timeout_secs = 3600;
@@ -15779,7 +16146,8 @@ fn stall_engine_report_shows_phase_and_held_queue() {
 /// live regardless of elapsed time while they report progress.
 #[test]
 fn stall_prior_session_subagent_is_suspect_but_long_running_child_is_live() {
-    use crate::core::engine::turn_heartbeat::{TurnPhase, set_test_stall_record_dir};
+    use crate::core::engine::turn_heartbeat::TurnPhase;
+    use codewhale_runtime::stall_report::set_test_stall_record_dir;
     let dir = tempfile::tempdir().expect("tempdir");
     set_test_stall_record_dir(Some(dir.path().to_path_buf()));
 
@@ -15905,7 +16273,7 @@ fn stall_recovery_hands_held_queued_message_back_to_composer() {
 /// a stall record.
 #[tokio::test]
 async fn stall_dispatch_task_overrun_reports_and_restores_message() {
-    use crate::core::engine::turn_heartbeat::set_test_stall_record_dir;
+    use codewhale_runtime::stall_report::set_test_stall_record_dir;
     let dir = tempfile::tempdir().expect("tempdir");
     set_test_stall_record_dir(Some(dir.path().to_path_buf()));
     let mut app = create_test_app();
@@ -15995,12 +16363,14 @@ fn turn_liveness_preserves_pending_user_input_beyond_tool_timeout() {
         app.pending_user_input_prompt = Some((
             "question-1".into(),
             crate::tools::user_input::UserInputRequest {
+                require_typed_answers: false,
                 questions: Vec::new(),
             },
         ));
         app.view_stack.push(UserInputView::new(
             "question-1",
             crate::tools::user_input::UserInputRequest {
+                require_typed_answers: false,
                 questions: Vec::new(),
             },
             app.ui_locale,
@@ -16055,6 +16425,7 @@ fn turn_liveness_preserves_pending_user_input_beyond_tool_timeout() {
 
 fn install_pending_question(app: &mut App, id: &str) {
     let request = crate::tools::user_input::UserInputRequest {
+        require_typed_answers: false,
         questions: Vec::new(),
     };
     app.pending_user_input_prompt = Some((id.into(), request.clone()));
@@ -16115,6 +16486,13 @@ fn user_input_completion_preserves_newer_question_and_dispatch() {
     // Neither a previous request nor a wrapping call's different id owns it.
     observe_human_request_settlement(&mut app, &completion("input-old"));
     observe_human_request_settlement(&mut app, &completion("outer-call"));
+    observe_human_request_settlement(
+        &mut app,
+        &EngineEvent::UserInputClosed {
+            id: "input-old".into(),
+            outcome: crate::core::events::UserInputClosedOutcome::Cancelled,
+        },
+    );
     apply_user_input_submission_result(&mut app, "input-old", Ok(()));
     assert_eq!(app.turn_last_activity_at, Some(activity));
     assert_eq!(
@@ -16142,6 +16520,16 @@ fn user_input_completion_preserves_newer_question_and_dispatch() {
     assert!(app.pending_user_input_prompt.is_some());
     assert!(app.view_stack.contains_kind(ModalKind::UserInput));
     assert_eq!(app.status_toasts.len(), 1);
+    observe_human_request_settlement(
+        &mut app,
+        &EngineEvent::UserInputClosed {
+            id: "input-new".into(),
+            outcome: crate::core::events::UserInputClosedOutcome::Answered,
+        },
+    );
+    assert!(app.pending_user_input_prompt.is_none());
+    assert!(!app.view_stack.contains_kind(ModalKind::UserInput));
+    assert_eq!(app.turn_last_activity_at, Some(activity));
 }
 
 #[test]
@@ -16659,9 +17047,11 @@ fn hotbar_dispatches_bound_slot_and_ignores_empty_slot() {
     let mut app = create_test_app();
     // #3807: a fresh config has no bindings, so opt in with the default slots
     // (slot 5 = mode.agent) to exercise dispatch of a bound slot.
-    let config = Config {
-        hotbar: Some(codewhale_config::default_hotbar_bindings_toml()),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_36_0 = Some(codewhale_config::default_hotbar_bindings_toml());
+        let mut __cw_config_init_36_value: Config = Config::default();
+        __cw_config_init_36_value.hotbar = __cw_config_init_36_0;
+        __cw_config_init_36_value
     };
     app.onboarding = OnboardingState::None;
     app.mode = AppMode::Plan;
@@ -16680,9 +17070,11 @@ fn hotbar_dispatches_bound_slot_and_ignores_empty_slot() {
         "mode-changing hotbar actions should leave the app ready to redraw"
     );
 
-    let empty_config = Config {
-        hotbar: Some(Vec::new()),
-        ..Config::default()
+    let empty_config = {
+        let __cw_config_init_37_0 = Some(Vec::new());
+        let mut __cw_config_init_37_value: Config = Config::default();
+        __cw_config_init_37_value.hotbar = __cw_config_init_37_0;
+        __cw_config_init_37_value
     };
     assert_eq!(
         dispatch_hotbar_slot(&mut app, &empty_config, 1).expect("empty slot is ok"),
@@ -16694,13 +17086,15 @@ fn hotbar_dispatches_bound_slot_and_ignores_empty_slot() {
 fn hotbar_dispatches_slash_command_slot() {
     let mut app = create_test_app();
     app.onboarding = OnboardingState::None;
-    let config = Config {
-        hotbar: Some(vec![codewhale_config::HotbarBindingToml {
+    let config = {
+        let __cw_config_init_38_0 = Some(vec![codewhale_config::HotbarBindingToml {
             slot: 1,
             label: Some("mode".to_string()),
             action: "slash.mode".to_string(),
-        }]),
-        ..Config::default()
+        }]);
+        let mut __cw_config_init_38_value: Config = Config::default();
+        __cw_config_init_38_value.hotbar = __cw_config_init_38_0;
+        __cw_config_init_38_value
     };
 
     assert_eq!(
@@ -16730,13 +17124,15 @@ fn hotbar_dispatches_route_switch_slot() {
         .resolve_provider_selection_identity(provider_key)
         .expect("admitted route");
     let model = model.to_string();
-    let config = Config {
-        hotbar: Some(vec![codewhale_config::HotbarBindingToml {
+    let config = {
+        let __cw_config_init_39_0 = Some(vec![codewhale_config::HotbarBindingToml {
             slot: 1,
             label: Some(route_metadata.compact_label),
             action: route_id,
-        }]),
-        ..Config::default()
+        }]);
+        let mut __cw_config_init_39_value: Config = Config::default();
+        __cw_config_init_39_value.hotbar = __cw_config_init_39_0;
+        __cw_config_init_39_value
     };
 
     assert_eq!(
@@ -16755,13 +17151,15 @@ fn hotbar_bound_reasoning_action_updates_auto_model_preference() {
     app.auto_model = true;
     app.reasoning_effort = ReasoningEffort::Off;
     app.needs_redraw = false;
-    let config = Config {
-        hotbar: Some(vec![codewhale_config::HotbarBindingToml {
+    let config = {
+        let __cw_config_init_40_0 = Some(vec![codewhale_config::HotbarBindingToml {
             slot: 1,
             label: Some("reason".to_string()),
             action: "reasoning.cycle".to_string(),
-        }]),
-        ..Config::default()
+        }]);
+        let mut __cw_config_init_40_value: Config = Config::default();
+        __cw_config_init_40_value.hotbar = __cw_config_init_40_0;
+        __cw_config_init_40_value
     };
 
     assert!(matches!(
@@ -17426,7 +17824,7 @@ fn active_deleted_origin_mailbox_usage_does_not_accrue_or_restore_the_session() 
     app.current_session_metadata = Some(session.metadata.clone());
     let origin_scope = crate::cost_status::scope_token();
     let owner = "interactive:active-deleted-origin:origin-turn";
-    crate::cost_status::register_persistent_interactive_runtime_usage_sink_for_test(
+    crate::usage_persistence::register_persistent_interactive_runtime_usage_sink_for_test(
         owner,
         origin_scope,
         &session.metadata.id,
@@ -18731,9 +19129,11 @@ fn local_cancel_marks_late_stream_events_for_suppression() {
     ));
     assert!(suppress_engine_event_after_local_cancel(
         &EngineEvent::SessionUpdated {
+            checkpoint: None,
             session_id: "session".to_string(),
             messages: std::sync::Arc::new(Vec::new()),
             system_prompt: None,
+            instruction_assembly: None,
             model: "deepseek-v4-flash".to_string(),
             workspace: PathBuf::from("."),
         }
@@ -19759,7 +20159,7 @@ fn apply_slash_menu_selection_honors_user_argument_metadata_and_builtin_override
     )
     .expect("write argument command");
     // Workspace commands load only in a trusted workspace.
-    crate::config::save_workspace_trust(tmp.path()).expect("trust test workspace");
+    codewhale_runtime::config::save_workspace_trust(tmp.path()).expect("trust test workspace");
     let mut app = crate::tui::test_support::test_app_with_options(
         crate::tui::test_support::test_tui_options(tmp.path()),
     );
@@ -20392,7 +20792,7 @@ async fn redaction_confirmation_restores_history_before_first_local_provider_req
         "provider = \"deepseek\"\napi_key = \"synthetic-local-consent-key\"\nbase_url = \"{}\"\n[redaction]\nmodel_bound = \"disabled\"\n",
         server.uri()
     )).unwrap();
-    let config = Config::load(Some(config_path), None).unwrap();
+    let config = crate::plugins::providers::load_config(Some(config_path), None).unwrap();
     let mut app = crate::tui::test_support::test_app_with_options(TuiOptions {
         start_in_agent_mode: true,
         ..crate::tui::test_support::test_tui_options(temp.path())
@@ -21472,7 +21872,7 @@ fn trust_directory_continue_untrusted_advances_without_recording_trust() {
     assert!(!app.trust_mode);
     assert_eq!(app.onboarding, OnboardingState::Ready);
     assert!(
-        crate::config::needs_trust(&app.workspace),
+        codewhale_runtime::config::needs_trust(&app.workspace),
         "declining trust must not write a trusted marker"
     );
     let notice = app.status_message.expect("restricted-mode notice");
@@ -21755,7 +22155,7 @@ fn tool_details_pager_frames_leaf_scope_and_preserves_raw_content() {
 #[test]
 fn tool_details_pager_keeps_exact_file_change_when_inline_diffs_are_off() {
     let mut app = create_test_app();
-    app.inline_diff_mode = crate::settings::InlineDiffMode::Off;
+    app.inline_diff_mode = codewhale_runtime::settings::InlineDiffMode::Off;
     let tool_result = crate::tools::spec::ToolResult::success("structured success").with_metadata(
         serde_json::json!({
             "mutation": {
@@ -22298,7 +22698,7 @@ fn launch_submit_holds_oversized_draft_before_creating_a_session() {
     app.input = draft.clone();
     app.cursor_position = app.input.chars().count();
 
-    assert!(super::event_loop::launch_submit_held(&mut app));
+    assert!(super::event_loop::launch_submit_held(&mut app, true));
     assert_eq!(app.input, draft, "the full text stays in the composer");
     // The toast row sheds clauses to fit, so it carries only the short form;
     // the full reason (with the write error) lives in the transcript.
@@ -22333,12 +22733,18 @@ fn launch_submit_holds_oversized_draft_before_creating_a_session() {
         notes[0]
     );
     // Retrying the same held submit does not stack identical notes.
-    assert!(super::event_loop::launch_submit_held(&mut app));
+    assert!(super::event_loop::launch_submit_held(&mut app, true));
     assert_eq!(held_notes(&app).len(), 1);
 
     app.input = "hello".to_string();
     app.cursor_position = app.input.chars().count();
-    assert!(!super::event_loop::launch_submit_held(&mut app));
+    assert!(!super::event_loop::launch_submit_held(&mut app, true));
+    app.paste_burst.extend_window(Instant::now());
+    assert!(!super::event_loop::launch_submit_held(&mut app, false));
+    assert_eq!(app.input, "hello");
+    app.startup_input_unproven = true;
+    assert!(super::event_loop::launch_submit_held(&mut app, false));
+    assert_eq!(app.input, "hello");
 }
 
 #[test]
@@ -23788,9 +24194,11 @@ fn missing_named_custom_provider_resume_leaves_current_session_wholly_unchanged(
         content: "existing receipt".to_string(),
     });
     app.status_message = Some("existing status".to_string());
-    let mut config = Config {
-        provider: Some("deepseek".to_string()),
-        ..Config::default()
+    let mut config = {
+        let __cw_config_init_41_0 = Some("deepseek".to_string());
+        let mut __cw_config_init_41_value: Config = Config::default();
+        __cw_config_init_41_value.provider = __cw_config_init_41_0;
+        __cw_config_init_41_value
     };
     let mut session = saved_session_with_messages(vec![text_message("user", "replacement")]);
     session.metadata.model_provider = "lm-studio".to_string();
@@ -23912,7 +24320,7 @@ fn same_workspace_named_custom_switch_requires_engine_respawn() {
         named_custom_session_config("custom-a", "http://127.0.0.1:18181/v1", "model-a");
     config.providers.as_mut().expect("providers").custom.insert(
         "custom-b".to_string(),
-        crate::config::ProviderConfig {
+        codewhale_runtime::config::ProviderConfig {
             kind: Some("openai-compatible".to_string()),
             base_url: Some("http://127.0.0.1:18182/v1".to_string()),
             model: Some("model-b".to_string()),
@@ -24015,10 +24423,13 @@ fn session_load_resolves_an_idless_custom_record_to_the_literal_table() {
 
 #[test]
 fn session_load_resumes_an_exact_custom_record_on_the_migrated_table() {
-    let mut config = Config {
-        provider: Some("custom".to_string()),
-        default_text_model: Some("legacy-root-model".to_string()),
-        ..Config::default()
+    let mut config = {
+        let __cw_config_init_42_0 = Some("custom".to_string());
+        let __cw_config_init_42_1 = Some("legacy-root-model".to_string());
+        let mut __cw_config_init_42_value: Config = Config::default();
+        __cw_config_init_42_value.provider = __cw_config_init_42_0;
+        __cw_config_init_42_value.default_text_model = __cw_config_init_42_1;
+        __cw_config_init_42_value
     }
     .with_legacy_root(None, Some("http://127.0.0.1:18181/v1".to_string()));
     let mut app = create_test_app();
@@ -24233,10 +24644,10 @@ fn session_restore_rebuilds_fresh_codex_route_limits() {
     let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &root);
     let mut app = create_test_app();
     let mut config = Config::default();
-    crate::oauth::install_test_chatgpt_registration(&mut config).unwrap();
-    crate::codex_model_cache::install_test_chatgpt_roster_with_metadata(
+    codewhale_runtime::oauth::install_test_chatgpt_registration(&mut config).unwrap();
+    codewhale_runtime::codex_model_roster::install_test_chatgpt_roster_with_metadata(
         &config,
-        vec![crate::codex_model_cache::CodexModelMetadata {
+        vec![codewhale_runtime::codex_model_roster::CodexModelMetadata {
             id: codewhale_config::descriptors::defaults::DEFAULT_OPENAI_CODEX_MODEL.into(),
             display_name: None,
             context_window: Some(272_000),
@@ -24401,7 +24812,7 @@ fn auto_route_receipt_survives_session_snapshot_and_restore() {
     assert_eq!(saved.receipt, receipt);
     assert_eq!(
         saved.effective_reasoning_effort,
-        Some(crate::work_graph::ReasoningEffortTier::High)
+        Some(codewhale_models::reasoning_effort_tier::ReasoningEffortTier::High)
     );
 
     let mut restored_app = create_test_app();
@@ -24448,10 +24859,14 @@ fn apply_loaded_session_restores_saved_mode() {
 #[test]
 fn app_new_restores_saved_model_and_reasoning_effort() {
     let _guard = ConfigPathEnvGuard::new();
-    let settings = crate::settings::Settings {
-        default_model: Some("deepseek-v4-pro".to_string()),
-        reasoning_effort: Some("high".to_string()),
-        ..Default::default()
+    let settings = {
+        let __cw_config_init_43_0 = Some("deepseek-v4-pro".to_string());
+        let __cw_config_init_43_1 = Some("high".to_string());
+        let mut __cw_config_init_43_value: codewhale_runtime::settings::Settings =
+            Default::default();
+        __cw_config_init_43_value.default_model = __cw_config_init_43_0;
+        __cw_config_init_43_value.reasoning_effort = __cw_config_init_43_1;
+        __cw_config_init_43_value
     };
     settings.save().expect("save settings");
 
@@ -24461,9 +24876,11 @@ fn app_new_restores_saved_model_and_reasoning_effort() {
         skip_onboarding: false,
         ..crate::tui::test_support::test_tui_options(PathBuf::from("."))
     };
-    let config = Config {
-        reasoning_effort: Some("max".to_string()),
-        ..Default::default()
+    let config = {
+        let __cw_config_init_44_0 = Some("max".to_string());
+        let mut __cw_config_init_44_value: Config = Default::default();
+        __cw_config_init_44_value.reasoning_effort = __cw_config_init_44_0;
+        __cw_config_init_44_value
     };
 
     let app = App::new(options, &config);
@@ -24476,10 +24893,14 @@ fn app_new_restores_saved_model_and_reasoning_effort() {
 #[test]
 fn app_new_restores_saved_reasoning_effort_for_auto_model() {
     let _guard = ConfigPathEnvGuard::new();
-    let settings = crate::settings::Settings {
-        default_model: Some("auto".to_string()),
-        reasoning_effort: Some("low".to_string()),
-        ..Default::default()
+    let settings = {
+        let __cw_config_init_45_0 = Some("auto".to_string());
+        let __cw_config_init_45_1 = Some("low".to_string());
+        let mut __cw_config_init_45_value: codewhale_runtime::settings::Settings =
+            Default::default();
+        __cw_config_init_45_value.default_model = __cw_config_init_45_0;
+        __cw_config_init_45_value.reasoning_effort = __cw_config_init_45_1;
+        __cw_config_init_45_value
     };
     settings.save().expect("save settings");
 
@@ -24501,10 +24922,14 @@ fn app_new_restores_saved_reasoning_effort_for_auto_model() {
 #[test]
 fn app_new_auto_model_preserves_explicit_config_reasoning() {
     let _guard = ConfigPathEnvGuard::new();
-    let settings = crate::settings::Settings {
-        default_model: Some("auto".to_string()),
-        reasoning_effort: None,
-        ..Default::default()
+    let settings = {
+        let __cw_config_init_46_0 = Some("auto".to_string());
+        let __cw_config_init_46_1 = None;
+        let mut __cw_config_init_46_value: codewhale_runtime::settings::Settings =
+            Default::default();
+        __cw_config_init_46_value.default_model = __cw_config_init_46_0;
+        __cw_config_init_46_value.reasoning_effort = __cw_config_init_46_1;
+        __cw_config_init_46_value
     };
     settings.save().expect("save settings");
 
@@ -24514,9 +24939,11 @@ fn app_new_auto_model_preserves_explicit_config_reasoning() {
         skip_onboarding: false,
         ..crate::tui::test_support::test_tui_options(PathBuf::from("."))
     };
-    let config = Config {
-        reasoning_effort: Some("medium".to_string()),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_47_0 = Some("medium".to_string());
+        let mut __cw_config_init_47_value: Config = Config::default();
+        __cw_config_init_47_value.reasoning_effort = __cw_config_init_47_0;
+        __cw_config_init_47_value
     };
 
     let app = App::new(options, &config);
@@ -24532,10 +24959,14 @@ fn app_new_auto_model_preserves_explicit_config_reasoning() {
 #[test]
 fn app_new_auto_model_without_saved_reasoning_keeps_auto_default() {
     let _guard = ConfigPathEnvGuard::new();
-    let settings = crate::settings::Settings {
-        default_model: Some("auto".to_string()),
-        reasoning_effort: None,
-        ..Default::default()
+    let settings = {
+        let __cw_config_init_48_0 = Some("auto".to_string());
+        let __cw_config_init_48_1 = None;
+        let mut __cw_config_init_48_value: codewhale_runtime::settings::Settings =
+            Default::default();
+        __cw_config_init_48_value.default_model = __cw_config_init_48_0;
+        __cw_config_init_48_value.reasoning_effort = __cw_config_init_48_1;
+        __cw_config_init_48_value
     };
     settings.save().expect("save settings");
 
@@ -24556,10 +24987,14 @@ fn app_new_auto_model_without_saved_reasoning_keeps_auto_default() {
 #[test]
 fn app_new_auto_model_ignores_reasoning_inferred_from_legacy_alias() {
     let _guard = ConfigPathEnvGuard::new();
-    let settings = crate::settings::Settings {
-        default_model: Some("auto".to_string()),
-        reasoning_effort: None,
-        ..Default::default()
+    let settings = {
+        let __cw_config_init_49_0 = Some("auto".to_string());
+        let __cw_config_init_49_1 = None;
+        let mut __cw_config_init_49_value: codewhale_runtime::settings::Settings =
+            Default::default();
+        __cw_config_init_49_value.default_model = __cw_config_init_49_0;
+        __cw_config_init_49_value.reasoning_effort = __cw_config_init_49_1;
+        __cw_config_init_49_value
     };
     settings.save().expect("save settings");
 
@@ -24569,11 +25004,16 @@ fn app_new_auto_model_ignores_reasoning_inferred_from_legacy_alias() {
         skip_onboarding: false,
         ..crate::tui::test_support::test_tui_options(PathBuf::from("."))
     };
-    let config = Config {
-        reasoning_effort: Some("high".to_string()),
-        reasoning_effort_inferred_from_legacy_alias: true,
-        migrated_deepseek_model_alias: Some("deepseek-reasoner".to_string()),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_50_0 = Some("high".to_string());
+        let __cw_config_init_50_1 = true;
+        let __cw_config_init_50_2 = Some("deepseek-reasoner".to_string());
+        let mut __cw_config_init_50_value: Config = Config::default();
+        __cw_config_init_50_value.reasoning_effort = __cw_config_init_50_0;
+        __cw_config_init_50_value.reasoning_effort_inferred_from_legacy_alias =
+            __cw_config_init_50_1;
+        __cw_config_init_50_value.migrated_deepseek_model_alias = __cw_config_init_50_2;
+        __cw_config_init_50_value
     };
 
     let app = App::new(options, &config);
@@ -24586,16 +25026,14 @@ fn app_new_auto_model_ignores_reasoning_inferred_from_legacy_alias() {
 #[tokio::test]
 async fn model_picker_apply_is_session_local_until_startup_default_is_requested() {
     let _guard = SettingsHomeGuard::new();
-    let global_config = crate::config::home_config_path().expect("global config path");
+    let global_config = codewhale_runtime::config::home_config_path().expect("global config path");
     let startup_before = std::fs::read(&global_config).ok();
     let mut app = create_test_app();
     app.set_model_selection("auto".to_string());
     app.reasoning_effort = ReasoningEffort::Auto;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        ..Default::default()
-    }
-    .with_legacy_root(Some("test-key".to_string()), None);
+    let mut config =
+        <Config as Default>::default().with_legacy_root(Some("test-key".to_string()), None);
 
     let selected_identity = app.admitted_provider_identity().unwrap().clone();
     apply_model_picker_choice(
@@ -24611,7 +25049,7 @@ async fn model_picker_apply_is_session_local_until_startup_default_is_requested(
     )
     .await;
 
-    let settings = crate::settings::Settings::load().expect("load settings");
+    let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
     assert_eq!(settings.default_model.as_deref(), None);
     assert_eq!(
         settings
@@ -24653,9 +25091,9 @@ async fn model_picker_apply_is_session_local_until_startup_default_is_requested(
 #[tokio::test]
 async fn model_picker_startup_default_overrides_configured_xai_route_after_restart() {
     let _guard = SettingsHomeGuard::new();
-    let xai_config = Config {
-        provider: Some("xai".to_string()),
-        providers: Some(ProvidersConfig {
+    let xai_config = {
+        let __cw_config_init_52_0 = Some("xai".to_string());
+        let __cw_config_init_52_1 = Some(ProvidersConfig {
             xai: ProviderConfig {
                 api_key: Some("xai-test-key".to_string()),
                 model: Some("grok-4.5".to_string()),
@@ -24667,10 +25105,13 @@ async fn model_picker_startup_default_overrides_configured_xai_route_after_resta
                 ..ProviderConfig::default()
             },
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_52_value: Config = Config::default();
+        __cw_config_init_52_value.provider = __cw_config_init_52_0;
+        __cw_config_init_52_value.providers = __cw_config_init_52_1;
+        __cw_config_init_52_value
     };
-    let config_path = crate::config::home_config_path().expect("global config path");
+    let config_path = codewhale_runtime::config::home_config_path().expect("global config path");
     std::fs::create_dir_all(config_path.parent().expect("config home")).expect("config home");
     std::fs::write(
         &config_path,
@@ -24724,7 +25165,8 @@ async fn model_picker_startup_default_overrides_configured_xai_route_after_resta
         Some("grok-4.5")
     );
 
-    let restart_config = Config::load(Some(config_path), None).expect("reload saved route");
+    let restart_config = crate::plugins::providers::load_config(Some(config_path), None)
+        .expect("reload saved route");
     let restart_options = TuiOptions {
         model: restart_config.default_model(),
         start_in_agent_mode: true,
@@ -24747,10 +25189,8 @@ async fn model_picker_auto_commits_visible_implicit_fixed_model_thinking() {
     app.reasoning_effort = ReasoningEffort::Max;
     app.reasoning_effort_preference = None;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        ..Default::default()
-    }
-    .with_legacy_root(Some("test-key".to_string()), None);
+    let mut config =
+        <Config as Default>::default().with_legacy_root(Some("test-key".to_string()), None);
 
     let selected_identity = app.admitted_provider_identity().unwrap().clone();
     apply_model_picker_choice(
@@ -24772,7 +25212,7 @@ async fn model_picker_auto_commits_visible_implicit_fixed_model_thinking() {
     // Session-local: the effort tier is not written to settings; the
     // route-save prompt owns persistence.
     assert_eq!(
-        crate::settings::Settings::load()
+        codewhale_runtime::settings::Settings::load()
             .expect("load settings")
             .reasoning_effort
             .as_deref(),
@@ -24790,10 +25230,8 @@ async fn model_picker_auto_restores_raw_preference_after_fixed_normalization() {
     app.reasoning_effort = ReasoningEffort::High;
     app.reasoning_effort_preference = Some(ReasoningEffort::Low);
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        ..Default::default()
-    }
-    .with_legacy_root(Some("test-key".to_string()), None);
+    let mut config =
+        <Config as Default>::default().with_legacy_root(Some("test-key".to_string()), None);
 
     let selected_identity = app.admitted_provider_identity().unwrap().clone();
     apply_model_picker_choice(
@@ -24814,7 +25252,7 @@ async fn model_picker_auto_restores_raw_preference_after_fixed_normalization() {
     assert_eq!(app.reasoning_effort_preference, Some(ReasoningEffort::Low));
     // Session-local: nothing reached settings.
     assert_eq!(
-        crate::settings::Settings::load()
+        codewhale_runtime::settings::Settings::load()
             .expect("load settings")
             .reasoning_effort
             .as_deref(),
@@ -24843,7 +25281,7 @@ async fn auto_model_effort_picker_persists_unresolved_tier_verbatim() {
     assert_eq!(app.reasoning_effort, ReasoningEffort::Low);
     assert_eq!(app.reasoning_effort_preference, Some(ReasoningEffort::Low));
     assert_eq!(
-        crate::settings::Settings::load()
+        codewhale_runtime::settings::Settings::load()
             .expect("load settings")
             .reasoning_effort
             .as_deref(),
@@ -24858,16 +25296,14 @@ async fn auto_model_effort_picker_persists_unresolved_tier_verbatim() {
 #[tokio::test]
 async fn reselecting_live_model_and_thinking_is_session_local() {
     let _guard = SettingsHomeGuard::new();
-    let global_config = crate::config::home_config_path().expect("global config path");
+    let global_config = codewhale_runtime::config::home_config_path().expect("global config path");
     let startup_before = std::fs::read(&global_config).ok();
     let mut app = create_test_app();
     app.set_model_selection("deepseek-v4-pro".to_string());
     app.reasoning_effort = ReasoningEffort::High;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        ..Default::default()
-    }
-    .with_legacy_root(Some("test-key".to_string()), None);
+    let mut config =
+        <Config as Default>::default().with_legacy_root(Some("test-key".to_string()), None);
     assert!(
         codewhale_config::SetupState::load()
             .ok()
@@ -24891,7 +25327,7 @@ async fn reselecting_live_model_and_thinking_is_session_local() {
     .await;
 
     // Reselecting the live pair changes no startup setting.
-    let settings = crate::settings::Settings::load().expect("load settings");
+    let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
     assert_eq!(settings.default_model.as_deref(), None);
     assert_eq!(
         settings
@@ -24937,7 +25373,7 @@ async fn reselecting_live_thinking_only_persists_startup_default() {
     .await;
 
     assert_eq!(
-        crate::settings::Settings::load()
+        codewhale_runtime::settings::Settings::load()
             .expect("load settings")
             .reasoning_effort
             .as_deref(),
@@ -24976,13 +25412,16 @@ async fn model_picker_switches_between_exact_named_custom_routes() {
     }
     // Opening custom B's model picker retargets only Config; App/engine still
     // own A until the operator applies a model.
-    let mut config = Config {
-        provider: Some("custom-b".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_56_0 = Some("custom-b".to_string());
+        let __cw_config_init_56_1 = Some(ProvidersConfig {
             custom,
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_56_value: Config = Default::default();
+        __cw_config_init_56_value.provider = __cw_config_init_56_0;
+        __cw_config_init_56_value.providers = __cw_config_init_56_1;
+        __cw_config_init_56_value
     };
     let mut engine = mock_engine_handle();
 
@@ -25032,13 +25471,16 @@ async fn model_picker_auto_switches_exact_named_custom_route_transactionally() {
             },
         );
     }
-    let mut config = Config {
-        provider: Some("custom-b".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_57_0 = Some("custom-b".to_string());
+        let __cw_config_init_57_1 = Some(ProvidersConfig {
             custom,
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_57_value: Config = Default::default();
+        __cw_config_init_57_value.provider = __cw_config_init_57_0;
+        __cw_config_init_57_value.providers = __cw_config_init_57_1;
+        __cw_config_init_57_value
     };
     let mut engine = mock_engine_handle();
 
@@ -25065,7 +25507,7 @@ async fn model_picker_auto_switches_exact_named_custom_route_transactionally() {
     assert_eq!(config.active_route_base_url(), "http://127.0.0.1:18182/v1");
     // Session-local: the effort tier is not written to settings.
     assert_eq!(
-        crate::settings::Settings::load()
+        codewhale_runtime::settings::Settings::load()
             .expect("load settings")
             .reasoning_effort
             .as_deref(),
@@ -25116,10 +25558,8 @@ async fn model_picker_startup_default_reports_settings_write_failure() {
     app.set_model_selection("auto".to_string());
     app.reasoning_effort = ReasoningEffort::Auto;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        ..Default::default()
-    }
-    .with_legacy_root(Some("test-key".to_string()), None);
+    let mut config =
+        <Config as Default>::default().with_legacy_root(Some("test-key".to_string()), None);
 
     let selected_identity = app.admitted_provider_identity().unwrap().clone();
     apply_model_picker_choice(
@@ -25751,10 +26191,13 @@ async fn composer_send_anchors_new_message_at_tail() {
     let mut app = create_test_app();
     app.set_provider_identity(ProviderKind::Zai, "zai");
     app.set_model_selection("auto".to_string());
-    let config = Config {
-        provider: Some("zai".to_string()),
-        default_text_model: Some("auto".to_string()),
-        ..Default::default()
+    let config = {
+        let __cw_config_init_59_0 = Some("zai".to_string());
+        let __cw_config_init_59_1 = Some("auto".to_string());
+        let mut __cw_config_init_59_value: Config = Default::default();
+        __cw_config_init_59_value.provider = __cw_config_init_59_0;
+        __cw_config_init_59_value.default_text_model = __cw_config_init_59_1;
+        __cw_config_init_59_value
     };
     let engine = mock_engine_handle();
 
@@ -26205,7 +26648,7 @@ fn turn_inspector_timeline_numbers_semantic_entries_and_checkpoint_actions() {
     let workspace = tmp.path().join("workspace");
     std::fs::create_dir_all(&workspace).expect("workspace");
     std::fs::write(workspace.join("src.rs"), "fn main() {}\n").expect("source");
-    let repo = crate::snapshot::SnapshotRepo::open_or_init(&workspace).expect("snapshot repo");
+    let repo = codewhale_snapshot::SnapshotRepo::open_or_init(&workspace).expect("snapshot repo");
     repo.snapshot("pre-turn:12: Fix timeline")
         .expect("pre-turn snapshot");
 
@@ -26738,7 +27181,7 @@ fn approval_prompt_uses_event_input_after_message_complete_drain() {
         "approval-key",
         "",
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
 
@@ -26773,7 +27216,7 @@ fn approval_prompt_uses_configured_default_selection() {
         "approval-key",
         "",
         None,
-        crate::config::ApprovalDefaultSelection::AllowOnce,
+        codewhale_runtime::config::ApprovalDefaultSelection::AllowOnce,
         None,
     );
 
@@ -26810,7 +27253,7 @@ fn patch_approval_modal_does_not_displace_the_active_file_receipt() {
         "approval-key",
         "",
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
 
@@ -27221,16 +27664,19 @@ fn recoverable_engine_error_does_not_enter_offline_mode() {
 fn recoverable_provider_error_advances_fallback_chain() {
     use crate::error_taxonomy::{ErrorCategory, ErrorEnvelope, ErrorSeverity};
 
-    let config = Config {
-        fallback_providers: vec![ProviderKind::Openrouter],
-        providers: Some(ProvidersConfig {
+    let config = {
+        let __cw_config_init_60_0 = vec![ProviderKind::Openrouter];
+        let __cw_config_init_60_1 = Some(ProvidersConfig {
             openrouter: ProviderConfig {
                 api_key: Some("captured-fixture-key".into()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_60_value: Config = Default::default();
+        __cw_config_init_60_value.fallback_providers = __cw_config_init_60_0;
+        __cw_config_init_60_value.providers = __cw_config_init_60_1;
+        __cw_config_init_60_value
     };
     let mut app = App::new(create_test_options(), &config);
     app.ui_locale = codewhale_localization::Locale::Fr;
@@ -27322,13 +27768,17 @@ fn auth_error_does_not_trigger_provider_fallback() {
 fn fallback_switch_status_shows_one_based_position_and_reason() {
     use crate::error_taxonomy::{ErrorCategory, ErrorEnvelope, ErrorSeverity};
 
-    let mut providers = crate::config::ProvidersConfig::default();
+    let mut providers = codewhale_runtime::config::ProvidersConfig::default();
     providers.openrouter.api_key = Some("fixture-fallback-key".to_string());
-    let config = crate::config::Config {
-        provider: Some("deepseek".to_string()),
-        fallback_providers: vec![ProviderKind::Openrouter],
-        providers: Some(providers),
-        ..Default::default()
+    let config = {
+        let __cw_config_init_61_0 = Some("deepseek".to_string());
+        let __cw_config_init_61_1 = vec![ProviderKind::Openrouter];
+        let __cw_config_init_61_2 = Some(providers);
+        let mut __cw_config_init_61_value: codewhale_runtime::config::Config = Default::default();
+        __cw_config_init_61_value.provider = __cw_config_init_61_0;
+        __cw_config_init_61_value.fallback_providers = __cw_config_init_61_1;
+        __cw_config_init_61_value.providers = __cw_config_init_61_2;
+        __cw_config_init_61_value
     };
     let mut app = App::new(
         crate::tui::test_support::test_tui_options(std::path::PathBuf::from(".")),
@@ -27368,10 +27818,10 @@ fn fallback_switch_status_shows_one_based_position_and_reason() {
 
 #[tokio::test]
 async fn failed_fallback_restores_exact_literal_custom_identity_without_root_crossover() {
-    let mut config = Config {
-        provider: Some("custom".to_string()),
-        default_text_model: Some("legacy-root-model".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_62_0 = Some("custom".to_string());
+        let __cw_config_init_62_1 = Some("legacy-root-model".to_string());
+        let __cw_config_init_62_2 = Some(ProvidersConfig {
             custom: HashMap::from([(
                 "custom".to_string(),
                 ProviderConfig {
@@ -27383,20 +27833,18 @@ async fn failed_fallback_restores_exact_literal_custom_identity_without_root_cro
                 },
             )]),
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_62_value: Config = Default::default();
+        __cw_config_init_62_value.provider = __cw_config_init_62_0;
+        __cw_config_init_62_value.default_text_model = __cw_config_init_62_1;
+        __cw_config_init_62_value.providers = __cw_config_init_62_2;
+        __cw_config_init_62_value
     }
     .with_legacy_root(
         Some("legacy-root-key".to_string()),
         Some("http://127.0.0.1:18180/v1".to_string()),
     );
-    let previous_identity = ProviderIdentity {
-        provider: ProviderKind::Custom,
-        key: "custom".into(),
-        exact_id: Some("custom".into()),
-        migrated_legacy_ollama_cloud_route: false,
-        legacy_root_custom_generation: None,
-    };
+    let previous_identity = ProviderIdentity::test_exact_identity(ProviderKind::Custom, "custom");
     let mut app = create_test_app();
     app.set_provider_identity_record(previous_identity.clone());
     app.set_model_selection("literal-table-model".to_string());
@@ -27454,10 +27902,10 @@ async fn provider_switch_auth_error_restores_previous_provider_and_model() {
     app.api_key_env_only = true;
     app.active_context_window_override = Some(1_000_000);
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("deepseek".to_string()),
-        default_text_model: Some("deepseek-v4-pro".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_64_0 = Some("deepseek".to_string());
+        let __cw_config_init_64_1 = Some("deepseek-v4-pro".to_string());
+        let __cw_config_init_64_2 = Some(ProvidersConfig {
             deepseek: ProviderConfig {
                 api_key: Some("deepseek-key".to_string()),
                 context_window: Some(1_000_000),
@@ -27469,8 +27917,12 @@ async fn provider_switch_auth_error_restores_previous_provider_and_model() {
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_64_value: Config = Default::default();
+        __cw_config_init_64_value.provider = __cw_config_init_64_0;
+        __cw_config_init_64_value.default_text_model = __cw_config_init_64_1;
+        __cw_config_init_64_value.providers = __cw_config_init_64_2;
+        __cw_config_init_64_value
     }
     .with_legacy_root(Some("deepseek-key".to_string()), None);
 
@@ -27512,7 +27964,7 @@ async fn provider_switch_auth_error_restores_previous_provider_and_model() {
     );
     // The switch and its rollback wrote nothing: settings are untouched and
     // no pending save decision survives the rollback.
-    let settings = crate::settings::Settings::load().expect("load settings");
+    let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
     assert_eq!(settings.default_provider.as_deref(), None);
     assert!(
         app.pending_route_save.is_none(),
@@ -27564,10 +28016,10 @@ async fn provider_switch_rollback_corrects_setup_receipt_when_persistence_fails(
     app.onboarding_needs_api_key = false;
     app.api_key_env_only = true;
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("deepseek".to_string()),
-        default_text_model: Some("deepseek-v4-pro".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_65_0 = Some("deepseek".to_string());
+        let __cw_config_init_65_1 = Some("deepseek-v4-pro".to_string());
+        let __cw_config_init_65_2 = Some(ProvidersConfig {
             deepseek: ProviderConfig {
                 api_key: Some("deepseek-key".to_string()),
                 ..Default::default()
@@ -27577,8 +28029,12 @@ async fn provider_switch_rollback_corrects_setup_receipt_when_persistence_fails(
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_65_value: Config = Default::default();
+        __cw_config_init_65_value.provider = __cw_config_init_65_0;
+        __cw_config_init_65_value.default_text_model = __cw_config_init_65_1;
+        __cw_config_init_65_value.providers = __cw_config_init_65_2;
+        __cw_config_init_65_value
     }
     .with_legacy_root(Some("deepseek-key".to_string()), None);
 
@@ -28004,6 +28460,7 @@ async fn stale_parent_approval_is_resolved_unavailable_not_dropped() {
     let question = EngineEvent::UserInputRequired {
         id: "stale-question".to_string(),
         request: crate::tools::user_input::UserInputRequest {
+            require_typed_answers: false,
             questions: Vec::new(),
         },
     };
@@ -28060,7 +28517,7 @@ async fn esc_on_child_card_keeps_badge_and_does_not_cancel_turn() {
         !crate::tui::pending_requests::repush_for_agent(
             &mut app,
             "agent_a",
-            crate::config::ApprovalDefaultSelection::Deny,
+            codewhale_runtime::config::ApprovalDefaultSelection::Deny,
             None,
         ),
         "a card already in the stack is not duplicated"
@@ -28148,7 +28605,7 @@ fn typeahead_before_card_does_not_answer() {
         "k",
         "g",
         None,
-        crate::config::ApprovalDefaultSelection::AllowOnce,
+        codewhale_runtime::config::ApprovalDefaultSelection::AllowOnce,
         None,
     );
     assert!(app.view_stack.key_predates_top_approval(typed_before));
@@ -28180,7 +28637,7 @@ fn stale_keys_cannot_answer_a_raised_or_revealed_elevation() {
         "k",
         "g",
         None,
-        crate::config::ApprovalDefaultSelection::AllowOnce,
+        codewhale_runtime::config::ApprovalDefaultSelection::AllowOnce,
         None,
     );
     let queued_enter = Instant::now();
@@ -28220,7 +28677,7 @@ fn second_quick_y_does_not_answer_the_card_it_reveals() {
             "k",
             "g",
             None,
-            crate::config::ApprovalDefaultSelection::Deny,
+            codewhale_runtime::config::ApprovalDefaultSelection::Deny,
             None,
         );
     }
@@ -28446,7 +28903,7 @@ async fn web_decision_dismisses_buried_child_card() {
         "k",
         "",
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
     // Record the shared gate before the fixture attaches, so the test does
@@ -28587,9 +29044,11 @@ async fn keyless_engine_error_stays_visible_after_a_config_ack() {
     // endpoint's credential-binding error, not DeepSeek's missing-key help.
     // The isolated home and cleared key sources must reject credentials
     // before constructing the Engine or sending a turn.
-    let config = Config {
-        provider: Some("deepseek".to_string()),
-        ..Config::default()
+    let config = {
+        let __cw_config_init_66_0 = Some("deepseek".to_string());
+        let mut __cw_config_init_66_value: Config = Config::default();
+        __cw_config_init_66_value.provider = __cw_config_init_66_0;
+        __cw_config_init_66_value
     }
     .with_legacy_root(Some(String::new()), None);
     let missing_key = config
@@ -28870,7 +29329,7 @@ fn merge_pending_steers_keeps_first_skill_instruction_only() {
 fn restored_queued_message_crosses_bounded_message_submit_serialization() {
     let app = create_test_app();
     let original = "restored 用户 \"quoted\"\n".repeat(8_000);
-    let persisted = queued_ui_to_session(&QueuedMessage::new(original.clone(), None));
+    let persisted = queued_ui_to_session(&QueuedMessage::new(original.clone(), None)).unwrap();
     let restored = queued_session_to_ui(persisted);
     let payload = crate::hooks::message_submit_payload(&app.base_hook_context(), &restored.display);
     let encoded = serde_json::to_vec(&payload).expect("serialize restored payload");
@@ -28989,18 +29448,18 @@ fn build_pending_input_preview_includes_current_context_chips() {
 
 #[test]
 fn default_footer_excludes_provider_specific_diagnostic_chips() {
-    let items = crate::config::StatusItem::default_footer();
+    let items = codewhale_runtime::config::StatusItem::default_footer();
 
     assert!(
-        !items.contains(&crate::config::StatusItem::Balance),
+        !items.contains(&codewhale_runtime::config::StatusItem::Balance),
         "balance is an opt-in prepaid chip and should not crowd the default footer"
     );
     assert!(
-        items.contains(&crate::config::StatusItem::Cache),
+        items.contains(&codewhale_runtime::config::StatusItem::Cache),
         "default footer should still include provider-reported cache hit rate"
     );
     assert!(
-        items.contains(&crate::config::StatusItem::ContextPercent),
+        items.contains(&codewhale_runtime::config::StatusItem::ContextPercent),
         "the context reading is on by default: it is the row's always-on signal (#5950)"
     );
 }
@@ -29011,18 +29470,19 @@ fn default_footer_excludes_provider_specific_diagnostic_chips() {
 fn should_fetch_provider_balance_requires_balance_status_item() {
     let mut app = create_test_app();
     app.api_provider = ProviderKind::Deepseek;
-    app.status_items = crate::config::StatusItem::default_footer();
+    app.status_items = codewhale_runtime::config::StatusItem::default_footer();
 
     assert!(!should_fetch_provider_balance(&app));
 
-    app.status_items.push(crate::config::StatusItem::Balance);
+    app.status_items
+        .push(codewhale_runtime::config::StatusItem::Balance);
     assert!(should_fetch_provider_balance(&app));
 }
 
 #[test]
 fn should_fetch_provider_balance_covers_prepaid_providers() {
     let mut app = create_test_app();
-    app.status_items = vec![crate::config::StatusItem::Balance];
+    app.status_items = vec![codewhale_runtime::config::StatusItem::Balance];
 
     app.api_provider = ProviderKind::Ollama;
     assert!(!should_fetch_provider_balance(&app));
@@ -29523,12 +29983,14 @@ fn composer_arrows_scroll_defaults_false_with_mouse_capture() {
 
 #[test]
 fn composer_arrows_scroll_config_overrides_default() {
-    let config = Config {
-        tui: Some(crate::config::TuiConfig {
+    let config = {
+        let __cw_config_init_67_0 = Some(codewhale_runtime::config::TuiConfig {
             composer_arrows_scroll: Some(false),
             ..Default::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_67_value: Config = Config::default();
+        __cw_config_init_67_value.tui = __cw_config_init_67_0;
+        __cw_config_init_67_value
     };
     // Even with mouse_capture off, explicit config=false wins.
     let options = TuiOptions {
@@ -29645,14 +30107,14 @@ fn end_at_newline_stays_at_line_end() {
 
 #[test]
 fn notification_settings_tui_always_keeps_configured_method_no_threshold() {
-    let config = Config {
-        tui: Some(crate::config::TuiConfig {
+    let config = {
+        let __cw_config_init_68_0 = Some(codewhale_runtime::config::TuiConfig {
             notification_condition: Some(
                 codewhale_config::notifications::NotificationCondition::Always,
             ),
             ..Default::default()
-        }),
-        notifications: Some(codewhale_config::notifications::NotificationsConfig {
+        });
+        let __cw_config_init_68_1 = Some(codewhale_config::notifications::NotificationsConfig {
             method: codewhale_config::notifications::NotificationMethod::Bel,
             threshold_secs: 120,
             completion_sound: codewhale_config::notifications::CompletionSound::Beep,
@@ -29665,37 +30127,42 @@ fn notification_settings_tui_always_keeps_configured_method_no_threshold() {
             events: codewhale_config::notifications::NotificationEventsConfig::default(),
             sound: None,
             condition: None,
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_68_value: Config = Config::default();
+        __cw_config_init_68_value.tui = __cw_config_init_68_0;
+        __cw_config_init_68_value.notifications = __cw_config_init_68_1;
+        __cw_config_init_68_value
     };
 
     let (method, threshold, include_summary) =
-        crate::notify::settings_projection(&config.notifications_config())
+        codewhale_notify::settings_projection(&config.notifications_config())
             .expect("notification should be enabled");
-    assert_eq!(method, crate::notify::Method::Bel);
+    assert_eq!(method, codewhale_notify::Method::Bel);
     assert_eq!(threshold, Duration::ZERO);
     assert!(include_summary);
 }
 
 #[test]
 fn notification_settings_tui_never_disables_notifications() {
-    let config = Config {
-        tui: Some(crate::config::TuiConfig {
+    let config = {
+        let __cw_config_init_69_0 = Some(codewhale_runtime::config::TuiConfig {
             notification_condition: Some(
                 codewhale_config::notifications::NotificationCondition::Never,
             ),
             ..Default::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_69_value: Config = Config::default();
+        __cw_config_init_69_value.tui = __cw_config_init_69_0;
+        __cw_config_init_69_value
     };
 
-    assert!(crate::notify::settings_projection(&config.notifications_config()).is_none());
+    assert!(codewhale_notify::settings_projection(&config.notifications_config()).is_none());
 }
 
 #[test]
 fn notification_settings_no_tui_override_uses_notifications_block() {
-    let config = Config {
-        notifications: Some(codewhale_config::notifications::NotificationsConfig {
+    let config = {
+        let __cw_config_init_70_0 = Some(codewhale_config::notifications::NotificationsConfig {
             method: codewhale_config::notifications::NotificationMethod::Osc9,
             threshold_secs: 45,
             completion_sound: codewhale_config::notifications::CompletionSound::Beep,
@@ -29708,14 +30175,16 @@ fn notification_settings_no_tui_override_uses_notifications_block() {
             events: codewhale_config::notifications::NotificationEventsConfig::default(),
             sound: None,
             condition: None,
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_70_value: Config = Config::default();
+        __cw_config_init_70_value.notifications = __cw_config_init_70_0;
+        __cw_config_init_70_value
     };
 
     let (method, threshold, include_summary) =
-        crate::notify::settings_projection(&config.notifications_config())
+        codewhale_notify::settings_projection(&config.notifications_config())
             .expect("notification should be enabled");
-    assert_eq!(method, crate::notify::Method::Osc9);
+    assert_eq!(method, codewhale_notify::Method::Osc9);
     assert_eq!(threshold, Duration::from_secs(45));
     assert!(!include_summary);
 }
@@ -29811,7 +30280,7 @@ fn completed_turn_notification_truncates_long_text() {
     // so the bound the type promises is the bound the OS receives.
     assert_eq!(
         preview.chars().count(),
-        crate::notify::payload::PREVIEW_MAX_CHARS
+        codewhale_notify::payload::PREVIEW_MAX_CHARS
     );
 }
 
@@ -30334,7 +30803,7 @@ mod work_sidebar_projection_tests {
 
         // The runtime helper should step back to the start of the char
         // and append the ellipsis without panicking.
-        let truncated = crate::utils::truncate_with_ellipsis(&summary, 60, "…");
+        let truncated = codewhale_util::utils::truncate_with_ellipsis(&summary, 60, "…");
         assert_eq!(truncated, format!("{prefix}…"));
     }
 
@@ -30953,7 +31422,7 @@ fn queued_terminal_events_keep_receipt_gap_for_late_unbracketed_submit() {
             continue;
         }
         if key.code == KeyCode::Enter {
-            submitted = app.handle_composer_enter();
+            submitted = app.handle_composer_enter(true);
         }
     }
 
@@ -31321,7 +31790,7 @@ mod work_surface {
 
     /// The lowest readable Top strip: enough room for the divider and the
     /// compact goal / to-do / Agent projection.
-    const TOP_HEIGHT_MIN: u16 = crate::settings::WORK_SURFACE_TOP_HEIGHT_MIN;
+    const TOP_HEIGHT_MIN: u16 = codewhale_runtime::settings::WORK_SURFACE_TOP_HEIGHT_MIN;
 
     fn idle_rail_app(panel: RailPanel) -> App {
         let mut app = create_test_app();
@@ -31908,19 +32377,22 @@ mod work_surface {
 #[tokio::test]
 async fn refused_route_change_does_not_pin_a_startup_default_and_says_so() {
     let _guard = SettingsHomeGuard::new();
-    let global_config = crate::config::home_config_path().expect("global config path");
+    let global_config = codewhale_runtime::config::home_config_path().expect("global config path");
     let startup_before = std::fs::read(&global_config).ok();
-    let mut config = Config {
-        provider: Some("xai".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_71_0 = Some("xai".to_string());
+        let __cw_config_init_71_1 = Some(ProvidersConfig {
             xai: ProviderConfig {
                 api_key: Some("xai-test-key".to_string()),
                 model: Some("grok-4.5".to_string()),
                 ..ProviderConfig::default()
             },
             ..ProvidersConfig::default()
-        }),
-        ..Config::default()
+        });
+        let mut __cw_config_init_71_value: Config = Config::default();
+        __cw_config_init_71_value.provider = __cw_config_init_71_0;
+        __cw_config_init_71_value.providers = __cw_config_init_71_1;
+        __cw_config_init_71_value
     };
     let options = TuiOptions {
         model: config.default_model(),
@@ -31955,7 +32427,7 @@ async fn refused_route_change_does_not_pin_a_startup_default_and_says_so() {
         ProviderKind::Xai,
         "the refused switch must leave the live route alone"
     );
-    let settings = crate::settings::Settings::load().expect("load settings");
+    let settings = codewhale_runtime::settings::Settings::load().expect("load settings");
     assert_eq!(std::fs::read(global_config).ok(), startup_before);
     assert_eq!(
         settings.default_provider.as_deref(),
@@ -32619,7 +33091,7 @@ fn drive_composer_events(app: &mut App, pending: &mut VecDeque<Event>) -> Option
         let Event::Key(key) = event else { continue };
         match key.code {
             KeyCode::Char(c) => app.insert_char(c),
-            KeyCode::Enter => submitted = app.handle_composer_enter(),
+            KeyCode::Enter => submitted = app.handle_composer_enter(true),
             KeyCode::Backspace => app.delete_char(),
             _ => {}
         }
@@ -32691,7 +33163,7 @@ fn startup_that_cannot_account_for_its_bytes_keeps_the_line_in_the_composer() {
         "queued Enters cannot clear the hold"
     );
     assert!(
-        app.handle_composer_enter().is_none(),
+        app.handle_composer_enter(true).is_none(),
         "the first fresh Enter explains the hold"
     );
     assert!(
@@ -32703,7 +33175,7 @@ fn startup_that_cannot_account_for_its_bytes_keeps_the_line_in_the_composer() {
     );
 
     // The user has now seen it; a deliberate second Enter sends what is shown.
-    let resent = app.handle_composer_enter();
+    let resent = app.handle_composer_enter(true);
     assert_eq!(
         resent.as_deref(),
         Some("gin install /tmp/bundle\n\nsecond line\n")
@@ -32743,9 +33215,9 @@ fn startup_terminal_replies_allow_a_fresh_long_paste_to_send_once() {
     app.startup_input_unproven = !receipt.whole_line_proven();
     let prompt = "Keep the complete pasted draft: 日本語, café, العربية.\n".repeat(30);
     handle_bracketed_paste(&mut app, &prompt);
-    assert!(app.composer_enter_would_submit());
-    assert_eq!(app.handle_composer_enter(), Some(prompt));
-    assert!(app.handle_composer_enter().is_none(), "no double send");
+    assert!(app.composer_enter_would_submit(true));
+    assert_eq!(app.handle_composer_enter(true), Some(prompt));
+    assert!(app.handle_composer_enter(true).is_none(), "no double send");
 }
 
 #[test]
@@ -32759,13 +33231,13 @@ fn startup_integrity_hold_keeps_send_available_for_acknowledgement() {
         "pasting cannot erase known loss"
     );
     assert!(
-        app.composer_enter_would_submit(),
+        app.composer_enter_would_submit(true),
         "the send button must remain usable to acknowledge an integrity hold"
     );
-    assert!(app.handle_composer_enter().is_none());
+    assert!(app.handle_composer_enter(true).is_none());
     assert_eq!(app.input, "gin install /tmp/bundle");
     assert!(
-        app.composer_enter_would_submit(),
+        app.composer_enter_would_submit(true),
         "fresh acknowledgement can send"
     );
 }
@@ -32783,7 +33255,7 @@ fn a_command_line_that_stops_looking_like_one_is_held_not_reinterpreted() {
     // @-mention. That rewrite must never silently turn a command line into a
     // prose turn for the model (#5925).
     app.composer.pending_paste_reference = Some("@.codewhale/pastes/p.md".to_string());
-    let submitted = app.handle_composer_enter();
+    let submitted = app.handle_composer_enter(true);
     assert!(
         submitted.is_none(),
         "a claimed command is never re-read as a prose prompt"
@@ -32811,7 +33283,7 @@ fn deleting_the_leading_slash_releases_the_command_claim() {
         "the claim is released by an edit"
     );
     assert_eq!(
-        app.handle_composer_enter().as_deref(),
+        app.handle_composer_enter(true).as_deref(),
         Some("plugin"),
         "the edited line submits normally"
     );
@@ -33048,9 +33520,11 @@ fn stale_session_projection_cannot_rewind_a_host_launch() {
         &mut app,
         &Config::default(),
         EngineEvent::SessionUpdated {
+            checkpoint: None,
             session_id: previous,
             messages: std::sync::Arc::new(vec![text_message("user", "stale transcript")]),
             system_prompt: Some(SystemPrompt::Text("stale prompt".into())),
+            instruction_assembly: None,
             model: "stale-model".into(),
             workspace: PathBuf::from("/must-not-be-adopted"),
         }
@@ -33069,15 +33543,102 @@ fn stale_session_projection_cannot_rewind_a_host_launch() {
     assert_eq!(app.input, "typing remains responsive");
     assert_eq!(app.history.len(), history_length);
     assert_eq!(app.status_toasts.len(), notice_count);
+    app.runtime_turn_id = Some("checkpoint-turn".into());
+    app.is_loading = true;
+    for invalid in ["session", "turn", "workspace", "child", "withdrawn"] {
+        let snapshot = std::sync::Arc::new(crate::core::ops::SessionSnapshot {
+            session_id: if invalid == "session" {
+                "stale-session".into()
+            } else {
+                current.clone()
+            },
+            messages: vec![text_message("user", "must not replace the transcript")],
+            total_tokens: 0,
+            model: model.clone(),
+            model_provider: "fixture".into(),
+            model_provider_id: None,
+            workspace: if invalid == "workspace" {
+                PathBuf::from("/must-not-be-adopted")
+            } else {
+                workspace.clone()
+            },
+            system_prompt: None,
+            instruction_assembly: None,
+            mode: "agent".into(),
+        });
+        let (reply, mut answer) = tokio::sync::oneshot::channel();
+        let request = crate::core::events::SessionCheckpointRequest::new(
+            crate::core::events::SessionCheckpointCaller {
+                session_id: snapshot.session_id.clone(),
+                agent_id: (invalid == "child").then(|| "child".into()),
+                turn_id: if invalid == "turn" {
+                    "wrong-turn".into()
+                } else {
+                    "checkpoint-turn".into()
+                },
+                call_id: "checkpoint-call".into(),
+                workspace: snapshot.workspace.clone(),
+            },
+            snapshot.clone(),
+            crate::core::events::SessionCheckpointRequest::prefix_hash(&snapshot.messages).unwrap(),
+            crate::core::events::SessionCheckpointProjection::Exact,
+            tokio_util::sync::CancellationToken::new(),
+            reply,
+        );
+        if invalid == "withdrawn" {
+            request.withdraw.cancel();
+        }
+        assert!(
+            !super::event_loop::apply_engine_session_projection(
+                &mut app,
+                &Config::default(),
+                EngineEvent::SessionUpdated {
+                    checkpoint: Some(request),
+                    session_id: snapshot.session_id.clone(),
+                    messages: std::sync::Arc::new(snapshot.messages.clone()),
+                    system_prompt: None,
+                    instruction_assembly: None,
+                    model: snapshot.model.clone(),
+                    workspace: snapshot.workspace.clone(),
+                },
+            ),
+            "{invalid}"
+        );
+        assert!(
+            answer
+                .try_recv()
+                .expect("explicit checkpoint refusal")
+                .is_err(),
+            "{invalid}"
+        );
+        assert_eq!(app.current_session_id.as_deref(), Some(current.as_str()));
+        assert_eq!(
+            *app.api_messages,
+            vec![text_message("user", "current host transcript")]
+        );
+        assert_eq!(
+            app.system_prompt,
+            Some(SystemPrompt::Text("current prompt".into()))
+        );
+        assert_eq!(app.workspace, workspace);
+        assert_eq!(app.model, model);
+        assert_eq!(app.input, "typing remains responsive");
+        assert_eq!(app.history.len(), history_length);
+        assert_eq!(app.status_toasts.len(), notice_count);
+    }
+    app.runtime_turn_id = None;
+    app.is_loading = false;
     assert!(super::event_loop::apply_engine_session_projection(
         &mut app,
         &Config::default(),
         EngineEvent::SessionUpdated {
+            checkpoint: None,
             session_id: current.clone(),
             messages: std::sync::Arc::new(vec![
                 text_message("user", "expected engine transcript",)
             ]),
             system_prompt: None,
+            instruction_assembly: None,
             model,
             workspace,
         }
@@ -33222,6 +33783,7 @@ fn notification_input_failure_keeps_the_request_and_success_retires_only_its_act
     app.pending_user_input_prompt = Some((
         "input-a".into(),
         crate::tools::user_input::UserInputRequest {
+            require_typed_answers: false,
             questions: Vec::new(),
         },
     ));
@@ -33271,6 +33833,7 @@ fn notification_input_result_never_reopens_or_clears_a_different_pending_questio
     app.pending_user_input_prompt = Some((
         "input-b".into(),
         crate::tools::user_input::UserInputRequest {
+            require_typed_answers: false,
             questions: Vec::new(),
         },
     ));
@@ -33812,18 +34375,22 @@ async fn provider_switch_back_lands_on_root_default_owned_by_that_provider() {
     app.api_provider = ProviderKind::Openai;
     app.model = "gpui-fixture".to_string();
     let mut engine = mock_engine_handle();
-    let mut config = Config {
-        provider: Some("openai".to_string()),
-        default_text_model: Some("gpui-fixture".to_string()),
-        providers: Some(ProvidersConfig {
+    let mut config = {
+        let __cw_config_init_72_0 = Some("openai".to_string());
+        let __cw_config_init_72_1 = Some("gpui-fixture".to_string());
+        let __cw_config_init_72_2 = Some(ProvidersConfig {
             openai: ProviderConfig {
                 api_key: Some("sk-test".to_string()),
                 base_url: Some("http://127.0.0.1:9/v1".to_string()),
                 ..Default::default()
             },
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_72_value: Config = Default::default();
+        __cw_config_init_72_value.provider = __cw_config_init_72_0;
+        __cw_config_init_72_value.default_text_model = __cw_config_init_72_1;
+        __cw_config_init_72_value.providers = __cw_config_init_72_2;
+        __cw_config_init_72_value
     }
     .with_legacy_root(Some("deepseek-key".to_string()), None);
 
@@ -34175,7 +34742,7 @@ async fn persisted_queued_native_skill_is_denied_after_host_withdrawal() {
     let skill = catalog.get("skills-root:quick-check").unwrap();
     let queued = QueuedMessage::new("finish the check".into(), Some(skill.body.clone()))
         .with_skill_provenance(skill.source.provenance());
-    let serialized = serde_json::to_string(&queued_ui_to_session(&queued)).unwrap();
+    let serialized = serde_json::to_string(&queued_ui_to_session(&queued).unwrap()).unwrap();
     let restored =
         queued_session_to_ui(serde_json::from_str::<QueuedSessionMessage>(&serialized).unwrap());
     let mut app = create_test_app();
@@ -34323,12 +34890,14 @@ fn engine_retry_status_receipts_survive_footer_overwrite_in_the_existing_transcr
 #[test]
 fn engine_retry_receipt_projection_keeps_quiet_history_without_internal_status_rows() {
     let _home = SettingsHomeGuard::new();
-    let config = Config {
-        notifications: Some(codewhale_config::notifications::NotificationsConfig {
+    let config = {
+        let __cw_config_init_73_0 = Some(codewhale_config::notifications::NotificationsConfig {
             quiet: true,
             ..Default::default()
-        }),
-        ..Default::default()
+        });
+        let mut __cw_config_init_73_value: Config = Default::default();
+        __cw_config_init_73_value.notifications = __cw_config_init_73_0;
+        __cw_config_init_73_value
     };
     let mut app = App::new(create_test_options(), &config);
     let before = app.history.len();
@@ -34405,7 +34974,7 @@ fn add_human_wait_approval(app: &mut App, id: &str) {
         "key",
         "group",
         None,
-        crate::config::ApprovalDefaultSelection::Deny,
+        codewhale_runtime::config::ApprovalDefaultSelection::Deny,
         None,
     );
 }

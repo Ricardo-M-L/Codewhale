@@ -109,7 +109,10 @@ impl RuntimeOptions {
         Ok(self)
     }
 
-    pub(crate) fn apply_features(&self, config: &mut crate::config::Config) -> Result<()> {
+    pub(crate) fn apply_features(
+        &self,
+        config: &mut codewhale_runtime::config::Config,
+    ) -> Result<()> {
         for feature in &self.enable {
             config.set_feature(feature, true)?;
         }
@@ -171,7 +174,7 @@ mod tests {
         let merged = root.merge(command).unwrap();
         assert_eq!(merged.workspace, Some(PathBuf::from("command workspace")));
         assert!(merged.no_project_config);
-        let mut config = crate::config::Config::default();
+        let mut config = codewhale_runtime::config::Config::default();
         merged.apply_features(&mut config).unwrap();
         assert!(
             !config

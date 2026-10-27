@@ -816,8 +816,8 @@ pub(crate) fn render_focus(app: &mut App, area: Rect, buf: &mut Buffer) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::tui::app::TuiOptions;
+    use codewhale_runtime::config::Config;
     use serde_json::json;
     use std::path::PathBuf;
     use tempfile::tempdir;
@@ -1439,8 +1439,8 @@ mod transcript_legacy;
 #[cfg(test)]
 mod mounted_transcript_acceptance {
     use super::*;
-    use crate::config::Config;
     use codewhale_localization::Locale;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     fn fixture(locale: Locale, offset: Option<usize>) -> App {

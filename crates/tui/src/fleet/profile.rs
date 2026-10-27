@@ -219,7 +219,7 @@ pub fn load_workspace_agent_profiles(workspace: impl AsRef<Path>) -> Result<Vec<
 /// own directories and installed plugins, which are not workspace content.
 fn read_profile_text(root: Option<&Path>, path: &Path) -> std::io::Result<String> {
     match root {
-        Some(root) => crate::fs_confined::read_to_string(root, path),
+        Some(root) => codewhale_util::fs_confined::read_to_string(root, path),
         None => std::fs::read_to_string(path),
     }
 }
@@ -227,7 +227,7 @@ fn read_profile_text(root: Option<&Path>, path: &Path) -> std::io::Result<String
 /// Refuse a profile directory that reaches outside `root` through a link.
 fn check_profile_dir_confined(root: Option<&Path>, dir: &Path) -> Result<()> {
     match root {
-        Some(root) => super::files::reject_linked_path(root, dir)
+        Some(root) => codewhale_util::files::reject_linked_path(root, dir)
             .with_context(|| format!("agent profile directory {}", dir.display())),
         None => Ok(()),
     }
@@ -452,7 +452,7 @@ pub fn load_claude_agent_profiles_from_dir_in(
 fn load_claude_agent_file(root: Option<&Path>, path: &Path) -> Result<AgentProfile> {
     let raw = read_profile_text(root, path)
         .with_context(|| format!("reading Claude agent {}", path.display()))?;
-    let (metadata, body) = crate::skills::parse_frontmatter(&raw)
+    let (metadata, body) = codewhale_skill_install::frontmatter::parse_frontmatter(&raw)
         .map_err(|err| anyhow!("parsing Claude agent {}: {err}", path.display()))?
         .ok_or_else(|| {
             anyhow!(

@@ -49,12 +49,12 @@ use crate::tools::workflow_plan_approval::{
     WorkflowPlanApprovalReceipt, analyze_workflow_plan_approval_with_config, analyze_workflow_spec,
     workflow_approval_requirement_for,
 };
-use crate::utils::spawn_supervised;
 use crate::work_graph::{
     CancelOutcome, EvidenceKind, EvidenceRef, OperationIntent, OperationObservation,
     OperationOwnerSnapshot, OwnerState, SharedWorkRuntime,
 };
 use codewhale_agent_contract::role::{FleetRole, public_role_label};
+use codewhale_util::utils::spawn_supervised;
 
 /// Keep promoted artifacts compact without clipping ordinary evidence reports.
 /// A 900-character cap cut six-line source receipts in half during live Fleet
@@ -1799,7 +1799,7 @@ impl WorkflowFleetBinding {
 fn workflow_fleet_binding(
     name: &str,
     workspace: &std::path::Path,
-    api_config: Option<&crate::config::Config>,
+    api_config: Option<&codewhale_runtime::config::Config>,
 ) -> Result<WorkflowFleetBinding, ToolError> {
     let roots = crate::fleet::exact::fleet_search_roots(workspace);
     let (document, id) = crate::fleet::exact::load_fleet_document(name, workspace, api_config)
@@ -1873,7 +1873,7 @@ fn apply_named_fleet_to_task_request(
 /// [`route_admitted_exact_task`].
 fn bind_exact_fleet_task_request(
     operation: &crate::fleet::exact::ExactFleetWorkflow,
-    session: codewhale_workflow::PermissionCeiling,
+    session: codewhale_protocol::fleet::PermissionCeiling,
     request: &mut TaskRequest,
 ) -> Result<crate::fleet::exact::ExactMemberBinding, DriverError> {
     let fleet = operation.snapshot().fleet().qualified();
@@ -2373,7 +2373,7 @@ fn workflow_config_for(runtime: &SubAgentRuntime) -> codewhale_config::WorkflowC
         runtime
             .api_config
             .as_deref()
-            .map(crate::config::Config::workflow_config)
+            .map(codewhale_runtime::config::Config::workflow_config)
             .unwrap_or_default()
     })
 }
@@ -6934,12 +6934,12 @@ permissions = "read_only"
         }
     }
 
-    fn exact_session() -> codewhale_workflow::PermissionCeiling {
-        codewhale_workflow::PermissionCeiling {
+    fn exact_session() -> codewhale_protocol::fleet::PermissionCeiling {
+        codewhale_protocol::fleet::PermissionCeiling {
             write: true,
             network_tool: true,
-            shell: codewhale_workflow::ShellCeiling::Full,
-            delegation_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+            shell: codewhale_protocol::fleet::ShellCeiling::Full,
+            delegation_depth: codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH,
             tools: true,
         }
     }
@@ -6995,7 +6995,7 @@ permissions = "read_only"
         assert_eq!(request.write_authority.as_deref(), Some("workspace_write"));
         assert_eq!(
             request.max_depth,
-            Some(codewhale_config::DEFAULT_SPAWN_DEPTH)
+            Some(codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH)
         );
         assert!(request.thinking.is_none(), "reasoning is not decided yet");
 
@@ -7052,12 +7052,15 @@ permissions = "read_only"
             "product default: writes need approval"
         );
 
-        let config = crate::config::Config {
-            workflow: Some(codewhale_config::WorkflowConfigToml {
+        let config = {
+            let __cw_config_init_0_0 = Some(codewhale_config::WorkflowConfigToml {
                 require_approval_for_writes: false,
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_0_value: codewhale_runtime::config::Config =
+                Default::default();
+            __cw_config_init_0_value.workflow = __cw_config_init_0_0;
+            __cw_config_init_0_value
         };
         runtime.api_config = Some(Arc::new(config));
         let tool = WorkflowTool::new(Arc::clone(&manager), runtime.clone());
@@ -7075,12 +7078,15 @@ permissions = "read_only"
                 "children": [{ "prompt": "look", "type": "explore" }]
             }
         });
-        let config = crate::config::Config {
-            workflow: Some(codewhale_config::WorkflowConfigToml {
+        let config = {
+            let __cw_config_init_1_0 = Some(codewhale_config::WorkflowConfigToml {
                 auto_start_read_only: false,
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_1_value: codewhale_runtime::config::Config =
+                Default::default();
+            __cw_config_init_1_value.workflow = __cw_config_init_1_0;
+            __cw_config_init_1_value
         };
         runtime.api_config = Some(Arc::new(config));
         let tool = WorkflowTool::new(manager, runtime);
@@ -7521,10 +7527,10 @@ permissions = "read_only"
     #[test]
     fn a_read_only_session_narrows_a_write_capable_exact_member() {
         let operation = exact_workflow(EXACT_GLM_FLEET);
-        let session = codewhale_workflow::PermissionCeiling {
+        let session = codewhale_protocol::fleet::PermissionCeiling {
             write: false,
             network_tool: false,
-            shell: codewhale_workflow::ShellCeiling::ReadOnly,
+            shell: codewhale_protocol::fleet::ShellCeiling::ReadOnly,
             delegation_depth: 0,
             tools: true,
         };
@@ -12959,10 +12965,7 @@ FINAL RECEIPT
             let server = tokio::spawn(async move {
                 let _ = axum::serve(listener, app).await;
             });
-            let config = crate::config::Config {
-                ..crate::config::Config::default()
-            }
-            .with_legacy_root(
+            let config = codewhale_runtime::config::Config::default().with_legacy_root(
                 Some("test-key".to_string()),
                 Some(format!("http://{address}/v1")),
             );
@@ -13773,23 +13776,29 @@ FINAL RECEIPT
 
     fn stub_client() -> CodewhaleClient {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let config = crate::config::Config {
-            ..crate::config::Config::default()
-        }
-        .with_legacy_root(Some("test-key".to_string()), None);
+        let config = codewhale_runtime::config::Config::default()
+            .with_legacy_root(Some("test-key".to_string()), None);
         CodewhaleClient::new(&config).expect("stub client should construct")
     }
 
     async fn fake_chat_client(
         response_text: &str,
-    ) -> (CodewhaleClient, Arc<AtomicUsize>, crate::config::Config) {
+    ) -> (
+        CodewhaleClient,
+        Arc<AtomicUsize>,
+        codewhale_runtime::config::Config,
+    ) {
         let (client, calls, _, config) = fake_chat_client_capturing(response_text).await;
         (client, calls, config)
     }
 
     async fn fake_chat_client_responses(
         response_texts: &[&str],
-    ) -> (CodewhaleClient, Arc<AtomicUsize>, crate::config::Config) {
+    ) -> (
+        CodewhaleClient,
+        Arc<AtomicUsize>,
+        codewhale_runtime::config::Config,
+    ) {
         let (client, calls, _, config) = fake_chat_client_capturing_responses(response_texts).await;
         (client, calls, config)
     }
@@ -13800,7 +13809,7 @@ FINAL RECEIPT
         CodewhaleClient,
         Arc<AtomicUsize>,
         Arc<Mutex<Vec<Value>>>,
-        crate::config::Config,
+        codewhale_runtime::config::Config,
     ) {
         fake_chat_client_capturing_responses(&[response_text]).await
     }
@@ -13811,7 +13820,7 @@ FINAL RECEIPT
         CodewhaleClient,
         Arc<AtomicUsize>,
         Arc<Mutex<Vec<Value>>>,
-        crate::config::Config,
+        codewhale_runtime::config::Config,
     ) {
         assert!(
             !response_texts.is_empty(),
@@ -13870,10 +13879,7 @@ FINAL RECEIPT
             let _ = axum::serve(listener, app).await;
         });
 
-        let config = crate::config::Config {
-            ..crate::config::Config::default()
-        }
-        .with_legacy_root(
+        let config = codewhale_runtime::config::Config::default().with_legacy_root(
             Some("test-key".to_string()),
             Some(format!("http://{addr}/v1")),
         );

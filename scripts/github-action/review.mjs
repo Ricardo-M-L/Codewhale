@@ -33,7 +33,8 @@ function integer(value, fallback, min, max) {
 
 export function settings(env) {
   if (!/^v\d+\.\d+\.\d+$/.test(env.CW_VERSION || '')) stop('configuration_missing', 'exact_release_required');
-  const provider = env.CW_PROVIDER || 'codewhale';
+  const provider = env.CW_PROVIDER || '';
+  if (!provider) stop('configuration_missing', 'provider_required');
   const model = env.CW_MODEL || '';
   if (!MODEL.test(model)) stop('configuration_missing', 'exact_model_required');
   if (env.CODEWHALE_API_KEY && provider !== 'codewhale') stop('configuration_missing', 'account_key_requires_relay');

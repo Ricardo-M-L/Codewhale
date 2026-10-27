@@ -358,7 +358,7 @@ name = "StepFun / StepFlash"
 api = "https://api.stepfun.ai/v1"
 npm = "@ai-sdk/openai-compatible"
 env = ["STEPFUN_API_KEY", "STEP_API_KEY"]
-default = "step-3.7-flash"
+default = "step-5-preview"
 models = [
   "step-3.5-flash",
   "step-3.5-flash-2603",

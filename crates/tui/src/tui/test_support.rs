@@ -53,7 +53,7 @@ pub(crate) fn test_tui_options(workspace: impl AsRef<Path>) -> crate::tui::app::
 /// a session after the user has chosen a Startup action; direct `App::new`
 /// tests remain the clean-launch authority.
 pub(crate) fn test_app_with_options(options: crate::tui::app::TuiOptions) -> crate::tui::app::App {
-    let config = crate::config::Config::default();
+    let config = codewhale_runtime::config::Config::default();
     let mut app = crate::tui::app::App::new(options, &config);
 
     // Shared behavior tests operate on the live session surface. Do not make

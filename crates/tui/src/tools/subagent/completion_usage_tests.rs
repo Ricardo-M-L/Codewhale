@@ -333,7 +333,8 @@ async fn completion_usage_counts_real_manifest_only_root_fork() {
     // Exercise real registration without allowing any provider request.
     runtime.cancel_token.cancel();
     let mut guard = manager.write().await;
-    let (canonical, directory) = crate::runtime_api::open_workspace_directory(dir.path()).unwrap();
+    let (canonical, directory) =
+        codewhale_util::workspace_dir::open_workspace_directory(dir.path()).unwrap();
     guard
         .admit_coordination_workspace(dir.path().to_path_buf(), canonical, Arc::new(directory))
         .unwrap();

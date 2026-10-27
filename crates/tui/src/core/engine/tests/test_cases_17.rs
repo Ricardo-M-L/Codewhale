@@ -1742,12 +1742,14 @@ async fn engine_transport_retry_receipts_and_counts_match_actual_scripted_attemp
             attempts: std::sync::atomic::AtomicUsize::new(0),
             failures,
         });
-        let config = Config {
-            notifications: Some(codewhale_config::notifications::NotificationsConfig {
+        let config = {
+            let __cw_config_init_0_0 = Some(codewhale_config::notifications::NotificationsConfig {
                 quiet,
                 ..Default::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.notifications = __cw_config_init_0_0;
+            __cw_config_init_0_value
         };
         let (mut engine, handle) = Engine::new_with_model_client(
             deterministic_engine_config(workspace.path()),

@@ -249,7 +249,7 @@ fn registered_resource_claims(
     input: &Value,
     context: &crate::tools::ToolContext,
 ) -> Result<Vec<ResourceClaim>, ToolError> {
-    let canonical = crate::tools::canonical_action::canonical_action_alias(name, input);
+    let canonical = codewhale_execpolicy::canonical_action::canonical_action_alias(name, input);
     match canonical {
         "read_file" => path_claim(input, "path", None, context, ResourceClaim::ReadPath),
         "write_file" | "edit_file" => {
@@ -297,7 +297,7 @@ fn apply_patch_resource_claims(
     input: &Value,
     context: &crate::tools::ToolContext,
 ) -> Result<Vec<ResourceClaim>, ToolError> {
-    let Ok(preflight) = crate::tools::apply_patch::preflight_apply_patch(input) else {
+    let Ok(preflight) = codewhale_tools::patch_preflight::preflight_apply_patch(input) else {
         return Ok(global_exclusive_claim());
     };
     if preflight.touched_files.is_empty() {

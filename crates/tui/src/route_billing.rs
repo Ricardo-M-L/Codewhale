@@ -12,11 +12,11 @@
 //!   was supplied by the provider;
 //! - unknown stays unknown — never `$0.00` and never an estimate-as-spend.
 
-use crate::config::{Config, ProviderConfig, ProviderIdentity};
 use crate::pricing::{UnpricedReason, format_cost_amount};
 use codewhale_config::ProviderKind;
 use codewhale_config::pricing::CostCurrency;
 use codewhale_localization::{Locale, MessageId, tr};
+use codewhale_runtime::config::{Config, ProviderConfig, ProviderIdentity};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BillingPresentation {
@@ -274,7 +274,7 @@ pub fn capture_product(config: &Config, identity: &ProviderIdentity) -> RoutePro
     let provider_config = config.provider_config_for(identity);
     match provider {
         ProviderKind::OpenaiCodex => {
-            if crate::oauth::official_chatgpt_registration(config).is_ok() {
+            if codewhale_runtime::oauth::official_chatgpt_registration(config).is_ok() {
                 RouteProduct::Subscription("ChatGPT plan allowance")
             } else {
                 RouteProduct::Unproven
@@ -301,7 +301,10 @@ pub fn capture_product(config: &Config, identity: &ProviderIdentity) -> RoutePro
         }
         ProviderKind::Xai => {
             if provider_config.is_some_and(uses_xai_oauth)
-                && crate::oauth::credentials_valid(crate::oauth::OAuthProvider::Xai, config)
+                && codewhale_runtime::oauth::credentials_valid(
+                    codewhale_runtime::oauth::OAuthProvider::Xai,
+                    config,
+                )
             {
                 RouteProduct::Subscription("Grok OAuth quota")
             } else {
@@ -432,11 +435,13 @@ fn classify(
         // Code token with no `base_url` in its table still resolves to
         // api.kimi.com/coding/v1, and calling that metered would put invented
         // dollars against a membership quota.
-        ProviderKind::Moonshot if crate::config::moonshot_base_url_is_exact_kimi_code(base_url) => {
+        ProviderKind::Moonshot
+            if codewhale_runtime::config::moonshot_base_url_is_exact_kimi_code(base_url) =>
+        {
             BillingPresentation::Subscription("Kimi Code quota")
         }
         ProviderKind::Moonshot
-            if crate::config::moonshot_base_url_is_exact_direct_platform(base_url) =>
+            if codewhale_runtime::config::moonshot_base_url_is_exact_direct_platform(base_url) =>
         {
             BillingPresentation::Metered
         }
@@ -647,7 +652,7 @@ fn product_billing(product: RouteProduct) -> BillingPresentation {
 // MiniMax's own hosted routes, for both wire dialects. Single-sourced in
 // `config` so billing classification and request shaping cannot disagree about
 // which hosts are first-party.
-use crate::config::minimax_base_url_is_supported_direct;
+use codewhale_runtime::config::minimax_base_url_is_supported_direct;
 
 /// StepFun already reduces an endpoint to a non-secret billing surface and
 /// fails closed on anything it does not recognize, so the resolved endpoint
@@ -1004,7 +1009,7 @@ fn auth_mode(config: &ProviderConfig) -> Option<String> {
 }
 
 fn uses_xai_oauth(config: &ProviderConfig) -> bool {
-    auth_mode(config).is_some_and(|mode| crate::oauth::auth_mode_uses_xai_oauth(&mode))
+    auth_mode(config).is_some_and(|mode| codewhale_runtime::oauth::auth_mode_uses_xai_oauth(&mode))
 }
 
 fn uses_anthropic_oauth(config: &ProviderConfig) -> bool {
@@ -2194,16 +2199,19 @@ mod tests {
 
     #[test]
     fn ollama_cloud_is_unknown_and_counts_as_possible_spend() {
-        let config = Config {
-            provider: Some("ollama-cloud".to_string()),
-            providers: Some(crate::config::ProvidersConfig {
-                ollama_cloud: crate::config::ProviderConfig {
+        let config = {
+            let __cw_config_init_0_0 = Some("ollama-cloud".to_string());
+            let __cw_config_init_0_1 = Some(codewhale_runtime::config::ProvidersConfig {
+                ollama_cloud: codewhale_runtime::config::ProviderConfig {
                     api_key: Some("cloud-key".to_string()),
                     ..Default::default()
                 },
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_0_value: Config = Default::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value
         };
         let billing = for_route(
             &config,
@@ -2291,8 +2299,8 @@ mod tests {
         .expect("secure owned credential directory");
         let scope = format!(
             "{}::{}",
-            crate::oauth::XAI_OIDC_ISSUER,
-            crate::oauth::GROK_OIDC_CLIENT_ID
+            codewhale_runtime::oauth::XAI_OIDC_ISSUER,
+            codewhale_runtime::oauth::GROK_OIDC_CLIENT_ID
         );
         std::fs::write(
             &owned_path,
@@ -3494,7 +3502,7 @@ model = "fixture-model"
             .custom
             .insert(
                 "custom".into(),
-                crate::config::ProviderConfig {
+                codewhale_runtime::config::ProviderConfig {
                     kind: Some("openai-compatible".into()),
                     base_url: Some("http://localhost:1234/v1".into()),
                     model: Some("fixture-model".into()),

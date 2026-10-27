@@ -222,7 +222,7 @@ pub struct TranscriptRenderOptions {
     pub thinking_highlight: bool,
     pub verbose: bool,
     pub show_tool_details: bool,
-    pub inline_diff_mode: crate::settings::InlineDiffMode,
+    pub inline_diff_mode: codewhale_runtime::settings::InlineDiffMode,
     pub calm_mode: bool,
     pub low_motion: bool,
     pub motion_mode: MotionMode,
@@ -265,7 +265,7 @@ impl Default for TranscriptRenderOptions {
             thinking_preview_lines: 2,
             verbose: false,
             show_tool_details: true,
-            inline_diff_mode: crate::settings::InlineDiffMode::Full,
+            inline_diff_mode: codewhale_runtime::settings::InlineDiffMode::Full,
             calm_mode: false,
             low_motion: false,
             motion_mode: MotionMode::Full,
@@ -748,7 +748,9 @@ pub fn history_cells_from_message(msg: &Message) -> Vec<HistoryCell> {
     if crate::runtime_handoff::is_operate_contract_message(msg) {
         return Vec::new();
     }
-    if let Some(display) = crate::runtime_handoff::restored_subagent_checkpoint_display(msg) {
+    if let Some(display) =
+        codewhale_models::turn_classify::restored_subagent_checkpoint_display(msg)
+    {
         return vec![HistoryCell::System {
             content: display.to_string(),
         }];
@@ -778,6 +780,7 @@ pub fn history_cells_from_message(msg: &Message) -> Vec<HistoryCell> {
     }
 
     let mut cells = Vec::new();
+    let runtime_owned = codewhale_models::turn_classify::is_runtime_owned_user_message(msg);
 
     for (block_index, block) in msg.content.iter().enumerate() {
         match block {
@@ -800,6 +803,16 @@ pub fn history_cells_from_message(msg: &Message) -> Vec<HistoryCell> {
                     continue;
                 }
                 match msg.role.as_str() {
+                    "user" if runtime_owned => {
+                        if let Some(HistoryCell::System { content }) = cells.last_mut() {
+                            content.push('\n');
+                            content.push_str(text);
+                        } else {
+                            cells.push(HistoryCell::System {
+                                content: format!("Runtime input:\n{text}"),
+                            });
+                        }
+                    }
                     "user" => {
                         if let Some(HistoryCell::User { content }) = cells.last_mut() {
                             if !content.is_empty() {
@@ -999,7 +1012,7 @@ impl ToolCell {
                 width,
                 low_motion,
                 mode,
-                crate::settings::InlineDiffMode::Full,
+                codewhale_runtime::settings::InlineDiffMode::Full,
                 locale,
             ),
             ToolCell::Review(cell) => cell.render(width, low_motion, mode, locale),
@@ -1718,7 +1731,7 @@ impl PatchSummaryCell {
         width: u16,
         low_motion: bool,
         mode: RenderMode,
-        inline_diff_mode: crate::settings::InlineDiffMode,
+        inline_diff_mode: codewhale_runtime::settings::InlineDiffMode,
         locale: Locale,
     ) -> Vec<Line<'static>> {
         let mut lines = Vec::new();
@@ -1726,7 +1739,7 @@ impl PatchSummaryCell {
             .receipt
             .as_ref()
             .map(|receipt| {
-                if inline_diff_mode == crate::settings::InlineDiffMode::Off {
+                if inline_diff_mode == codewhale_runtime::settings::InlineDiffMode::Off {
                     receipt.outcome_label()
                 } else {
                     receipt.semantic_summary()
@@ -3484,7 +3497,7 @@ fn reference_tokens(line: &str) -> impl Iterator<Item = &str> {
 /// The regular file `raw` names inside `workspace`, as
 /// `workspace.join(relative)`, or `None`.
 ///
-/// [`crate::snapshot::workspace_relative_path`] checks only the text, and
+/// [`codewhale_snapshot::workspace_relative_path`] checks only the text, and
 /// `is_file()` follows links, so a link inside the workspace (`vendor -> /`,
 /// `notes.md -> ~/.ssh/config`) used to pass. Each part below the workspace
 /// is read with `symlink_metadata` and a link is refused, as
@@ -3492,13 +3505,13 @@ fn reference_tokens(line: &str) -> impl Iterator<Item = &str> {
 /// must still sit under the resolved workspace. Callers that act later check
 /// again at that point: this is a check at one moment, not a lock.
 pub(crate) fn workspace_file(workspace: &Path, raw: &str) -> Option<PathBuf> {
-    let relative = crate::snapshot::workspace_relative_path(workspace, raw)?;
+    let relative = codewhale_snapshot::workspace_relative_path(workspace, raw)?;
     let mut path = workspace.to_path_buf();
     let mut is_file = false;
     for component in relative.components() {
         path.push(component);
         let metadata = std::fs::symlink_metadata(&path).ok()?;
-        if crate::plugins::metadata_is_link_or_reparse(&metadata) {
+        if codewhale_util::path_identity::metadata_is_link_or_reparse(&metadata) {
             return None;
         }
         is_file = metadata.is_file();

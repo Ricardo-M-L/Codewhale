@@ -2,7 +2,6 @@
 //! History, provider requests, tools, approval and cancellation are Core facts.
 //! This module keeps only connection configuration, canonical bindings and
 //! JSON-RPC correlation. Secure cross-process attachment is not yet qualified.
-use crate::config::Config;
 use crate::core::authority::{SandboxNetworkAccess, sandbox_policy_for_turn};
 #[cfg(test)]
 use crate::runtime_threads::RuntimeThreadManagerConfig;
@@ -11,6 +10,7 @@ use anyhow::{Result, anyhow};
 use codewhale_config::AppMode;
 use codewhale_config::ProviderKind;
 use codewhale_execpolicy::ApprovalMode;
+use codewhale_runtime::config::Config;
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -538,7 +538,8 @@ impl AcpServer {
             };
             if let Some(kind) = kind
                 && !crate::runtime_handoff::is_internal_runtime_handoff(message)
-                && crate::runtime_handoff::restored_subagent_checkpoint_display(message).is_none()
+                && codewhale_models::turn_classify::restored_subagent_checkpoint_display(message)
+                    .is_none()
             {
                 let mut chunks = Vec::<String>::new();
                 let mut coalesce = false;
@@ -638,7 +639,7 @@ impl AcpServer {
         session_id: &str,
     ) -> std::result::Result<Value, AcpError> {
         use codewhale_localization::{MessageId, resolve_locale, tr};
-        let settings = crate::settings::Settings::load().unwrap_or_default();
+        let settings = codewhale_runtime::settings::Settings::load().unwrap_or_default();
         let locale = resolve_locale(&settings.locale);
         let binding = self
             .sessions
@@ -1291,12 +1292,12 @@ mod tests {
             .collect()
     }
     pub(super) fn fixture_config() -> Config {
-        let mut config = Config {
-            provider: Some("acp-fixture".into()),
-            providers: Some(crate::config::ProvidersConfig {
+        let mut config = {
+            let __cw_config_init_0_0 = Some("acp-fixture".into());
+            let __cw_config_init_0_1 = Some(codewhale_runtime::config::ProvidersConfig {
                 custom: HashMap::from([(
                     "acp-fixture".into(),
-                    crate::config::ProviderConfig {
+                    codewhale_runtime::config::ProviderConfig {
                         kind: Some("openai-compatible".into()),
                         base_url: Some("http://127.0.0.1:18181/v1".into()),
                         model: Some("fixture-model".into()),
@@ -1305,12 +1306,16 @@ mod tests {
                     },
                 )]),
                 ..Default::default()
-            }),
-            snapshots: Some(crate::config::SnapshotsConfig {
+            });
+            let __cw_config_init_0_2 = Some(codewhale_runtime::config::SnapshotsConfig {
                 enabled: false,
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_0_value: Config = Default::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value.snapshots = __cw_config_init_0_2;
+            __cw_config_init_0_value
         };
         config.set_feature("mcp", false).unwrap();
         config.set_feature("subagents", false).unwrap();
@@ -1679,14 +1684,18 @@ mod tests {
     #[test]
     fn acp_approval_mode_derives_from_server_config() {
         // #6337: `--yolo --danger-full-access` must not silently run as Ask.
-        let yolo = Config {
-            yolo: Some(true),
-            ..Config::default()
+        let yolo = {
+            let __cw_config_init_1_0 = Some(true);
+            let mut __cw_config_init_1_value: Config = Config::default();
+            __cw_config_init_1_value.yolo = __cw_config_init_1_0;
+            __cw_config_init_1_value
         };
         assert_eq!(acp_approval_mode(&yolo), ApprovalMode::Bypass);
-        let policy = Config {
-            approval_policy: Some("never".into()),
-            ..Config::default()
+        let policy = {
+            let __cw_config_init_2_0 = Some("never".into());
+            let mut __cw_config_init_2_value: Config = Config::default();
+            __cw_config_init_2_value.approval_policy = __cw_config_init_2_0;
+            __cw_config_init_2_value
         };
         assert_eq!(acp_approval_mode(&policy), ApprovalMode::Never);
         assert_eq!(acp_approval_mode(&Config::default()), ApprovalMode::Suggest);
@@ -2989,7 +2998,7 @@ mod tests {
     }
     async fn finite_engine_step_budget_case(base_acp: bool) -> Result<()> {
         let mut config = fixture_config();
-        config.tui = Some(crate::config::TuiConfig {
+        config.tui = Some(codewhale_runtime::config::TuiConfig {
             max_model_steps: Some(1),
             ..Default::default()
         });

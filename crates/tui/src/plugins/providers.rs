@@ -14,8 +14,29 @@ use super::{
     PluginRegistry, activation::PluginActivationCapability,
     registry::verify_plugin_component_authority,
 };
-use crate::config::{Config, ProviderConfig};
 use codewhale_config::ProviderKind;
+use codewhale_runtime::config::{Config, ProviderConfig};
+
+pub fn load_config(path: Option<std::path::PathBuf>, profile: Option<&str>) -> Result<Config> {
+    Config::load_with(
+        path,
+        profile,
+        codewhale_runtime::config::ConfigEnvironmentPolicy::Runtime,
+        &mut apply_startup_providers,
+    )
+}
+
+pub fn load_config_structural(
+    path: Option<std::path::PathBuf>,
+    profile: Option<&str>,
+) -> Result<Config> {
+    Config::load_with(
+        path,
+        profile,
+        codewhale_runtime::config::ConfigEnvironmentPolicy::StructuralDiagnostic,
+        &mut apply_startup_providers,
+    )
+}
 
 static STARTUP_REGISTRY: OnceLock<Arc<PluginRegistry>> = OnceLock::new();
 
@@ -47,7 +68,7 @@ pub struct PluginProviderDeclaration {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub models: Vec<String>,
-    pub oauth: crate::oauth::PluginOAuthConfig,
+    pub oauth: codewhale_runtime::oauth::PluginOAuthConfig,
     /// Public routing/application metadata only. Authentication stays host-owned.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub http_headers: BTreeMap<String, String>,
@@ -179,7 +200,7 @@ pub fn apply_startup_providers(config: &mut Config) -> anyhow::Result<()> {
 pub(crate) async fn plugin_oauth_login(
     provider: String,
     base_url: String,
-    descriptor: crate::oauth::PluginOAuthConfig,
+    descriptor: codewhale_runtime::oauth::PluginOAuthConfig,
     authority: codewhale_config::PluginAuthority,
 ) -> Result<()> {
     let policy = crate::plugins::activation::extension_host_policy_enabled();
@@ -193,7 +214,7 @@ pub(crate) async fn plugin_oauth_login(
             None,
         )
         .map_err(anyhow::Error::msg)?;
-        let slot = crate::oauth::plugin_oauth_slot(&provider, &base_url, &descriptor)?;
+        let slot = codewhale_runtime::oauth::plugin_oauth_slot(&provider, &base_url, &descriptor)?;
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
         listener.set_nonblocking(true)?;
         let redirect_uri = format!(
@@ -201,14 +222,14 @@ pub(crate) async fn plugin_oauth_login(
             listener.local_addr()?.port(),
             descriptor.callback_path
         );
-        let pkce = crate::oauth::generate_pkce();
-        let state = crate::oauth::generate_state();
+        let pkce = codewhale_runtime::oauth::generate_pkce();
+        let state = codewhale_runtime::oauth::generate_state();
         let authorize_url = descriptor.authorize_url(&redirect_uri, &state, &pkce)?;
         eprintln!("{provider} sign-in (PKCE)\n  Open: {authorize_url}");
         if std::env::var_os("CODEWHALE_PLUGIN_OAUTH_NO_BROWSER").is_none() {
             let _ = webbrowser::open(&authorize_url);
         }
-        let (code, _) = crate::oauth::wait_for_callback_validated(
+        let (code, _) = codewhale_runtime::oauth::wait_for_callback_validated(
             &[listener],
             &descriptor.callback_params(),
             &state,
@@ -232,7 +253,7 @@ pub(crate) async fn plugin_oauth_login(
         if let Some(resource) = &descriptor.resource {
             form.push(("resource", resource));
         }
-        let token = crate::oauth::plugin_token_response(&descriptor, &form, None)?;
+        let token = codewhale_runtime::oauth::plugin_token_response(&descriptor, &form, None)?;
         crate::plugins::providers::verify_provider_binding(
             &authority,
             &provider,
@@ -282,7 +303,7 @@ pub(crate) fn verify_provider_binding(
     authority: &codewhale_config::PluginAuthority,
     name: &str,
     base_url: &str,
-    oauth: &crate::oauth::PluginOAuthConfig,
+    oauth: &codewhale_runtime::oauth::PluginOAuthConfig,
     http_headers: Option<&std::collections::HashMap<String, String>>,
 ) -> anyhow::Result<()> {
     verify_plugin_component_authority(authority, PluginActivationCapability::Providers)
@@ -298,8 +319,8 @@ pub(crate) fn verify_provider_binding(
         anyhow::anyhow!("reviewed plugin does not declare this provider identity")
     })?;
     anyhow::ensure!(
-        crate::config::normalize_base_url(base_url)
-            == crate::config::normalize_base_url(&declaration.base_url),
+        codewhale_runtime::config::normalize_base_url(base_url)
+            == codewhale_runtime::config::normalize_base_url(&declaration.base_url),
         "plugin provider endpoint differs from its reviewed declaration"
     );
     anyhow::ensure!(
@@ -631,7 +652,7 @@ mod tests {
             // First use starts from an empty document, with no provider table.
             let identity = config.resolve_provider_pin_identity("gateway").unwrap();
             let mut doc = toml_edit::DocumentMut::new();
-            crate::config_persistence::set_provider_model_document(
+            crate::route_preferences::set_provider_model_document(
                 &mut doc,
                 &identity,
                 "selected-model",
@@ -639,7 +660,7 @@ mod tests {
             .unwrap();
             let model_only = doc.to_string();
             assert!(!model_only.contains("base_url") && !model_only.contains("oauth"));
-            let mut parsed = crate::config::parse_config_base(&model_only).unwrap();
+            let mut parsed = codewhale_runtime::config::parse_config_base(&model_only).unwrap();
             apply_startup_providers(&mut parsed).unwrap();
             assert_eq!(
                 parsed.providers.as_ref().unwrap().custom["gateway"]
@@ -647,7 +668,7 @@ mod tests {
                     .as_deref(),
                 Some("selected-model")
             );
-            crate::config_persistence::persist_provider_selection(
+            crate::route_preferences::persist_provider_selection(
                 Some(&selection_path),
                 &identity,
                 Some("selected-model"),
@@ -657,7 +678,7 @@ mod tests {
         });
         // The scoped registry is gone; reconstruct using the explicit fixture.
         assert!(TEST_REGISTRY.with(|slot| slot.borrow().is_none()));
-        let mut restored = crate::config::parse_config_base(&saved).unwrap();
+        let mut restored = codewhale_runtime::config::parse_config_base(&saved).unwrap();
         apply_providers(&mut restored, &registry).unwrap();
         assert_eq!(restored.provider.as_deref(), Some("gateway"));
         let restored_entry = restored
@@ -694,7 +715,7 @@ mod tests {
             "kind = 'openai-compatible'",
             "api_key_env = 'OTHER_KEY'",
         ] {
-            let mut collision = crate::config::parse_config_base(&format!(
+            let mut collision = codewhale_runtime::config::parse_config_base(&format!(
                 "[providers.gateway]\nmodel = 'tiny-model'\n{override_field}\n"
             ))
             .unwrap();

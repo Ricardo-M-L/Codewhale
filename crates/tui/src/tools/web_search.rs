@@ -8,9 +8,9 @@
 use super::spec::{
     ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec, optional_u64,
 };
-use crate::config::{SearchProvider, tavily_env_key, tavily_key_from};
-use crate::network_policy::{Decision, NetworkPolicyDecider};
 use async_trait::async_trait;
+use codewhale_net::network_policy::{Decision, NetworkPolicyDecider};
+use codewhale_runtime::config::{SearchProvider, tavily_env_key, tavily_key_from};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -1818,7 +1818,7 @@ fn search_timeout_budgets(
 fn provider_native_timeout_floor(
     client: &crate::client::ProviderNativeSearchClient,
 ) -> Option<Duration> {
-    let k3_formula = crate::config::is_exact_direct_moonshot_k3_route(
+    let k3_formula = codewhale_runtime::config::is_exact_direct_moonshot_k3_route(
         client.provider(),
         client.base_url(),
         client.model(),
@@ -3926,12 +3926,12 @@ mod tests {
         searxng_score, searxng_search_url, serply_search_url, truncate_error_body,
         volcengine_extract_text,
     };
-    use crate::config::SearchProvider;
     use crate::tools::web::contract::{
         BackendId, BackendSearch, CapabilityState, DegradedReason, QueryCapabilities, QueryKnob,
         Recency, SearchQuery, SearchResult,
     };
     use crate::tools::web::scrape::{decode_html_entities, normalize_bing_url};
+    use codewhale_runtime::config::SearchProvider;
     use serde_json::json;
     use std::time::{Duration, Instant};
 
@@ -3985,10 +3985,10 @@ mod tests {
 
     #[test]
     fn provider_native_floor_follows_what_the_client_requests() {
-        use crate::config::{Config, ProviderConfig, ProvidersConfig};
-        let config = Config {
-            provider: Some("anthropic".to_string()),
-            providers: Some(ProvidersConfig {
+        use codewhale_runtime::config::{Config, ProviderConfig, ProvidersConfig};
+        let config = {
+            let __cw_config_init_0_0 = Some("anthropic".to_string());
+            let __cw_config_init_0_1 = Some(ProvidersConfig {
                 anthropic: ProviderConfig {
                     api_key: Some("anthropic-test-key".to_string()),
                     base_url: Some("https://api.anthropic.com".to_string()),
@@ -3996,8 +3996,11 @@ mod tests {
                     ..ProviderConfig::default()
                 },
                 ..ProvidersConfig::default()
-            }),
-            ..Config::default()
+            });
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value
         };
         let client = crate::client::ProviderNativeSearchClient::new(
             crate::client::CodewhaleClient::new(&config).expect("Anthropic client"),
@@ -4730,8 +4733,8 @@ mod tests {
 
     #[tokio::test]
     async fn baidu_provider_without_api_key_surfaces_clear_error_not_silent_fallback() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let _env = crate::test_support::lock_test_env();
         let _baidu_key = crate::test_support::EnvVarGuard::remove("BAIDU_SEARCH_API_KEY");
@@ -4788,8 +4791,8 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn serply_provider_without_api_key_surfaces_clear_error_not_silent_fallback() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let _guard = crate::test_support::lock_test_env();
         let prev = std::env::var_os("SERPLY_API_KEY");
@@ -4819,8 +4822,8 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn sofya_provider_without_api_key_surfaces_clear_error_not_silent_fallback() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let _guard = crate::test_support::lock_test_env();
         let prev = std::env::var_os("SOFYA_API_KEY");
@@ -4850,8 +4853,8 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn volcengine_provider_without_api_key_lists_supported_env_fallbacks() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let _guard = crate::test_support::lock_test_env();
         let prev_volc = std::env::var_os("VOLCENGINE_API_KEY");
@@ -4896,8 +4899,8 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn metaso_provider_without_api_key_fails_closed_before_fallback() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let _guard = crate::test_support::lock_test_env();
         let previous = std::env::var_os("METASO_API_KEY");
@@ -5494,8 +5497,8 @@ mod tests {
 
     #[tokio::test]
     async fn searxng_provider_requires_base_url() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut ctx = ToolContext::new(tmp.path().to_path_buf());
@@ -5522,8 +5525,8 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::await_holding_lock)]
     async fn missing_provider_key_fails_closed_as_not_configured() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolError, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let _guard = crate::test_support::lock_test_env();
         let prev_tavily = std::env::var_os("TAVILY_API_KEY");
@@ -5578,35 +5581,43 @@ mod tests {
 
         unsafe { std::env::set_var("TAVILY_API_KEY", "tvly-a") };
         assert_eq!(
-            crate::config::tavily_key_from(Some("tvly-b")).as_deref(),
+            codewhale_runtime::config::tavily_key_from(Some("tvly-b")).as_deref(),
             Some("tvly-a"),
             "the dedicated env wins over the shared generic slot"
         );
-        assert_eq!(crate::config::tavily_env_key().as_deref(), Some("tvly-a"));
+        assert_eq!(
+            codewhale_runtime::config::tavily_env_key().as_deref(),
+            Some("tvly-a")
+        );
 
         // A dedicated env key is never prefix-checked.
         unsafe { std::env::set_var("TAVILY_API_KEY", "not-a-tvly-prefix") };
         assert_eq!(
-            crate::config::tavily_key_from(None).as_deref(),
+            codewhale_runtime::config::tavily_key_from(None).as_deref(),
             Some("not-a-tvly-prefix")
         );
 
         unsafe { std::env::set_var("TAVILY_API_KEY", "   ") };
-        assert_eq!(crate::config::tavily_env_key(), None);
+        assert_eq!(codewhale_runtime::config::tavily_env_key(), None);
 
         unsafe { std::env::remove_var("TAVILY_API_KEY") };
         assert_eq!(
-            crate::config::tavily_key_from(Some("tvly-b")).as_deref(),
+            codewhale_runtime::config::tavily_key_from(Some("tvly-b")).as_deref(),
             Some("tvly-b")
         );
         assert_eq!(
-            crate::config::tavily_key_from(Some("doctor-offline-search-sentinel")),
+            codewhale_runtime::config::tavily_key_from(Some("doctor-offline-search-sentinel")),
             None,
             "a non-`tvly-` generic key must never autodetect Tavily"
         );
-        assert_eq!(crate::config::tavily_key_from(Some("   ")), None);
-        assert!(crate::config::looks_like_tavily_key(" tvly-x "));
-        assert!(!crate::config::looks_like_tavily_key("fc-live-test"));
+        assert_eq!(
+            codewhale_runtime::config::tavily_key_from(Some("   ")),
+            None
+        );
+        assert!(codewhale_runtime::config::looks_like_tavily_key(" tvly-x "));
+        assert!(!codewhale_runtime::config::looks_like_tavily_key(
+            "fc-live-test"
+        ));
 
         match prev {
             Some(value) => unsafe { std::env::set_var("TAVILY_API_KEY", value) },
@@ -5616,8 +5627,8 @@ mod tests {
 
     #[tokio::test]
     async fn searxng_search_returns_json_results() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -5669,8 +5680,8 @@ mod tests {
 
     #[tokio::test]
     async fn searxng_honors_recency_and_locale_and_post_filters_domains() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6051,8 +6062,8 @@ mod tests {
 
     #[tokio::test]
     async fn searxng_empty_results_report_backend() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6086,8 +6097,8 @@ mod tests {
 
     #[tokio::test]
     async fn searxng_http_errors_are_actionable() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6120,8 +6131,8 @@ mod tests {
 
     #[tokio::test]
     async fn searxng_rate_limit_error_mentions_configured_instance() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6154,8 +6165,8 @@ mod tests {
 
     #[tokio::test]
     async fn searxng_invalid_json_is_actionable() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6188,8 +6199,8 @@ mod tests {
 
     #[tokio::test]
     async fn custom_duckduckgo_results_report_custom_host_source() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6232,9 +6243,9 @@ mod tests {
 
     #[tokio::test]
     async fn repeated_search_uses_session_cache_and_marks_receipt() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
         use crate::tools::web::cache;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6280,7 +6291,7 @@ mod tests {
         assert_eq!(second["receipt"]["latency_ms"], 0);
         assert_eq!(second["results"], first["results"]);
 
-        use crate::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
+        use codewhale_net::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
         let denied_host = reqwest::Url::parse(&server.uri())
             .expect("mock server URL")
             .host_str()
@@ -6314,8 +6325,8 @@ mod tests {
 
     #[tokio::test]
     async fn explicit_bing_does_not_fall_back_to_duckduckgo() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6355,8 +6366,8 @@ mod tests {
 
     #[tokio::test]
     async fn custom_duckduckgo_challenge_returns_actionable_error() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6390,8 +6401,8 @@ mod tests {
 
     #[tokio::test]
     async fn duckduckgo_challenge_to_bing_success_populates_fallback_receipt() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use std::time::Instant;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -6465,8 +6476,8 @@ mod tests {
     /// non-2xx must still reach the Bing fallback instead of ending the chain.
     #[tokio::test]
     async fn duckduckgo_unreachable_or_non_2xx_falls_back_to_bing() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path, query_param};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6568,8 +6579,8 @@ mod tests {
     /// eat the whole budget; Bing answers inside the same total.
     #[tokio::test]
     async fn hanging_duckduckgo_leaves_bing_time_inside_the_total_budget() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6633,8 +6644,8 @@ mod tests {
     /// contacted, whether the endpoint answers late or hangs.
     #[tokio::test]
     async fn custom_base_url_keeps_full_budget_and_never_reaches_bing() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::ToolContext;
+        use codewhale_runtime::config::SearchProvider;
         use wiremock::matchers::{method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -6699,8 +6710,8 @@ mod tests {
 
     #[tokio::test]
     async fn search_base_url_with_non_duckduckgo_provider_is_explicit_error() {
-        use crate::config::SearchProvider;
         use crate::tools::spec::{ToolContext, ToolSpec};
+        use codewhale_runtime::config::SearchProvider;
 
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut ctx = ToolContext::new(tmp.path().to_path_buf());

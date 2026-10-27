@@ -11,7 +11,7 @@
 //! - the provider enum and the non-secret configured route key,
 //! - the canonical wire model id,
 //! - a **normalized, redacted** endpoint identity (URL userinfo and sensitive
-//!   query values masked by [`crate::client::redact_url_for_display`]),
+//!   query values masked by [`codewhale_secrets::sanitize::redact_url_for_display`]),
 //! - a one-way credential *generation* digest that is never rendered.
 //!
 //! The credential generation is deliberately taken over the endpoint **and** the
@@ -21,9 +21,9 @@
 
 use std::fmt;
 
-use crate::config::ProviderIdentity;
 use codewhale_config::ProviderKind;
 use codewhale_config::credentials::CredentialGeneration;
+use codewhale_runtime::config::ProviderIdentity;
 
 /// Endpoint identity for a string that is not a parseable URL.
 ///
@@ -47,7 +47,7 @@ pub fn endpoint_identity(base_url: &str) -> String {
     if reqwest::Url::parse(trimmed).is_err() {
         return OPAQUE_ENDPOINT.to_string();
     }
-    crate::client::redact_url_for_display(trimmed)
+    codewhale_secrets::sanitize::redact_url_for_display(trimmed)
         .trim_end_matches('/')
         .to_string()
 }
@@ -92,13 +92,7 @@ impl TurnRouteReceipt {
         base_url: &str,
         credential: &str,
     ) -> Self {
-        let identity = ProviderIdentity {
-            provider,
-            key: provider_identity.into(),
-            exact_id: Some(provider_identity.into()),
-            migrated_legacy_ollama_cloud_route: false,
-            legacy_root_custom_generation: None,
-        };
+        let identity = ProviderIdentity::test_exact_identity(provider, provider_identity);
         Self::from_admitted(&identity, wire_model, base_url, credential)
     }
 
@@ -108,7 +102,7 @@ impl TurnRouteReceipt {
     /// the production lookup still refuses to reuse that evidence.
     #[cfg(test)]
     pub(crate) fn for_test_fixture(
-        config: &crate::config::Config,
+        config: &codewhale_runtime::config::Config,
         kind: ProviderKind,
         model: &str,
     ) -> Self {

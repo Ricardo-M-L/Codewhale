@@ -66,7 +66,7 @@ pub(crate) struct TerminalSession {
     /// A later narrowed posture must not reuse an unsandboxed shell.
     sandbox_confined: bool,
     /// A running process cannot adopt changed roots or network restrictions.
-    sandbox_policy: crate::sandbox::SandboxPolicy,
+    sandbox_policy: codewhale_sandbox::SandboxPolicy,
 }
 
 #[cfg(unix)]
@@ -266,20 +266,22 @@ fn load_durable(path: &Path) -> Option<DurableTerminalRecord> {
 fn persist_durable(path: &Path, record: &DurableTerminalRecord) -> Result<(), String> {
     let payload = serde_json::to_vec_pretty(record)
         .map_err(|error| format!("failed to encode terminal session state: {error}"))?;
-    crate::utils::write_atomic(path, &payload)
+    codewhale_util::utils::write_atomic(path, &payload)
         .map_err(|error| format!("failed to persist terminal session state: {error}"))
 }
 
 #[cfg(unix)]
 fn pty_lacks_required_sandbox(
-    policy: &crate::sandbox::SandboxPolicy,
-    applied: crate::sandbox::SandboxType,
+    policy: &codewhale_sandbox::SandboxPolicy,
+    applied: codewhale_sandbox::SandboxType,
 ) -> bool {
-    policy.should_sandbox() && matches!(applied, crate::sandbox::SandboxType::None)
+    policy.should_sandbox() && matches!(applied, codewhale_sandbox::SandboxType::None)
 }
 
 #[cfg(unix)]
-fn pty_sandbox_policy(context: &ToolContext) -> Result<crate::sandbox::SandboxPolicy, ToolError> {
+fn pty_sandbox_policy(
+    context: &ToolContext,
+) -> Result<codewhale_sandbox::SandboxPolicy, ToolError> {
     if context.sandbox_backend.is_some() {
         return Err(ToolError::not_available(
             "terminal PTY tools start a local shell, and this session runs commands in an external sandbox; run the command through the shell tool instead",
@@ -292,9 +294,9 @@ fn pty_sandbox_policy(context: &ToolContext) -> Result<crate::sandbox::SandboxPo
 fn prepare_pty_shell(
     shell: &str,
     workspace: &std::path::Path,
-    policy: crate::sandbox::SandboxPolicy,
+    policy: codewhale_sandbox::SandboxPolicy,
     shell_manager: &crate::tools::shell::SharedShellManager,
-) -> Result<(crate::sandbox::ExecEnv, bool), String> {
+) -> Result<(codewhale_sandbox::ExecEnv, bool), String> {
     let prepared = shell_manager
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -314,7 +316,7 @@ fn prepare_pty_shell(
     if prepared.command.is_empty() {
         return Err("sandbox prepare returned an empty PTY command".to_string());
     }
-    let confined = !matches!(prepared.sandbox_type, crate::sandbox::SandboxType::None);
+    let confined = !matches!(prepared.sandbox_type, codewhale_sandbox::SandboxType::None);
     Ok((prepared, confined))
 }
 
@@ -322,7 +324,7 @@ fn prepare_pty_shell(
 fn create_session(
     name: &str,
     workspace: &std::path::Path,
-    policy: crate::sandbox::SandboxPolicy,
+    policy: codewhale_sandbox::SandboxPolicy,
     shell_manager: &crate::tools::shell::SharedShellManager,
 ) -> Result<SharedSession, String> {
     // Unit tests exercise the persistent-PTY contract, not a developer's
@@ -425,7 +427,7 @@ fn create_session(
 pub(crate) fn get_or_create(
     name: &str,
     workspace: &std::path::Path,
-    policy: crate::sandbox::SandboxPolicy,
+    policy: codewhale_sandbox::SandboxPolicy,
     shell_manager: &crate::tools::shell::SharedShellManager,
 ) -> Result<SharedSession, String> {
     let key = session_key(name, workspace);
@@ -455,7 +457,7 @@ pub(crate) fn get_or_create(
 #[cfg(unix)]
 fn can_reuse_under_policy(
     session: &TerminalSession,
-    policy: &crate::sandbox::SandboxPolicy,
+    policy: &codewhale_sandbox::SandboxPolicy,
 ) -> bool {
     !policy.should_sandbox() || (session.sandbox_confined && session.sandbox_policy == *policy)
 }
@@ -699,7 +701,7 @@ pub(crate) fn write_dock_input(
     name: &str,
     id: &str,
     bytes: &[u8],
-    policy: &crate::sandbox::SandboxPolicy,
+    policy: &codewhale_sandbox::SandboxPolicy,
 ) -> Result<(), String> {
     let handle = lookup(name, workspace).ok_or("selected terminal is gone or was reset")?;
     let mut session = handle
@@ -1278,7 +1280,7 @@ mod tests {
             get_or_create(
                 name,
                 self.path(),
-                crate::sandbox::SandboxPolicy::DangerFullAccess,
+                codewhale_sandbox::SandboxPolicy::DangerFullAccess,
                 &test_shell_manager(),
             )
             .unwrap()
@@ -1313,7 +1315,7 @@ mod tests {
         let session = get_or_create(
             name,
             std::path::Path::new("/tmp"),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();
@@ -1323,7 +1325,7 @@ mod tests {
         let replacement = create_session(
             name,
             std::path::Path::new("/tmp"),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();
@@ -1447,7 +1449,7 @@ mod tests {
         let replacement = create_session(
             "test-reset",
             std::path::Path::new("/tmp"),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();
@@ -1538,12 +1540,12 @@ mod tests {
     #[test]
     fn narrowed_posture_without_a_backend_fails_closed() {
         assert!(pty_lacks_required_sandbox(
-            &crate::sandbox::SandboxPolicy::read_only(),
-            crate::sandbox::SandboxType::None,
+            &codewhale_sandbox::SandboxPolicy::read_only(),
+            codewhale_sandbox::SandboxType::None,
         ));
         assert!(!pty_lacks_required_sandbox(
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
-            crate::sandbox::SandboxType::None,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxType::None,
         ));
     }
 
@@ -1552,7 +1554,7 @@ mod tests {
         let (prepared, confined) = prepare_pty_shell(
             "/bin/sh",
             Path::new("/tmp"),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .expect("full access may start a PTY");
@@ -1569,14 +1571,14 @@ mod tests {
         let first = get_or_create(
             "shared-name",
             first_workspace.path(),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();
         let second = get_or_create(
             "shared-name",
             second_workspace.path(),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();
@@ -1627,7 +1629,7 @@ mod tests {
             "shared-name",
             &first_id,
             b"printf wrong-workspace\n",
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
         )
         .unwrap_err();
         assert!(error.contains("reset"), "{error}");
@@ -1646,7 +1648,7 @@ mod tests {
         let replacement = create_session(
             "replaceable",
             workspace.path(),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();
@@ -1663,7 +1665,7 @@ mod tests {
             "replaceable",
             &old_id,
             b"touch stale-input-must-not-run\n",
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
         )
         .unwrap_err();
         assert!(
@@ -1687,7 +1689,7 @@ mod tests {
 
     #[test]
     fn dock_and_model_reuse_refuse_changed_restricted_policies() {
-        use crate::sandbox::SandboxPolicy;
+        use codewhale_sandbox::SandboxPolicy;
         let workspace = DockWorkspace::new();
         let shell = workspace.session("posture");
         let id = shell.lock().unwrap().durable.session_id.clone();
@@ -1758,7 +1760,7 @@ mod tests {
             "exited",
             &id,
             b"must-not-run\n",
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
         )
         .unwrap_err();
         assert!(error.contains("has exited"), "{error}");
@@ -1791,7 +1793,7 @@ mod tests {
             "paste-guard",
             &id,
             &[b'x'; 1024],
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
         )
         .unwrap_err();
         assert!(error.contains("no input was sent"), "{error}");
@@ -1800,7 +1802,7 @@ mod tests {
             "paste-guard",
             &id,
             b"human-answer\n",
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
         )
         .unwrap();
         let (done, timed_out) = wait_shared_session(&shell, Duration::from_secs(10)).unwrap();
@@ -1860,7 +1862,7 @@ mod tests {
                 "send-wait",
                 &id,
                 b"human\n",
-                &crate::sandbox::SandboxPolicy::DangerFullAccess,
+                &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             )?;
             Ok::<_, String>(snapshot)
         });
@@ -1902,7 +1904,7 @@ mod tests {
             "interactive",
             &id,
             b"human-answer\n",
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
         )
         .unwrap();
         let (done, timed_out) = wait_shared_session(&shell, Duration::from_secs(10)).unwrap();
@@ -1953,7 +1955,7 @@ mod tests {
             "waiting",
             &id,
             &[3],
-            &crate::sandbox::SandboxPolicy::DangerFullAccess,
+            &codewhale_sandbox::SandboxPolicy::DangerFullAccess,
         )
         .unwrap();
         let (done, timed_out) = waiter.join().unwrap();
@@ -1975,7 +1977,7 @@ mod tests {
         let first = create_session(
             &name,
             workspace.path(),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();
@@ -2000,7 +2002,7 @@ mod tests {
         let replacement = create_session(
             &name,
             workspace.path(),
-            crate::sandbox::SandboxPolicy::DangerFullAccess,
+            codewhale_sandbox::SandboxPolicy::DangerFullAccess,
             &test_shell_manager(),
         )
         .unwrap();

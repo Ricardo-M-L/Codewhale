@@ -10,6 +10,7 @@ import { Status, type StatusTone } from "@/components/status-badge";
 import { TerminalCapture } from "@/components/terminal-capture";
 import { WhaleLive } from "@/components/whale-live";
 import { getFacts } from "@/lib/facts";
+import { compareVersions } from "@/lib/features";
 import { GETTING_STARTED_STEPS } from "@/lib/content/getting-started";
 import { PARTNER_PROMO } from "@/lib/content/partner-promo";
 import { RELEASE_HIGHLIGHTS } from "@/lib/content/release-highlights";
@@ -52,7 +53,8 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const publishedRelease = facts.latestPublishedRelease;
   const sourceIsPublished = publishedRelease?.version === sourceVersion;
   const highlightsPublished = publishedRelease?.version === RELEASE_HIGHLIGHTS.version;
-  const showHighlights = highlightsPublished || sourceVersion === RELEASE_HIGHLIGHTS.version;
+  const highlightsAhead = publishedRelease ? (compareVersions(RELEASE_HIGHLIGHTS.version, publishedRelease.version) ?? 0) > 0 : false;
+  const showHighlights = highlightsPublished || highlightsAhead || sourceVersion === RELEASE_HIGHLIGHTS.version;
   const showPromo = Date.now() < Date.parse(PARTNER_PROMO.endsAt);
 
   // The install URL resolves published artifacts, so its structured version

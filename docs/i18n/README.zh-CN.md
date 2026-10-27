@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -169,9 +169,9 @@ Codewhale 会自动读取 `AGENTS.md`。为其他工具编写的指令文件，�
 连接 [MCP 服务器](../MCP.md)，添加[技能](../SKILLS.md)和[插件](../PLUGINS.md)，
 并在会话和工具事件上运行[钩子](../HOOKS.md)。代码模式（Code mode，实验性，默认开启）
 让模型编写一个 `execute_tools` 程序来调用多个 MCP 和插件工具；每次调用仍要遵守你的审批规则，
-并保留各自的回执。内置的 Computer Use 插件（实验性，
+并保留各自的回执。独立安装的 Computer Use 插件（实验性，
 仅限 macOS）可以观察和操作其他应用。在你审阅其访问权限并启用之前，它保持关闭
-（[指南](../../crates/tui/plugins/computer-use/README.md)）。
+（[指南](https://github.com/codewhale-hq/codewhale-cu-plugin)）。
 
 ## 运行方式
 

@@ -128,7 +128,7 @@ pub(crate) async fn report(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dependencies::ExternalTool;
+    use codewhale_dependencies::ExternalTool;
     #[tokio::test]
     async fn disabled_review_host_refuses_before_demand_or_provider() {
         let temp = tempfile::tempdir().unwrap();
@@ -163,7 +163,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let manager = std::sync::Arc::new(crate::extension_host::ExtensionHostManager::new(
             crate::extension_host::ExtensionHostOptions {
-                runtime: crate::config::ExtensionHostRuntime::Node,
+                runtime: codewhale_config::extension_host::ExtensionHostRuntime::Node,
                 node_override: Some(node),
                 root: Some(root.path().join("host")),
                 ..Default::default()
@@ -172,7 +172,7 @@ mod tests {
         let _manager =
             crate::extension_host::TestManagerGuard::install(std::sync::Arc::clone(&manager));
         let git = |args: &[&str]| {
-            let output = crate::dependencies::Git::command()
+            let output = codewhale_dependencies::Git::command()
                 .unwrap()
                 .args(args)
                 .current_dir(root.path())

@@ -76,19 +76,24 @@ use tokio_util::sync::CancellationToken;
 
 use super::ManagerShared;
 use super::protocol::{
-    ContentBlockWire, CoreCallParams, OwnerRef, RpcErrorWire, ToolResultWire, error_code,
+    ContentBlockWire, CoreCallParams, RpcErrorWire, SessionCheckpointParams, ToolResultWire,
+    UserQuestionParams, error_code,
 };
 use super::supervisor::HostRequestContext;
 use super::ticket::{Grant, Presented, Ticket, TicketKind};
 use super::tier::HostTier;
 use crate::core::authority::{ToolCategory, get_tool_category_for_call};
+use crate::core::events::SessionCheckpointCaller;
 use crate::tools::codemode::{
     CodemodeInvoker, ExtensionCaller, NestedCallGate, NestedDecision, NestedFailure, PauseClock,
 };
 use crate::tools::spec::{ToolCapability, ToolContext, ToolSpec};
+use codewhale_config::OwnerRef;
 
 /// The protocol method an invocation ticket is good for.
 pub(crate) const METHOD: &str = "core/call";
+const CHECKPOINT_METHOD: &str = "session/checkpoint";
+const QUESTION_METHOD: &str = "user-questions/ask";
 /// `core/call`s one invocation may make in all.
 pub(crate) const MAX_CALLS_PER_INVOCATION: u32 = 50;
 /// A backstop only: an invocation ends (and revokes its ticket) long before
@@ -141,11 +146,12 @@ const FORCED_PROMPT_NAMES: &[&str] = &[
 fn canonical(name: &str, input: &Value) -> String {
     // Preserve the family's registered spelling until its action is resolved.
     // Lowercasing `Git` first would hide `Git{action:"fetch"}` from policy.
-    let family = crate::tools::canonical_action::CANONICAL_ACTION_ALIASES
+    let family = codewhale_execpolicy::canonical_action::CANONICAL_ACTION_ALIASES
         .iter()
         .find(|(family, _, _)| family.eq_ignore_ascii_case(name))
         .map_or(name, |(family, _, _)| *family);
-    crate::tools::canonical_action::canonical_action_alias(family, input).to_ascii_lowercase()
+    codewhale_execpolicy::canonical_action::canonical_action_alias(family, input)
+        .to_ascii_lowercase()
 }
 
 fn is_extension_tool(specs: &[Arc<dyn ToolSpec>], name: &str) -> bool {
@@ -250,10 +256,14 @@ pub(crate) struct Invocation {
     tier: HostTier,
     host_generation: u64,
     owner: OwnerRef,
-    scope: Option<super::protocol::EntryRef>,
+    scope: Option<codewhale_config::EntryRef>,
     plugins: Option<Arc<crate::plugins::PluginRegistry>>,
     content_hash: String,
     calls: CodemodeInvoker,
+    gate: NestedCallGate,
+    root_caller: Option<SessionCheckpointCaller>,
+    tickets: Vec<Ticket>,
+    session_call_lock: tokio::sync::Mutex<()>,
     /// Fires when the invocation ends or is revoked: withdraws every
     /// `core/call` still waiting or running for it.
     cancel: CancellationToken,
@@ -304,7 +314,7 @@ impl CoreCalls {
         expected: &ExtensionCaller,
         context: &ToolContext,
         gate: &NestedCallGate,
-        scope: Option<super::protocol::EntryRef>,
+        scope: Option<codewhale_config::EntryRef>,
         content_hash: String,
     ) -> Option<InvocationGuard> {
         let (caller, specs) = gate.extension()?;
@@ -328,6 +338,50 @@ impl CoreCalls {
             ttl: TICKET_TTL,
             uses: MAX_CALLS_PER_INVOCATION,
         });
+        let root_caller = context
+            .execution
+            .session_objects
+            .as_ref()
+            .filter(|session| !session.session_id.is_empty())
+            .zip(
+                context
+                    .execution
+                    .origin_turn_id
+                    .as_ref()
+                    .filter(|id| !id.is_empty()),
+            )
+            .filter(|_| context.execution.owner_agent_id.is_none())
+            .map(|(session, turn_id)| SessionCheckpointCaller {
+                session_id: session.session_id.clone(),
+                agent_id: None,
+                turn_id: turn_id.clone(),
+                call_id: call_id.to_string(),
+                workspace: context.workspace.clone(),
+            });
+        let checkpoint_ticket = root_caller.as_ref().map(|_| {
+            self.tickets.mint(Grant {
+                kind: TicketKind::Invocation,
+                tier,
+                host_generation,
+                owner: owner.clone(),
+                method: CHECKPOINT_METHOD,
+                target: json!({ "call_id": call_id }),
+                ttl: TICKET_TTL,
+                uses: MAX_CALLS_PER_INVOCATION,
+            })
+        });
+        let question_ticket = root_caller.as_ref().map(|_| {
+            self.tickets.mint(Grant {
+                kind: TicketKind::Invocation,
+                tier,
+                host_generation,
+                owner: owner.clone(),
+                method: QUESTION_METHOD,
+                target: json!({ "call_id": call_id }),
+                ttl: TICKET_TTL,
+                uses: MAX_CALLS_PER_INVOCATION,
+            })
+        });
         let invocation = Arc::new(Invocation {
             tier,
             host_generation,
@@ -336,13 +390,34 @@ impl CoreCalls {
             plugins: context.plugin_registry.clone(),
             content_hash,
             calls,
+            gate: gate.clone(),
+            root_caller,
+            tickets: std::iter::once(ticket.clone())
+                .chain(checkpoint_ticket.iter().cloned())
+                .chain(question_ticket.iter().cloned())
+                .collect(),
+            session_call_lock: tokio::sync::Mutex::new(()),
             cancel: CancellationToken::new(),
         });
         self.invocations
             .lock()
             .expect("invocations lock")
             .insert(ticket.expose().to_string(), Arc::clone(&invocation));
+        if let Some(checkpoint_ticket) = checkpoint_ticket.as_ref() {
+            self.invocations.lock().expect("invocations lock").insert(
+                checkpoint_ticket.expose().to_string(),
+                Arc::clone(&invocation),
+            );
+        }
+        if let Some(question_ticket) = question_ticket.as_ref() {
+            self.invocations.lock().expect("invocations lock").insert(
+                question_ticket.expose().to_string(),
+                Arc::clone(&invocation),
+            );
+        }
         Some(InvocationGuard {
+            question_ticket,
+            checkpoint_ticket,
             core_calls: Arc::clone(self),
             ticket,
             invocation,
@@ -372,6 +447,9 @@ impl CoreCalls {
                 .collect()
         };
         for invocation in gone {
+            for ticket in &invocation.tickets {
+                self.tickets.revoke(ticket);
+            }
             invocation.cancel.cancel();
         }
     }
@@ -383,7 +461,7 @@ impl CoreCalls {
         self.revoke_where(|invocation| invocation.owner.plugin_id == plugin_id);
     }
 
-    pub(crate) fn revoke_scope(&self, plugin_id: &str, scope: &super::protocol::EntryRef) {
+    pub(crate) fn revoke_scope(&self, plugin_id: &str, scope: &codewhale_config::EntryRef) {
         self.revoke_where(|invocation| {
             invocation.owner.plugin_id == plugin_id && invocation.scope.as_ref() == Some(scope)
         });
@@ -414,15 +492,268 @@ impl CoreCalls {
     }
 
     fn end(&self, ticket: &Ticket) {
-        self.tickets.revoke(ticket);
-        if let Some(invocation) = self
-            .invocations
-            .lock()
-            .expect("invocations lock")
-            .remove(ticket.expose())
-        {
-            invocation.cancel.cancel();
+        if let Some(invocation) = self.invocation(ticket.expose()) {
+            self.revoke_where(|candidate| std::ptr::eq(candidate, invocation.as_ref()));
+        } else {
+            self.tickets.revoke(ticket);
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn redeem_invocation(
+        &self,
+        shared: &ManagerShared,
+        tier: HostTier,
+        host_generation: u64,
+        owner: &OwnerRef,
+        ticket: &str,
+        method: &str,
+        cx: &HostRequestContext,
+    ) -> Result<Arc<Invocation>, RpcErrorWire> {
+        let refuse = |code, message| RpcErrorWire {
+            code,
+            message,
+            data: None,
+        };
+        let redeemed = self.tickets.redeem(&Presented {
+            ticket,
+            kind: TicketKind::Invocation,
+            tier,
+            host_generation,
+            owner,
+            method,
+            target: None,
+        });
+        if let Err(refused) = redeemed {
+            if refused.violation {
+                cx.violation(format!(
+                    "too many invalid {method} tickets from one host process"
+                ));
+            }
+            return Err(refuse(
+                error_code::REFUSED,
+                refused.reason.describe().to_string(),
+            ));
+        }
+        // The redemption proved the ticket is live and ours; the owner must
+        // still be the current one of this tier.
+        let live = shared
+            .registry
+            .lock()
+            .expect("registry lock")
+            .tier_of(owner)
+            == Some(tier);
+        let Some(invocation) = self.invocation(ticket).filter(|_| live) else {
+            return Err(refuse(
+                error_code::REFUSED,
+                format!("the invocation this {method} belongs to has ended"),
+            ));
+        };
+        shared
+            .check_selection(
+                invocation
+                    .plugins
+                    .as_ref()
+                    .and_then(|plugins| plugins.caller_selection()),
+                invocation.plugins.as_deref(),
+                &owner.plugin_id,
+                &invocation.content_hash,
+                invocation.scope.as_ref(),
+            )
+            .map_err(|message| refuse(error_code::REFUSED, message))?;
+        if invocation.cancel.is_cancelled() {
+            return Err(refuse(
+                error_code::REFUSED,
+                "the invocation has ended".to_string(),
+            ));
+        }
+        Ok(invocation)
+    }
+
+    pub(crate) async fn serve_checkpoint(
+        &self,
+        shared: &ManagerShared,
+        tier: HostTier,
+        host_generation: u64,
+        params: SessionCheckpointParams,
+        cx: HostRequestContext,
+    ) -> Result<Value, RpcErrorWire> {
+        let refuse = |code, message| RpcErrorWire {
+            code,
+            message,
+            data: None,
+        };
+        let invocation = self.redeem_invocation(
+            shared,
+            tier,
+            host_generation,
+            &params.owner,
+            &params.ticket,
+            CHECKPOINT_METHOD,
+            &cx,
+        )?;
+        let caller = invocation.root_caller.clone().ok_or_else(|| {
+            refuse(
+                error_code::NOT_AVAILABLE,
+                "session checkpoint requires a live root invocation".into(),
+            )
+        })?;
+        let withdraw = invocation.cancel.child_token();
+        let _withdraw_guard = withdraw.clone().drop_guard();
+        let outcome = tokio::select! {
+            biased;
+            () = cx.cancel.cancelled() => Err(crate::tools::spec::ToolError::cancelled("session checkpoint was cancelled by its host")),
+            () = withdraw.cancelled() => Err(crate::tools::spec::ToolError::cancelled("session checkpoint invocation ended")),
+            result = async {
+                let _session_call = invocation.session_call_lock.lock().await;
+                invocation.gate.checkpoint(caller, withdraw.clone()).await
+            } => result,
+        };
+        if cx.cancel.is_cancelled() || invocation.cancel.is_cancelled() {
+            return Err(refuse(
+                error_code::CANCELLED,
+                "session checkpoint invocation was withdrawn".into(),
+            ));
+        }
+        if shared
+            .registry
+            .lock()
+            .expect("registry lock")
+            .tier_of(&params.owner)
+            != Some(tier)
+        {
+            return Err(refuse(
+                error_code::REFUSED,
+                "session checkpoint owner is no longer current".into(),
+            ));
+        }
+        shared
+            .check_selection(
+                invocation
+                    .plugins
+                    .as_ref()
+                    .and_then(|plugins| plugins.caller_selection()),
+                invocation.plugins.as_deref(),
+                &params.owner.plugin_id,
+                &invocation.content_hash,
+                invocation.scope.as_ref(),
+            )
+            .map_err(|message| refuse(error_code::REFUSED, message))?;
+        outcome.map(Value::Bool).map_err(|error| {
+            let code = if matches!(&error, crate::tools::spec::ToolError::Cancelled { .. }) {
+                error_code::CANCELLED
+            } else {
+                error_code::NOT_AVAILABLE
+            };
+            refuse(code, error.to_string())
+        })
+    }
+
+    pub(crate) async fn serve_question(
+        &self,
+        shared: &ManagerShared,
+        tier: HostTier,
+        host_generation: u64,
+        params: UserQuestionParams,
+        cx: HostRequestContext,
+    ) -> Result<Value, RpcErrorWire> {
+        let refuse = |code, message| RpcErrorWire {
+            code,
+            message,
+            data: None,
+        };
+        let invocation = self.redeem_invocation(
+            shared,
+            tier,
+            host_generation,
+            &params.owner,
+            &params.ticket,
+            QUESTION_METHOD,
+            &cx,
+        )?;
+        let caller = invocation.root_caller.clone().ok_or_else(|| {
+            refuse(
+                error_code::NOT_AVAILABLE,
+                "user question requires a live root invocation".into(),
+            )
+        })?;
+        let request = crate::tools::user_input::UserInputRequest {
+            require_typed_answers: true,
+            questions: params
+                .questions
+                .into_iter()
+                .map(|mut question| {
+                    question.allow_free_text = true;
+                    question
+                })
+                .collect(),
+        };
+        request
+            .validate_transport()
+            .map_err(|error| refuse(error_code::INVALID_PARAMS, error.to_string()))?;
+        let withdraw = invocation.cancel.child_token();
+        let _withdraw_guard = withdraw.clone().drop_guard();
+        let outcome = tokio::select! {
+            biased;
+            () = cx.cancel.cancelled() => Err(crate::tools::spec::ToolError::cancelled("user question was cancelled by its host")),
+            () = withdraw.cancelled() => Err(crate::tools::spec::ToolError::cancelled("user question invocation ended")),
+            result = async {
+                let _session_call = invocation.session_call_lock.lock().await;
+                invocation.gate.user_question(caller, request, withdraw.clone(), invocation.calls.clock()).await
+            } => result,
+        };
+        if cx.cancel.is_cancelled() || invocation.cancel.is_cancelled() {
+            return Err(refuse(
+                error_code::CANCELLED,
+                "user question invocation was withdrawn".into(),
+            ));
+        }
+        if shared
+            .registry
+            .lock()
+            .expect("registry lock")
+            .tier_of(&params.owner)
+            != Some(tier)
+        {
+            return Err(refuse(
+                error_code::REFUSED,
+                "user question owner is no longer current".into(),
+            ));
+        }
+        shared
+            .check_selection(
+                invocation
+                    .plugins
+                    .as_ref()
+                    .and_then(|plugins| plugins.caller_selection()),
+                invocation.plugins.as_deref(),
+                &params.owner.plugin_id,
+                &invocation.content_hash,
+                invocation.scope.as_ref(),
+            )
+            .map_err(|message| refuse(error_code::REFUSED, message))?;
+        outcome
+            .map(|response| serde_json::to_value(response).expect("user input response serializes"))
+            .map_err(|error| {
+                let question_code = error
+                    .metadata()
+                    .and_then(|metadata| metadata.get("user_question_error"))
+                    .and_then(Value::as_str)
+                    .filter(|code| matches!(*code, "NO_PROVIDER" | "ASK_CANCELLED"));
+                let code = if matches!(&error, crate::tools::spec::ToolError::Cancelled { .. })
+                    || question_code == Some("ASK_CANCELLED")
+                {
+                    error_code::CANCELLED
+                } else {
+                    error_code::NOT_AVAILABLE
+                };
+                let data = question_code.map(|code| json!({"user_question_error": code}));
+                RpcErrorWire {
+                    code,
+                    message: error.to_string(),
+                    data,
+                }
+            })
     }
 
     /// Redeem `params` presented by `tier`'s host process `host_generation`
@@ -441,52 +772,15 @@ impl CoreCalls {
             message,
             data: None,
         };
-        let redeemed = self.tickets.redeem(&Presented {
-            ticket: &params.ticket,
-            kind: TicketKind::Invocation,
+        let invocation = self.redeem_invocation(
+            shared,
             tier,
             host_generation,
-            owner: &params.owner,
-            method: METHOD,
-            target: None,
-        });
-        if let Err(refused) = redeemed {
-            if refused.violation {
-                cx.violation(
-                    "too many invalid core/call tickets from one host process".to_string(),
-                );
-            }
-            return Err(refuse(
-                error_code::REFUSED,
-                refused.reason.describe().to_string(),
-            ));
-        }
-        // The redemption proved the ticket is live and ours; the owner must
-        // still be the current one of this tier.
-        let live = shared
-            .registry
-            .lock()
-            .expect("registry lock")
-            .tier_of(&params.owner)
-            == Some(tier);
-        let Some(invocation) = self.invocation(&params.ticket).filter(|_| live) else {
-            return Err(refuse(
-                error_code::REFUSED,
-                "the invocation this core/call belongs to has ended".to_string(),
-            ));
-        };
-        shared
-            .check_selection(
-                invocation
-                    .plugins
-                    .as_ref()
-                    .and_then(|plugins| plugins.caller_selection()),
-                invocation.plugins.as_deref(),
-                &params.owner.plugin_id,
-                &invocation.content_hash,
-                invocation.scope.as_ref(),
-            )
-            .map_err(|message| refuse(error_code::REFUSED, message))?;
+            &params.owner,
+            &params.ticket,
+            METHOD,
+            &cx,
+        )?;
         // Withdrawn when the host cancels this request, its owner is revoked,
         // the host exits (`cx.cancel`), or the invocation ends.
         let withdraw = invocation.cancel.child_token();
@@ -583,10 +877,12 @@ pub(crate) fn wire_from_response(response: ToolCallResponse) -> ToolResultWire {
 }
 
 /// Holds an invocation open. Dropping it (the `tool/call` ended or its future
-/// was dropped) revokes the ticket and withdraws whatever is still pending.
+/// was dropped) revokes its tickets and withdraws whatever is still pending.
 pub(crate) struct InvocationGuard {
     core_calls: Arc<CoreCalls>,
     ticket: Ticket,
+    checkpoint_ticket: Option<Ticket>,
+    question_ticket: Option<Ticket>,
     invocation: Arc<Invocation>,
 }
 
@@ -594,6 +890,14 @@ impl InvocationGuard {
     /// The ticket id to put in this call's `tool/call` (and nowhere else).
     pub(crate) fn ticket(&self) -> &str {
         self.ticket.expose()
+    }
+
+    pub(crate) fn checkpoint_ticket(&self) -> Option<&str> {
+        self.checkpoint_ticket.as_ref().map(Ticket::expose)
+    }
+
+    pub(crate) fn question_ticket(&self) -> Option<&str> {
+        self.question_ticket.as_ref().map(Ticket::expose)
     }
 
     /// The clock the `tool/call` deadline runs on: paused while one of this

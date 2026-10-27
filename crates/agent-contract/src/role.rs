@@ -21,7 +21,7 @@
 //! members, and nothing from tools.
 
 use codewhale_protocol::fleet::{FleetEffectivePermissions, migrate_legacy_role_token};
-use codewhale_workflow::{PermissionCeiling, ShellCeiling};
+use codewhale_protocol::fleet::{PermissionCeiling, ShellCeiling};
 
 use crate::worker_profile::{ShellPolicy, ToolScope, WorkerRuntimeProfile};
 
@@ -268,7 +268,7 @@ pub const NETWORK_TOOL_DENYLIST: &[&str] = &[
     // contract was considered and rejected: `rlm_open` chooses its source from
     // *input fields* (`file_path` / `content` / `url` / `session_object`), not
     // from the action name, and the action-policy seam
-    // (`crate::tools::canonical_action`) resolves names, not field shapes —
+    // (`codewhale_execpolicy::canonical_action`) resolves names, not field shapes —
     // it cannot prove a source is local before execution. So this fails closed.
     // A network-denied member loses `rlm` loading and evaluation entirely,
     // including the purely local `file_path` form, and keeps only the bounded

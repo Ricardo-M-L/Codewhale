@@ -2,10 +2,7 @@ use super::*;
 use crate::task_manager::{TaskManager, TaskManagerConfig};
 
 fn fixture_config() -> Config {
-    let mut config = Config {
-        ..Config::default()
-    }
-    .with_legacy_root(
+    let mut config = Config::default().with_legacy_root(
         Some("local-fixture-key".into()),
         Some("http://127.0.0.1:1/v1".into()),
     );
@@ -201,6 +198,7 @@ async fn shutdown_drains_accepted_user_input_receipt_after_caller_disconnects() 
             id: "input_drain".into(),
             turn_id: "turn_drain".into(),
             request: crate::tools::user_input::UserInputRequest {
+                require_typed_answers: false,
                 questions: Vec::new(),
             },
         },

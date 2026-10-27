@@ -7,9 +7,11 @@ fn fixture(
     workspace: &Path,
     scope: Option<Vec<String>>,
 ) -> (Engine, EngineHandle, Arc<ChildAuthority>, TurnRouteContext) {
-    let api = Config {
-        allow_shell: Some(true),
-        ..Default::default()
+    let api = {
+        let __cw_config_init_0_0 = Some(true);
+        let mut __cw_config_init_0_value: Config = Default::default();
+        __cw_config_init_0_value.allow_shell = __cw_config_init_0_0;
+        __cw_config_init_0_value
     }
     .with_legacy_root(Some("child-local-fixture".into()), None);
     let (mut parent, _parent_handle) = Engine::new(

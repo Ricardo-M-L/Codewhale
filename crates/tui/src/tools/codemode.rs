@@ -214,7 +214,23 @@ pub(crate) enum NestedCallVerdict {
 }
 
 /// One nested call waiting on the turn loop's gate.
-pub(crate) struct NestedCallRequest {
+pub(crate) enum NestedCallRequest {
+    Tool(NestedToolCallRequest),
+    Checkpoint {
+        caller: crate::core::events::SessionCheckpointCaller,
+        withdraw: CancellationToken,
+        reply: oneshot::Sender<Result<bool, ToolError>>,
+    },
+    UserQuestion {
+        caller: crate::core::events::SessionCheckpointCaller,
+        request: crate::tools::user_input::UserInputRequest,
+        withdraw: CancellationToken,
+        clock: Arc<Mutex<PauseClock>>,
+        reply: oneshot::Sender<Result<crate::tools::user_input::UserInputResponse, ToolError>>,
+    },
+}
+
+pub(crate) struct NestedToolCallRequest {
     pub(crate) name: String,
     pub(crate) input: Value,
     pub(crate) reply: oneshot::Sender<NestedCallVerdict>,
@@ -226,7 +242,7 @@ pub(crate) struct NestedCallRequest {
     pub(crate) withdraw: Option<CancellationToken>,
 }
 
-impl NestedCallRequest {
+impl NestedToolCallRequest {
     /// Nobody is waiting for the answer any more.
     pub(crate) fn is_stale(&self) -> bool {
         self.reply.is_closed()
@@ -314,6 +330,62 @@ impl NestedCallGate {
             .map(|gate| (&gate.caller, gate.specs.as_slice()))
     }
 
+    pub(crate) async fn checkpoint(
+        &self,
+        caller: crate::core::events::SessionCheckpointCaller,
+        withdraw: CancellationToken,
+    ) -> Result<bool, ToolError> {
+        if self.extension.is_none() {
+            return Err(ToolError::not_available(
+                "session checkpoint requires a directly served extension invocation",
+            ));
+        }
+        let (reply, answer) = oneshot::channel();
+        let request = NestedCallRequest::Checkpoint {
+            caller,
+            withdraw: withdraw.clone(),
+            reply,
+        };
+        tokio::select! {
+            biased;
+            () = withdraw.cancelled() => Err(ToolError::cancelled("session checkpoint was withdrawn")),
+            result = async {
+                self.requests.send(request).await.map_err(|_| ToolError::not_available("the turn no longer serves session checkpoints"))?;
+                answer.await.map_err(|_| ToolError::not_available("owning host did not acknowledge the session checkpoint"))?
+            } => result,
+        }
+    }
+
+    pub(crate) async fn user_question(
+        &self,
+        caller: crate::core::events::SessionCheckpointCaller,
+        request: crate::tools::user_input::UserInputRequest,
+        withdraw: CancellationToken,
+        clock: Arc<Mutex<PauseClock>>,
+    ) -> Result<crate::tools::user_input::UserInputResponse, ToolError> {
+        if self.extension.is_none() {
+            return Err(ToolError::not_available(
+                "user questions require a directly served extension invocation",
+            ));
+        }
+        let (reply, answer) = oneshot::channel();
+        let request = NestedCallRequest::UserQuestion {
+            caller,
+            request,
+            withdraw: withdraw.clone(),
+            clock,
+            reply,
+        };
+        tokio::select! {
+            biased;
+            () = withdraw.cancelled() => Err(ToolError::cancelled("user question was withdrawn")),
+            result = async {
+                self.requests.send(request).await.map_err(|_| ToolError::not_available("the turn no longer serves user questions"))?;
+                answer.await.map_err(|_| ToolError::not_available("owning host did not answer the user question"))?
+            } => result,
+        }
+    }
+
     /// Ask the serving turn loop to decide one nested call. A gate nobody
     /// serves any more refuses.
     pub(crate) async fn ask(&self, name: String, input: Value) -> NestedCallVerdict {
@@ -340,12 +412,12 @@ impl NestedCallGate {
             decision: NestedDecision::Refused,
         };
         let (reply, answer) = oneshot::channel();
-        let request = NestedCallRequest {
+        let request = NestedCallRequest::Tool(NestedToolCallRequest {
             name,
             input,
             reply,
             withdraw: withdraw.clone(),
-        };
+        });
         let wait = async {
             if self.requests.send(request).await.is_err() {
                 return unavailable();
@@ -386,6 +458,21 @@ impl NestedCallGate {
         let (gate, mut requests) = Self::new(None, tx_event, Duration::from_secs(60));
         tokio::spawn(async move {
             while let Some(request) = requests.recv().await {
+                let request = match request {
+                    NestedCallRequest::Tool(request) => request,
+                    NestedCallRequest::UserQuestion { reply, .. } => {
+                        let _ = reply.send(Err(ToolError::not_available(
+                            "fixture has no user question backend",
+                        )));
+                        continue;
+                    }
+                    NestedCallRequest::Checkpoint { reply, .. } => {
+                        let _ = reply.send(Err(ToolError::not_available(
+                            "fixture has no session checkpoint backend",
+                        )));
+                        continue;
+                    }
+                };
                 let _ = request.reply.send(answer(&request.name, &request.input));
             }
         });
@@ -535,7 +622,16 @@ impl PauseClock {
     }
 }
 
-struct PauseGuard<'a>(&'a Mutex<PauseClock>);
+pub(crate) struct PauseGuard<'a>(&'a Mutex<PauseClock>);
+
+impl<'a> PauseGuard<'a> {
+    pub(crate) fn new(clock: &'a Mutex<PauseClock>) -> Self {
+        if let Ok(mut clock) = clock.lock() {
+            clock.pause();
+        }
+        Self(clock)
+    }
+}
 
 impl Drop for PauseGuard<'_> {
     fn drop(&mut self) {
@@ -669,10 +765,7 @@ impl CodemodeInvoker {
     }
 
     fn pause(&self) -> PauseGuard<'_> {
-        if let Ok(mut clock) = self.clock.lock() {
-            clock.pause();
-        }
-        PauseGuard(&self.clock)
+        PauseGuard::new(&self.clock)
     }
 
     /// Time left before the deadline ([`PauseClock::remaining`]).
@@ -1603,6 +1696,21 @@ mod tests {
         let counter = asked.clone();
         tokio::spawn(async move {
             while let Some(request) = requests.recv().await {
+                let request = match request {
+                    NestedCallRequest::Tool(request) => request,
+                    NestedCallRequest::UserQuestion { reply, .. } => {
+                        let _ = reply.send(Err(ToolError::not_available(
+                            "fixture has no user question backend",
+                        )));
+                        continue;
+                    }
+                    NestedCallRequest::Checkpoint { reply, .. } => {
+                        let _ = reply.send(Err(ToolError::not_available(
+                            "fixture has no session checkpoint backend",
+                        )));
+                        continue;
+                    }
+                };
                 counter.fetch_add(1, Ordering::SeqCst);
                 tokio::time::sleep(delay).await;
                 let verdict = answer(&request.name, &request.input);

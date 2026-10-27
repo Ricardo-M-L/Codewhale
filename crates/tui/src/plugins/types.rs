@@ -206,7 +206,12 @@ impl LoadedPlugin {
     }
 
     #[must_use]
-    pub fn authority(&self, state_path: PathBuf, workspace: PathBuf) -> Option<PluginAuthority> {
+    pub(super) fn authority(
+        &self,
+        state_path: PathBuf,
+        workspace: PathBuf,
+        managed_policy_path: PathBuf,
+    ) -> Option<PluginAuthority> {
         let staged_root = self.staged_root.as_ref()?;
         // The staged tree mirrors the source bundle byte-for-byte, so both
         // share one manifest file name (`plugin.json` or legacy
@@ -220,6 +225,8 @@ impl LoadedPlugin {
             plugin_name: self.name().to_string(),
             workspace,
             state_path,
+            managed_policy_path: Some(managed_policy_path.clone()),
+            managed_policy_source: Some(managed_policy_path),
             source_manifest: self.canonical_root.join(&manifest_name),
             staged_manifest: staged_root.join(&manifest_name),
             content_hash: self.content_hash.clone(),

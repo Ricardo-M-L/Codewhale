@@ -76,14 +76,14 @@ controls do not blur together.
   root down to the workspace, and puts your global instruction file (such as
   `~/.codewhale/AGENTS.md`) in front of them. The nearest scope reads last
   and wins: the workspace file overrides its parents, and project files
-  override the global file. A file over 100 KiB is cut to its first 100 KiB
-  and ends with a `[…truncated: N of M bytes omitted …]` marker, and
-  `/context report` names the file. Instruction and rules files share one
-  48 KiB budget, and instruction files claim it first. Instruction text past
-  the budget is dropped from the front, broadest scope first (the global
-  file, then the repository root), so a file larger than the budget keeps
-  only its end; a marker gives the bytes dropped. Rules past what is left
-  are cut from the end.
+  override the global file. Global and project instructions are budgeted
+  separately in estimated tokens (see [Instruction budget](#instruction-budget-instruction_budget-6526)
+  below): a scope over its budget drops whole files from the broadest end
+  first, and a single file larger than the remaining budget keeps its head
+  with a marker that names the bytes and tokens dropped. A file keeps at most
+  its first 100 KiB, and a file larger than `file_max_bytes` (8 MiB, lowerable
+  only) is skipped with a notice. Every loss — trimmed, skipped, or refused —
+  reaches the model and `/context report`.
 - **Memory and handoffs** — recalled state. Useful, but lower authority than
   constitutions and project instructions.
 
@@ -1563,14 +1563,101 @@ instructions = [
 Rules:
 
 - Paths run through `expand_path` so `~` and env vars work.
-- Each file is capped at 100 KiB; oversized files are
-  truncated with a `[…elided]` marker rather than skipped.
-- Missing files are skipped with a tracing warning so a stale
-  entry doesn't fail the launch.
+- These entries are **global-scope** instruction authority: they are charged
+  to the global budget together with the global `AGENTS.md`/`instructions.md`
+  fallbacks and `~/.claude/CLAUDE.md`.
+- A file keeps at most its first 100 KiB. A file larger than
+  `[instruction_budget] file_max_bytes` (8 MiB by default) is skipped with a
+  notice. Missing and empty files are skipped with a notice so a stale entry
+  doesn't fail the launch.
 - Only user-owned config, profiles, and managed config may set this array.
   Project config (`<workspace>/.codewhale/config.toml`, or legacy
   `<workspace>/.deepseek/config.toml`) ignores `instructions` so a cloned repo
   cannot choose arbitrary local files to place into the prompt.
+
+### Instruction budget (`[instruction_budget]`, #6526)
+
+Standing instruction files are assembled into two independent scopes and
+budgeted in **estimated tokens** — the same conservative estimator `/context`
+uses, never a `bytes/4` shortcut, which underestimates Cyrillic by 30–50%.
+
+- **global** — `~/.codewhale/AGENTS.md` (or the `.agents`/`.deepseek`
+  fallbacks), the global `instructions.md` fallbacks, `~/.claude/CLAUDE.md`
+  as a last resort when `claude_fallback` is on, and the
+  `instructions = [...]` array.
+- **project** — the repository-root → workspace `AGENTS.md` chain, co-read
+  foreign files, and the `.codewhale/rules`/`.claude/rules` block.
+
+Each scope is capped at `min(absolute_tokens, percent × usable_window)`. The
+usable window is the route window minus the output reservation the request
+will actually carry and a safety reserve of 10% of the window (minimum 2,048
+tokens). A route whose context window is unknown has no usable window: the
+percentage ceilings and the guard are reported as `unknown` and only the
+absolute caps apply.
+
+```toml
+[instruction_budget]
+global_budget_tokens = 100000
+project_budget_tokens = 100000
+global_budget_percent = 25
+project_budget_percent = 25
+static_prefix_guard_percent = 80
+file_max_bytes = 8388608
+policy = "trim"
+claude_fallback = false
+```
+
+With a 64K (65,536-token) output reservation:
+
+| window | usable | per scope | both scopes | guard 80% |
+| --- | --- | --- | --- | --- |
+| 128,000 | 49,664 | 12,416 | 24,832 | 39,731 |
+| 1,000,000 | 834,464 | 100,000 (absolute cap) | 200,000 | 667,571 |
+
+Behaviour:
+
+- **Nothing is trimmed while a source is within its scope budget.**
+- A scope over budget drops whole files from the broadest end first — the
+  root-most ancestor goes first, the workspace file last — and a single file
+  that alone exceeds the remaining budget keeps its **head** and drops its
+  tail with a marker carrying bytes and estimated tokens.
+- Every instruction, rules, and configured file retains at most its first
+  100 KiB of text, ending in a marker that names the bytes kept and dropped.
+- Rules are charged to the project scope after the instruction chain and keep
+  a head-first trim.
+- `file_max_bytes` is a hard ceiling that can only be lowered from its 8 MiB
+  default: a larger file is **skipped**, never trimmed, and the read is
+  bounded on the open file, so a FIFO or a growing file cannot exhaust memory.
+  The same applies to a whitespace-only file and to files beyond the
+  50-per-directory rules cap.
+- `policy = "trim"` (default) trims and reports. `policy = "refuse"` stops the
+  request before dispatch when a scope budget, the rules budget, or the
+  100 KiB retention would trim, or when the request prefix exceeds the guard;
+  skips stay skips, because one bad file must not make the project unopenable.
+- `static_prefix_guard_percent` caps the request prefix: every system block
+  plus the tool schemas the request carries. When it trips, the two scopes are
+  narrowed largest first until the prefix fits, only the installed instruction
+  block is replaced, and the change is recorded as a declared prefix change.
+  If the prefix still exceeds the guard afterwards, the residual excess is
+  reported rather than looped on. The guard must leave at least 10 points
+  above the two scope percents. Prompts owned by a host (child agents,
+  isolated chat, RLM) are measured and can be refused, but are never trimmed.
+- `claude_fallback = true` (opt in; default `false`): a directory with no
+  `AGENTS.md` (or codewhale `instructions.md`) uses its `CLAUDE.md`. A skipped
+  `AGENTS.md` counts as absent; a file already loaded from a wider scope (a
+  symlink) is a reported duplicate, not a fallback trigger. Other tools'
+  instruction files are never imported unless you opt in here or through
+  `project_instruction_imports`.
+- Every loss — trimmed, skipped, refused — reaches the model as one
+  runtime-provenance message whenever the list changes, and appears per source
+  in `/context report`. `codewhale doctor`'s report is a preview built from the
+  current files and config; it does not claim a request passed the tool-schema
+  guard.
+- The table is **user config only**, like `instructions`: project config is
+  ignored and a cloned repository cannot shrink the global budget or force
+  `refuse`. An invalid table (unknown key, zero budget, percent outside
+  1–100, guard without room left, `file_max_bytes` outside 1–8388608) fails
+  the launch.
 
 ### Hooks
 

@@ -29,6 +29,8 @@ use std::time::Duration;
 use crate::hashing::sha256_hex;
 
 mod compiled_host;
+#[cfg(any(unix, windows))]
+pub(crate) mod uninstall;
 
 const GITHUB_LATEST_RELEASE_PAGE_URL: &str =
     "https://github.com/codewhale-hq/CodeWhale/releases/latest";
@@ -205,6 +207,10 @@ pub fn run_update(beta: bool, check_only: bool, proxy_arg: Option<String>) -> Re
     // Step 4: Replace command paths only after the download and the running
     // executable identity verify. The preflight happens before a colocated
     // compatibility path can change, then the identity is checked just in time.
+    #[cfg(unix)]
+    let mut command_receipt = uninstall::CommandReceipt::capture(&current_exe)?;
+    #[cfg(windows)]
+    let had_receipt = uninstall::CommandReceipt::capture(&current_exe)?.is_some();
     let mut host_update = compiled_host::prepare(
         &download,
         latest_tag,
@@ -222,13 +228,38 @@ pub fn run_update(beta: bool, check_only: bool, proxy_arg: Option<String>) -> Re
             validate_update_target(target, &executable_identity)
         })
     })();
+    #[cfg(unix)]
+    let receipt_renewal = command_receipt
+        .as_mut()
+        .map(|receipt| receipt.renew(&bytes))
+        .transpose();
+    #[cfg(windows)]
+    let receipt_renewal = if had_receipt {
+        uninstall::CommandReceipt::capture_accepting(&current_exe, Some(&sha256_hex(&bytes)))
+            .and_then(|receipt| {
+                receipt
+                    .context("command ownership receipt disappeared during update")?
+                    .renew(&bytes)
+            })
+            .map(Some)
+    } else {
+        Ok(None)
+    };
     if let Err(error) = replaced {
         if let Some(host) = &mut host_update {
             host.rollback()
                 .context("compiled-host rollback failed; retained backup path is reported below")?;
         }
+        #[cfg(any(unix, windows))]
+        if let Err(renewal) = receipt_renewal {
+            return Err(error.context(format!(
+                "command ownership receipt could not be renewed after partial update: {renewal:#}"
+            )));
+        }
         return Err(error);
     }
+    #[cfg(any(unix, windows))]
+    receipt_renewal.context("binaries updated, but command ownership receipt renewal failed; preserved receipt/recovery paths require attention")?;
     if let Some(host) = &host_update {
         println!(
             "Updated the qualified compiled image, notices and relink source beside this CLI; Node remains default."
@@ -1300,7 +1331,10 @@ fn parse_checksum_manifest(text: &str) -> Result<HashMap<String, String>> {
             bail!("invalid SHA256 manifest line {}: {trimmed}", index + 1);
         }
 
-        let (hash, rest) = trimmed.split_at(64);
+        let (hash, rest) = trimmed
+            .get(..64)
+            .zip(trimmed.get(64..))
+            .with_context(|| format!("invalid SHA256 manifest line {}: {trimmed}", index + 1))?;
         if !hash.chars().all(|ch| ch.is_ascii_hexdigit())
             || rest.is_empty()
             || !rest.chars().next().is_some_and(char::is_whitespace)

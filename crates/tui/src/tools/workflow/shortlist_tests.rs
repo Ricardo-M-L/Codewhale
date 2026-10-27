@@ -2,12 +2,12 @@
 
 use super::*;
 use crate::client::CodewhaleClient;
-use crate::config::Config;
 use crate::fleet::exact::{ExactFleetWorkflow, StaticFleetRouter};
 use crate::fleet::members::add_fleet_model;
 use crate::fleet::store::{FleetFile, FleetScope, save_fleet, set_selected};
 use crate::tools::subagent::new_shared_subagent_manager;
 use codewhale_config::ProviderKind;
+use codewhale_runtime::config::Config;
 use codewhale_workflow::{FleetDocument, QualifiedFleetId};
 use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
@@ -34,10 +34,7 @@ impl RouteFixture {
         let (parent, parent_calls, _, _) = tests::fake_chat_client_capturing("parent route").await;
         let (target, target_calls, target_bodies, _) =
             tests::fake_chat_client_capturing("frozen route result").await;
-        let mut config = Config {
-            ..Default::default()
-        }
-        .with_legacy_root(
+        let mut config = <Config as Default>::default().with_legacy_root(
             Some("fixture-key".into()),
             Some(parent.base_url().to_string()),
         );

@@ -331,7 +331,7 @@ pub(crate) async fn run_pdf_driver(
     let output = async {
         if cancel.is_some_and(CancellationToken::is_cancelled) { return Err(PdfTextError::Cancelled); }
         let mut command = tokio::process::Command::new(&input.binary);
-        crate::utils::suppress_tokio_console_window(&mut command);
+        codewhale_util::utils::suppress_tokio_console_window(&mut command);
         command.arg("-layout");
         if let Some((start,end))=input.page_range { command.arg("-f").arg(start.to_string()).arg("-l").arg(end.to_string()); }
         command.arg(&input.path).arg("-").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);

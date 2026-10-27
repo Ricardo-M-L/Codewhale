@@ -85,7 +85,6 @@ mod tests {
     };
     use ratatui::{Terminal, backend::TestBackend};
 
-    use crate::config::Config;
     use crate::tools::subagent::{
         AgentWorkerStatus, MailboxMessage, SubAgentAssignment, SubAgentResult, SubAgentStatus,
     };
@@ -105,6 +104,7 @@ mod tests {
     };
     use codewhale_agent_contract::role::FleetRole;
     use codewhale_config::ProviderKind;
+    use codewhale_runtime::config::Config;
 
     const SESSION: &str = "work-surface-test";
 

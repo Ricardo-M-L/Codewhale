@@ -11,10 +11,10 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::Value;
 use tracing::debug;
 
-use crate::config::Config;
 use crate::core::events::TurnRoute;
 use crate::route_receipt::{TurnRouteReceipt, endpoint_identity};
 use codewhale_config::ProviderKind;
+use codewhale_runtime::config::Config;
 
 /// The exact route authority a turn was launched against.
 ///
@@ -180,7 +180,7 @@ pub fn route_is_supported_suggestion_provider(provider: ProviderKind) -> bool {
 /// and fail closed on routes that never changed.
 fn resolve_credentials_for_identity(
     config: &Config,
-    identity: &crate::config::ProviderIdentity,
+    identity: &codewhale_runtime::config::ProviderIdentity,
     model: &str,
 ) -> Option<SuggestionRouteCredentials> {
     // Belt and braces: callers already gated, but this function must never
@@ -526,8 +526,8 @@ mod tests {
         endpoint_identity, generate_suggestion, plan_suggestion_launch,
         plan_suggestion_launch_with_config, resolve_credentials_for_identity,
     };
-    use crate::config::ProvidersConfig;
     use crate::test_support::{EnvVarGuard, TestEnvLock, lock_test_env};
+    use codewhale_runtime::config::ProvidersConfig;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -1301,9 +1301,11 @@ mod tests {
     }
 
     fn deepseek_config(api_key: &str, base_url: &str) -> Config {
-        let mut config = Config {
-            provider: Some("deepseek".to_string()),
-            ..Config::default()
+        let mut config = {
+            let __cw_config_init_0_0 = Some("deepseek".to_string());
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value
         };
         let providers = config
             .providers
@@ -1316,10 +1318,10 @@ mod tests {
     #[test]
     fn suggestion_vendor_pin_rotation_or_invalid_config_fails_closed() {
         let _env = seal_deepseek_env();
-        let mut config = Config {
-            provider: Some("openrouter".to_string()),
-            providers: Some(ProvidersConfig {
-                openrouter: crate::config::ProviderConfig {
+        let mut config = {
+            let __cw_config_init_1_0 = Some("openrouter".to_string());
+            let __cw_config_init_1_1 = Some(ProvidersConfig {
+                openrouter: codewhale_runtime::config::ProviderConfig {
                     api_key: Some("fixture-openrouter-key".to_string()),
                     base_url: Some("http://127.0.0.1:18080/v1".to_string()),
                     model: Some("fixture/model".to_string()),
@@ -1327,8 +1329,11 @@ mod tests {
                     ..Default::default()
                 },
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_1_value: Config = Default::default();
+            __cw_config_init_1_value.provider = __cw_config_init_1_0;
+            __cw_config_init_1_value.providers = __cw_config_init_1_1;
+            __cw_config_init_1_value
         };
         let client = crate::client::CodewhaleClient::new(&config).unwrap();
         let authority =

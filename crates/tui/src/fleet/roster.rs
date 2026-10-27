@@ -698,7 +698,9 @@ impl FleetRoster {
     /// identity. Provider-less saved defaults share the typed override map
     /// with explicit subagent configuration, without a second lookup table.
     #[must_use]
-    pub fn model_overrides(&self) -> HashMap<String, crate::config::SubagentModelOverride> {
+    pub fn model_overrides(
+        &self,
+    ) -> HashMap<String, codewhale_runtime::config::SubagentModelOverride> {
         self.members
             .iter()
             .filter_map(|member| {
@@ -781,14 +783,14 @@ impl FleetRoster {
                 "{}: effective={} · {}",
                 entry.id,
                 entry.effective,
-                crate::utils::display_path(&entry.effective_path)
+                codewhale_util::utils::display_path(&entry.effective_path)
             ));
             for layer in &entry.layers {
                 let mark = if layer.wins { "wins" } else { "ignored" };
                 lines.push(format!(
                     "  {} · {} ({mark})",
                     layer.origin,
-                    crate::utils::display_path(&layer.source)
+                    codewhale_util::utils::display_path(&layer.source)
                 ));
             }
         }
@@ -1397,7 +1399,7 @@ mod tests {
             overrides,
             HashMap::from([(
                 "reviewer".to_string(),
-                crate::config::SubagentModelOverride {
+                codewhale_runtime::config::SubagentModelOverride {
                     provider: None,
                     model: "deepseek-v4-pro".to_string(),
                 }
@@ -1442,7 +1444,7 @@ mod tests {
         );
         assert_eq!(
             overrides.get("builder"),
-            Some(&crate::config::SubagentModelOverride {
+            Some(&codewhale_runtime::config::SubagentModelOverride {
                 provider: None,
                 model: "deepseek-v4-pro".to_string(),
             }),

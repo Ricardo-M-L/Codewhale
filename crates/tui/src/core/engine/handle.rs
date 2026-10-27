@@ -433,7 +433,7 @@ impl EngineHandle {
             .turn_controls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if matches!(&op, Op::SendMessage(_)) {
+        if matches!(&op, Op::SendMessage(_) | Op::Review { .. }) {
             let mut control = controls.fresh();
             control.narrowing = narrowing;
             controls.pending.push_back(control);
@@ -730,7 +730,7 @@ impl EngineHandle {
     pub async fn retry_tool_with_policy(
         &self,
         id: impl Into<String>,
-        policy: crate::sandbox::SandboxPolicy,
+        policy: codewhale_sandbox::SandboxPolicy,
     ) -> Result<()> {
         self.retry_tool_with_policy_by(id, policy, ApprovalDecider::User)
             .await
@@ -740,7 +740,7 @@ impl EngineHandle {
     pub async fn retry_tool_with_policy_by(
         &self,
         id: impl Into<String>,
-        policy: crate::sandbox::SandboxPolicy,
+        policy: codewhale_sandbox::SandboxPolicy,
         by: ApprovalDecider,
     ) -> Result<()> {
         self.tx_approval

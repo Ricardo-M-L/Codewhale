@@ -11,10 +11,10 @@ fn change(app: &mut App, version: Option<&str>) -> CommandResult {
         app,
     )
 }
-use crate::config::Config;
 use crate::test_support::{EnvVarGuard, lock_test_env};
 use crate::tui::app::{App, TuiOptions};
 use codewhale_localization::Locale;
+use codewhale_runtime::config::Config;
 fn make_app(tmpdir: &tempfile::TempDir, locale: Locale, has_api_key: bool) -> App {
     let mut config = Config::default();
     if has_api_key {

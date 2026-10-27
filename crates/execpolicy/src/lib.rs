@@ -1,5 +1,6 @@
 pub mod approval_mode;
 pub mod bash_arity;
+pub mod canonical_action;
 pub mod command_safety;
 pub mod matcher;
 pub mod shell_expand;

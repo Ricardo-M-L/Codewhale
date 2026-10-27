@@ -1212,7 +1212,9 @@ title is unset, the latest turn's input summary — the displayed title). It
 does not scan turn or item bodies: `preview` is filled only after a match, so
 a dashboard keystroke is not a whole-store read per thread. Each item includes
 `id`, `title`, `preview`, `model`, `mode`, `archived`, `updated_at`,
-`latest_turn_id`, `latest_turn_status`, plus workspace metadata:
+`latest_turn_id`, `latest_turn_status`, `parent_thread_id` when the thread
+was forked from another (absent on threads forked before the field existed),
+plus workspace metadata:
 
 ```json
 {
@@ -1864,6 +1866,46 @@ Create and update requests accept an optional `model`. When present, each
 scheduled or manually triggered run uses that model; omitting it keeps the
 runtime's default task model.
 
+Create and update requests also accept an optional `destination_thread_id`.
+When set, each run is delivered into that existing thread as a new turn
+instead of starting a new task thread; the turn item carries
+`{"input_provenance":"scheduled","task_id":...}` metadata, and the turn uses
+the thread's own model and permission posture. If the thread is busy the run
+waits for its current turn to finish (bounded by the task wall-time budget).
+A destination that no longer exists or is archived fails the run with a
+receipt naming the thread; it is never rerouted to a new thread. An empty
+string on `PATCH` clears the destination. Create and update return `404` for
+an unknown thread and `409` for an archived one.
+
+**Delayed triggers** (one-shot messages; the HTTP face of `send_later`)
+- `GET /v1/triggers?thread_id=&status=&limit=50` — newest first; `thread_id`
+  filters by destination thread, `status` is one of `pending`,
+  `dispatching`, `fired`, `canceled`, `failed`
+- `POST /v1/triggers` — `{"message", "fire_at" | "delay_minutes",
+  "thread_id"?, "workspace"?, "owner_session_id"?}`; exactly one of `fire_at`
+  (RFC 3339, in the future) or `delay_minutes` (>= 1). `owner_session_id`
+  defaults to `thread_id` and is required without one. Returns `201` with the
+  `DelayedTriggerRecord`; honours `Idempotency-Key` like `POST
+  /v1/automations`
+- `GET /v1/triggers/{id}`
+- `DELETE /v1/triggers/{id}` — cancels a pending trigger; `409` once it has
+  been admitted
+
+A trigger with `destination_thread_id` fires into that thread exactly as an
+automation run does above. `send_later` called from inside a Runtime thread
+defaults its destination to that thread, so the reminder comes back to the
+same conversation; `thread_id: ""` keeps the old new-task-thread behaviour.
+The `automation` tool accepts the same `thread_id`. From a tool, `thread_id`
+can name only the calling thread (`"current"` or its id); targeting another
+thread is a Runtime API operation.
+
+When an automation or trigger names a destination thread, the Engine
+publishes typed events on that thread's stream: `automation.created`,
+`automation.updated` (`automation_id`, `name`, `rrule`, `status`,
+`next_run_at`), `trigger.scheduled`, `trigger.canceled` and `trigger.fired`
+(`trigger_id`, `message`, `fire_at`, `status`, `task_id`). They are
+notifications for captions, not model input.
+
 **Automation mutation preconditions.** `GET /v1/runtime/info` advertises
 `capabilities.automation_mutation_preconditions: true`; require it before
 relying on the behavior below (older Engines ignore both inputs).
@@ -2201,7 +2243,14 @@ also how a client sees model-spawned work.
   `POST /v1/git/unstage` same; `POST /v1/git/discard` `{ "paths": [...] }`
   (tracked paths only — no `all`, an untracked path fails closed);
   `POST /v1/git/commit` `{ "message", "all"? }`; stage, unstage, discard
-  and commit also take an optional `expect` (below); `POST /v1/git/push`
+  and commit also take an optional `expect` (below). Stage, unstage and
+  discard also take `patch`: hunks of the one path in `paths`, with file
+  headers `diff --git a/<path> b/<path>`, `--- a/<path>`, `+++ b/<path>`
+  naming that workspace-relative path. Stage applies them to the index,
+  unstage reverses them in the index, discard reverses them in the working
+  tree (`git apply [--cached] [--reverse]`). Renames, copies, mode changes,
+  creations, deletions and binary patches are refused, and a patch that no
+  longer applies fails with git's message and writes nothing. `POST /v1/git/push`
   `{ "remote"?, "set_upstream"? }` (`remote`, or `origin` when only
   `set_upstream` is given, must name a configured remote);
   `POST /v1/git/branch`

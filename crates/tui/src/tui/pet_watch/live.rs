@@ -342,7 +342,7 @@ impl Client {
             // environment and `PATH`, where a workspace could shadow the
             // launcher and receive this URL's owner token. Use the launcher
             // from a trusted system prefix only (U06-06).
-            let launcher = crate::notify::audio::trusted_system_executable("xdg-open")?;
+            let launcher = codewhale_notify::audio::trusted_system_executable("xdg-open")?;
             let mut child = Process::new(launcher)
                 .arg(&url)
                 .stdin(Stdio::null())

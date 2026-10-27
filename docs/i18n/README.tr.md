@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -198,10 +198,10 @@ veya LSP sunucusu gerektiren eklentileri reddeder
 [kancalar](../HOOKS.md) çalıştırın. Code mode (deneysel, varsayılan olarak açık),
 modelin birkaç MCP ve eklenti aracını çağıran tek bir `execute_tools` programı
 yazmasını sağlar; her çağrı yine onay kurallarınızdan geçer ve makbuzunu korur.
-Birlikte gelen Computer Use eklentisi
+Ayrı olarak yüklenen Computer Use eklentisi
 (deneysel, yalnızca macOS) diğer uygulamaları gözlemleyip kullanabilir. Siz
 erişimini gözden geçirip etkinleştirene kadar kapalı kalır
-([kılavuz](../../crates/tui/plugins/computer-use/README.md)).
+([kılavuz](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## Çalıştırma yolları
 

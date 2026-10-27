@@ -463,7 +463,7 @@ impl WorkerRuntimeProfile {
             // wins via `derive_child`, same as every other role.
             reasoning_effort: matches!(role, FleetRole::Consultant).then(|| "high".to_string()),
             denied_tools: Vec::new(),
-            max_spawn_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+            max_spawn_depth: codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH,
             spawn_depth: 0,
             wall_time_secs: None,
             wall_deadline_ms: None,

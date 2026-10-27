@@ -8537,7 +8537,7 @@ fn fleet_exec_config_default_matches_subagent_depth() {
     // the fleet default equals DEFAULT_SPAWN_DEPTH without a nesting cap.
     assert_eq!(
         FleetExecConfig::default().max_spawn_depth,
-        DEFAULT_SPAWN_DEPTH
+        codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH
     );
     assert_eq!(FleetExecConfig::default().max_spawn_depth, u32::MAX);
 }

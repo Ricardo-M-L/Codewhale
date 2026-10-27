@@ -1,10 +1,10 @@
 //! Public-host observations captured before FEAT-027 production migration.
 //! Fixtures stay outside the portable command closure.
 use crate::commands::{CommandResult, execute};
-use crate::config::Config;
 use crate::tui::app::{App, AppAction, TuiOptions};
 use codewhale_config::ProviderKind;
 use codewhale_localization::Locale;
+use codewhale_runtime::config::Config;
 use serde_json::{Value, json};
 use std::fs;
 use tempfile::TempDir;
@@ -41,7 +41,10 @@ fn normalize(message: &str, temp: &TempDir) -> String {
             &codewhale_config::quote_os_path(&workspace.join("permissions.toml")),
             "\"<WORKSPACE>/permissions.toml\"",
         );
-        text = text.replace(&crate::utils::display_path(workspace), "<WORKSPACE>");
+        text = text.replace(
+            &codewhale_util::utils::display_path(workspace),
+            "<WORKSPACE>",
+        );
         if let Some(workspace) = workspace.to_str() {
             text = text.replace(workspace, "<WORKSPACE>");
         }

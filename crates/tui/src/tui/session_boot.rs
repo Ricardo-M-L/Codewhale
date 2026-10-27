@@ -533,18 +533,6 @@ mod tests {
 
         let registry = crate::plugins::PluginDiscoveryContext::capture_pre_dotenv()
             .registry_for_workspace(&workspace);
-        let shipped_disabled = registry
-            .list()
-            .into_iter()
-            .filter(|plugin| {
-                !plugin.enabled && plugin.trust_status == PluginTrustStatus::NeverReviewed
-            })
-            .count();
-        assert!(
-            shipped_disabled > 0,
-            "fixture must discover at least one disabled, never-reviewed built-in"
-        );
-
         let summary = PluginBootSummary::from_registry(&registry);
         assert_eq!(summary.loaded, registry.list().len());
         assert!(

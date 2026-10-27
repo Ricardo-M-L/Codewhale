@@ -168,11 +168,25 @@ sandbox_mode = "workspace-write" # read-only | workspace-write | danger-full-acc
 # "muse", or "all". Env: CODEWHALE_PROJECT_INSTRUCTION_IMPORTS (comma-separated).
 # project_instruction_imports = ["claude"]
 #
-# Everything that reaches the model as standing project instruction authority —
-# the repository-root -> workspace AGENTS.md chain, the global fallback layer,
-# .codewhale/rules/*.md, and any imported foreign files — shares one 48 KiB
-# aggregate budget. Instructions claim it first and are trimmed from the
-# broadest scope inward, so the nearest-scope file is the last thing dropped.
+# Standing instructions are budgeted per scope, in estimated tokens, and every
+# trim or skip is reported to the model and in /context.
+# `global` covers ~/.codewhale/AGENTS.md (or ~/.agents/AGENTS.md), the global
+# instructions.md fallbacks, ~/.claude/CLAUDE.md (last resort, claude_fallback
+# only) and the `instructions = [...]` array. `project` covers the
+# repository-root -> workspace AGENTS.md chain, co-read foreign files, and
+# .codewhale/rules/*.md. A scope is capped at the smaller of its absolute token
+# budget and its share of the usable window (context window minus the output
+# reservation and a 10% safety reserve). Each file keeps at most its first
+# 100 KiB. User config only: a cloned repository cannot change it.
+# [instruction_budget]
+# global_budget_tokens = 100000    # positive; absolute cap for the global scope
+# project_budget_tokens = 100000   # positive; absolute cap for the project scope
+# global_budget_percent = 25       # 1..=100, share of the usable window
+# project_budget_percent = 25      # 1..=100, share of the usable window
+# static_prefix_guard_percent = 80 # 1..=100; guard must leave >=10 points
+# file_max_bytes = 8388608         # 1..=8388608; larger files are skipped
+# policy = "trim"                  # trim | refuse
+# claude_fallback = false          # opt in: AGENTS.md wins; else CLAUDE.md
 # prompt_suggestion = true  # opt-in: show ghost-text follow-up question in composer after each turn
 
 # Optional tab/window title shown as `[title] …` in front of the terminal
@@ -1267,20 +1281,18 @@ code_mode = true # execute_tools composes MCP/plugin/native calls; false defers 
                         # a prompt under Full Access, under Bypass, or with a
                         # matching session grant, which is bound to the
                         # plugin's reviewed build (an update asks again).
-                        # Sandbox: on macOS the host runs under Seatbelt, and
-                        # on Linux under bubblewrap (/usr/bin/bwrap) when a
-                        # launch-time probe shows it works. Either way: no
-                        # direct network, no reads of ~/.codewhale secrets/
-                        # credentials/config/sessions, and writes only to its
-                        # data dir and temp dirs (plus, on macOS, the Darwin
-                        # user cache, ~/.cargo/registry, ~/.cargo/git and the
-                        # npm cache, which every Seatbelt-sandboxed command
-                        # gets). If bwrap is missing or cannot start (for
-                        # example blocked unprivileged user namespaces), the
-                        # host runs UNSANDBOXED with your user permissions and
-                        # /plugin, `codewhale doctor` and the start diagnostic
-                        # say so with bwrap's own error. On Windows it always
-                        # runs with your user permissions.
+                        # Native code requires a verified OS sandbox: Seatbelt
+                        # on macOS, bubblewrap on Linux, and LPAC/Job on Windows.
+                        # An unavailable Native sandbox refuses activation.
+                        # Unix reads are limited to the selected runtime and
+                        # libraries, canonical host bundle, captured Core-managed
+                        # plugin stores and Native data. Writes stay in Native
+                        # data and private scratch; repository reads and direct
+                        # network are denied. Native plugins share one trusted
+                        # cohort, not separate per-plugin OS sandboxes.
+                        # On macOS a detached child can outlive process-group
+                        # cancellation while retaining the sandbox restrictions.
+                        # Builtin host policy is separate and diagnosed separately.
                         # Toggling this changes the plugin activation policy,
                         # so every plugin must be re-reviewed afterwards.
 

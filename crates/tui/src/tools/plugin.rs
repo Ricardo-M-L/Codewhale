@@ -45,7 +45,7 @@ use super::spec::{
     ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec,
 };
 
-use crate::config::ToolOverride;
+use codewhale_runtime::config::ToolOverride;
 
 /// Timeout for plugin script execution (120 seconds).
 const PLUGIN_EXECUTION_TIMEOUT: Duration = Duration::from_secs(120);
@@ -184,7 +184,7 @@ impl ToolSpec for ScriptPluginTool {
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
         let (interpreter, script_args) = script_command_parts(&self.script_path, &self.args);
         let mut command = tokio::process::Command::new(&interpreter);
-        crate::utils::suppress_tokio_console_window(&mut command);
+        codewhale_util::utils::suppress_tokio_console_window(&mut command);
         command.args(script_args);
         self.executor
             .run(
@@ -257,12 +257,12 @@ impl ToolSpec for CommandPluginTool {
         // we let tokio::process::Command resolve via PATH.
         let mut cmd = if cfg!(windows) && !self.command.contains('.') {
             let mut c = tokio::process::Command::new("cmd");
-            crate::utils::suppress_tokio_console_window(&mut c);
+            codewhale_util::utils::suppress_tokio_console_window(&mut c);
             c.arg("/c").arg(&self.command);
             c
         } else {
             let mut c = tokio::process::Command::new(&self.command);
-            crate::utils::suppress_tokio_console_window(&mut c);
+            codewhale_util::utils::suppress_tokio_console_window(&mut c);
             c
         };
         cmd.args(&self.args);

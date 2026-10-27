@@ -6,9 +6,9 @@
 //! both suites must pass again after the handlers move.
 
 use super::{CommandResult, execute};
-use crate::config::Config;
 use crate::tui::app::{App, AppAction};
 use codewhale_models::{SystemBlock, SystemPrompt};
+use codewhale_runtime::config::Config;
 use serde_json::{Value, json};
 
 fn outcome(result: CommandResult) -> Value {
@@ -67,7 +67,7 @@ fn collect() -> Value {
         );
         app.ui_locale = codewhale_localization::Locale::En;
         app.set_provider_identity_record(
-            crate::config::Config::default()
+            codewhale_runtime::config::Config::default()
                 .resolve_provider_identity(codewhale_config::ProviderKind::Deepseek.as_str())
                 .expect("captured fixture provider"),
         );
@@ -106,13 +106,13 @@ fn collect() -> Value {
         );
         app.ui_locale = codewhale_localization::Locale::En;
         app.set_provider_identity_record(
-            crate::config::Config::default()
+            codewhale_runtime::config::Config::default()
                 .resolve_provider_identity(codewhale_config::ProviderKind::Deepseek.as_str())
                 .expect("captured fixture provider"),
         );
         match label {
             "balance_unsupported" => app.set_provider_identity_record(
-                crate::config::Config::default()
+                codewhale_runtime::config::Config::default()
                     .resolve_provider_identity(codewhale_config::ProviderKind::OpenaiCodex.as_str())
                     .expect("captured fixture provider"),
             ),

@@ -772,7 +772,7 @@ mod tests {
 
     #[tokio::test]
     async fn network_policy_denies_blocked_host() {
-        use crate::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
+        use codewhale_net::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
         let policy = NetworkPolicy {
             default: Decision::Deny.into(),
             allow: vec!["api.deepseek.com".to_string()],
@@ -793,7 +793,7 @@ mod tests {
 
     #[tokio::test]
     async fn proxy_opt_in_does_not_allow_restricted_ip_literal() {
-        use crate::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
+        use codewhale_net::network_policy::{Decision, NetworkPolicy, NetworkPolicyDecider};
 
         let policy = NetworkPolicy {
             default: Decision::Allow.into(),

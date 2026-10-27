@@ -24,11 +24,12 @@ Codewhale account, with any explicit saved repository override. OrcaRouter is
 an optional provider connection, not a review default. Missing usable account
 configuration requires setup; it does not select another provider.
 
-This standalone Action has explicit provider/model inputs. It does not fetch
-the hosted GitHub App settings automatically. Its account machine-key route
-is described below; optional BYOK setup is shown next.
+This standalone Action has explicit provider/model inputs and no default
+provider. It does not fetch the hosted GitHub App settings automatically. Use
+your own provider key, shown next; the account machine-key route is described
+below.
 
-## Optional: use your own provider key
+## Use your own provider key
 
 Pick `orcarouter`, `deepseek`, `anthropic`, `openrouter`, `zai`, or `modelstudio-token-plan`,
 an exact model ID, and a released CLI tag. Store the matching provider key as
@@ -162,7 +163,7 @@ your account's machine-key route has been separately verified. The Action runs
 | Analysis input | Default | Meaning |
 | --- | --- | --- |
 | `version` | Required | Exact released CLI tag, never `latest` |
-| `provider` | `codewhale` | Account relay or explicit BYOK |
+| `provider` | Required | Explicit BYOK provider, or `codewhale` for a verified account machine key |
 | `model` | Required | Exact model ID; account mode uses `provider/model` |
 | `max-chars` | 200000 | Complete diff characters per pass, maximum 8388608 |
 | `max-passes` | 1 | Complete ordered passes, maximum 64 |

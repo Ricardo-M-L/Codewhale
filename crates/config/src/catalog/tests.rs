@@ -1433,7 +1433,7 @@ fn stepfun_bundled_coding_models_preserve_default_and_plan_pricing_boundary() {
             .find(|row| row.default_for_provider)
             .unwrap()
             .wire_model_id,
-        "step-3.7-flash"
+        "step-5-preview"
     );
     for row in &rows {
         assert_eq!(row.reasoning, Some(true));

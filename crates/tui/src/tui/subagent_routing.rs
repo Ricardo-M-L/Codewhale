@@ -715,7 +715,7 @@ fn record_agent_current_activity(app: &mut App, message: &MailboxMessage) {
         meta.received_tokens = Some(meta.received_tokens.unwrap_or(0).saturating_add(turn_total));
         meta.resolved_provider = Some(route.provider.as_str().to_string());
         meta.resolved_model = Some(bound_agent_activity_text(
-            &crate::cost_status::sanitize_persisted_route_label(&route.model),
+            &codewhale_runtime::safe_label::sanitize_persisted_route_label(&route.model),
         ))
         .filter(|model| !model.trim().is_empty());
         return;
@@ -981,7 +981,7 @@ fn format_task_detail(task: &TaskRecord) -> String {
     lines.push(format!("Model: {}", task.model));
     lines.push(format!(
         "Workspace: {}",
-        crate::utils::display_path(&task.workspace)
+        codewhale_util::utils::display_path(&task.workspace)
     ));
     if let Some(owner_session_id) = task.owner_session_id.as_deref() {
         lines.push(format!("Owning Session: {owner_session_id}"));
@@ -1078,13 +1078,13 @@ fn format_task_detail(task: &TaskRecord) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::task_manager::{TaskStatus, TaskSummary};
     use crate::tools::subagent::SubAgentAssignment;
     use crate::tui::app::{InitialInput, TuiOptions};
     use crate::tui::widgets::agent_card::AgentLifecycle;
     use chrono::Utc;
     use codewhale_agent_contract::role::FleetRole;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     fn test_options() -> TuiOptions {

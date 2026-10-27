@@ -17,8 +17,8 @@ use reqwest::{Method, Request, Response, Url, header};
 
 use super::headers::{apply_safe_custom_headers, with_default_mcp_http_headers};
 use super::{McpServerConfig, ReviewedPluginMcpSource, oauth};
-use crate::network_policy::{Decision, NetworkPolicyDecider};
-use crate::tools::web::guard::{guarded_reqwest_client_builder, is_restricted_ip};
+use codewhale_net::guard::{guarded_reqwest_client_builder, is_restricted_ip};
+use codewhale_net::network_policy::{Decision, NetworkPolicyDecider};
 
 #[derive(Clone, Default)]
 pub(super) struct McpHttpAuth {
@@ -199,7 +199,12 @@ impl McpHttpClient {
             || request.headers().keys().any(|name| {
                 !matches!(
                     name.as_str(),
-                    "accept" | "content-type" | "content-length" | "mcp-protocol-version"
+                    "accept"
+                        | "content-type"
+                        | "content-length"
+                        | "mcp-protocol-version"
+                        | "mcp-method"
+                        | "mcp-name"
                 )
             });
         validate_credential_transport(request.url(), credentials)
@@ -220,7 +225,26 @@ impl McpHttpClient {
                 .context("MCP request body cannot be replayed")?
                 .build()?,
         )?;
-        let headers = self.mcp_auth.resolved_headers().await?;
+        let modern = request
+            .try_clone()
+            .context("MCP request body cannot be replayed")?
+            .build()?
+            .headers()
+            .get("mcp-protocol-version")
+            .is_some_and(|value| value == super::MCP_MODERN_PROTOCOL_VERSION);
+        let mut headers = self.mcp_auth.resolved_headers().await?;
+        if modern {
+            headers.retain(|name, _| {
+                ![
+                    "mcp-session-id",
+                    "mcp-protocol-version",
+                    "mcp-method",
+                    "mcp-name",
+                ]
+                .iter()
+                .any(|reserved| name.trim().eq_ignore_ascii_case(reserved))
+            });
+        }
         Ok(apply_safe_custom_headers(
             with_default_mcp_http_headers(request, json_body),
             &headers,
@@ -373,7 +397,22 @@ impl McpHttpClient {
         validate: &mut (dyn FnMut() -> Result<()> + Send),
     ) -> Result<Response> {
         if request.url().origin().ascii_serialization() == self.origin {
+            let modern = request
+                .headers()
+                .get("mcp-protocol-version")
+                .is_some_and(|value| value == super::MCP_MODERN_PROTOCOL_VERSION);
             for (name, value) in &self.default_headers {
+                if modern
+                    && [
+                        "mcp-session-id",
+                        "mcp-protocol-version",
+                        "mcp-method",
+                        "mcp-name",
+                    ]
+                    .contains(&name.as_str())
+                {
+                    continue;
+                }
                 if !request.headers().contains_key(name) {
                     request.headers_mut().insert(name.clone(), value.clone());
                 }
@@ -472,10 +511,11 @@ impl McpHttpClient {
         if !operator_origin && url_has_credentials(url) {
             bail!("MCP HTTP discovered URL must not contain credentials");
         }
-        let proxy =
-            super::configured_mcp_proxy(url, !operator_origin || self.reviewed_plugin, |key| {
-                std::env::var(key)
-            })?;
+        let proxy = codewhale_net::proxy::configured_mcp_proxy(
+            url,
+            !operator_origin || self.reviewed_plugin,
+            |key| std::env::var(key),
+        )?;
         // A selected operator proxy resolves its own destinations. This is
         // delegated proxy authority, never evidence of a local DNS pin.
         let pin = if (self.private_origin_allowed && same_origin) || proxy.is_some() {

@@ -760,8 +760,8 @@ pub fn apply_toggle_compatible(view: &mut SkillsManagerView, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::tui::app::{App, TuiOptions};
+    use codewhale_runtime::config::Config;
     use crossterm::event::{KeyEventKind, KeyModifiers};
     use std::ffi::OsString;
     use std::fs;
@@ -857,7 +857,7 @@ mod tests {
         )
         .unwrap();
         let digest = crate::skills::audit::compute_package_digest(&skill_dir).unwrap();
-        crate::skills::install::write_installed_from_v2(
+        codewhale_skill_install::install::write_installed_from_v2(
             &skill_dir,
             "github:o/r",
             None,

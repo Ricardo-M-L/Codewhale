@@ -194,7 +194,7 @@ impl WorkflowRunJournal {
     }
 
     fn hydrate_runs(&self, recover_orphans: bool) -> HashMap<String, WorkflowRunRecord> {
-        let file = match crate::fs_confined::open_read(&self.root, &self.ledger_path) {
+        let file = match codewhale_util::fs_confined::open_read(&self.root, &self.ledger_path) {
             Ok(file) => file,
             Err(err) => {
                 if err.kind() != std::io::ErrorKind::NotFound {
@@ -295,7 +295,7 @@ impl WorkflowRunJournal {
         let mut line =
             serde_json::to_string(record).map_err(|err| std::io::Error::other(err.to_string()))?;
         line.push('\n');
-        let mut file = crate::fs_confined::open_append(&self.root, &self.ledger_path)?;
+        let mut file = codewhale_util::fs_confined::open_append(&self.root, &self.ledger_path)?;
         file.write_all(line.as_bytes())?;
         file.flush()?;
         Ok(())

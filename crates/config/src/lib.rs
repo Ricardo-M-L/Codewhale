@@ -7,7 +7,10 @@ mod config_document;
 pub mod credentials;
 pub mod descriptors;
 pub mod device_code;
+pub mod extension_host;
 pub mod external_credentials;
+pub mod hooks;
+pub mod instruction_budget;
 pub mod legacy_root;
 pub mod model_reference;
 pub mod models_dev;
@@ -1771,6 +1774,10 @@ pub struct PluginAuthority {
     pub plugin_name: String,
     pub workspace: std::path::PathBuf,
     pub state_path: std::path::PathBuf,
+    #[serde(default)]
+    pub managed_policy_path: Option<std::path::PathBuf>,
+    #[serde(skip)]
+    pub managed_policy_source: Option<std::path::PathBuf>,
     pub source_manifest: std::path::PathBuf,
     pub staged_manifest: std::path::PathBuf,
     pub content_hash: String,
@@ -1781,19 +1788,45 @@ pub struct PluginAuthority {
     pub state_generation: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectHookAuthority {
+    pub workspace: PathBuf,
+    pub digest: String,
+}
+
+/// Identity of one activation. `generation` bumps on every (re)activation;
+/// `owner_token` is 128+ random bits minted by the core and handed over only
+/// in `ext/activate`. It catches bugs and stale fibers; it is not a boundary
+/// against a malicious plugin in the same process (see the design, §4.4).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct OwnerRef {
+    pub plugin_id: String,
+    pub generation: u64,
+    pub owner_token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct EntryRef {
+    pub path: String,
+    pub sha256: String,
+}
+
 impl std::fmt::Display for PluginId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-/// Protocol owner selected only by user configuration. Rust is the default;
-/// Host explicitly selects the SDK and never falls back to Rust on refusal.
+/// Host uses the SDK by default; explicit Rust selection remains available.
+/// A Host refusal never falls back to Rust.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum McpBackend {
-    #[default]
     Rust,
+    #[default]
     Host,
 }
 
@@ -1849,7 +1882,7 @@ pub struct SnapshotsToml {
     pub extras: BTreeMap<String, toml::Value>,
 }
 
-fn default_snapshots_enabled() -> bool {
+pub fn default_snapshots_enabled() -> bool {
     true
 }
 
@@ -1889,9 +1922,6 @@ pub struct FleetConfigToml {
     pub exec: FleetExecConfig,
 }
 
-/// Runtime delegation has no default product depth limit. Explicit owner
-/// values still restrict child authority; zero disables delegation.
-pub const DEFAULT_SPAWN_DEPTH: u32 = u32::MAX;
 pub const DEFAULT_STREAM_CHUNK_TIMEOUT_SECS: u64 = 900;
 pub const MIN_STREAM_CHUNK_TIMEOUT_SECS: u64 = 1;
 pub const MAX_STREAM_CHUNK_TIMEOUT_SECS: u64 = 3600;
@@ -1968,7 +1998,7 @@ pub struct FleetExecConfig {
     #[serde(default = "default_fleet_max_turns")]
     pub max_turns: u32,
     /// Recursive child-agent budget for headless fleet workers.
-    /// Defaults to [`DEFAULT_SPAWN_DEPTH`], with no product depth cap.
+    /// Defaults to [`codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH`], with no product depth cap.
     /// Set zero to block child delegation while preserving the root worker.
     #[serde(default = "default_fleet_max_spawn_depth")]
     pub max_spawn_depth: u32,
@@ -1993,7 +2023,7 @@ fn default_fleet_max_turns() -> u32 {
 }
 
 fn default_fleet_max_spawn_depth() -> u32 {
-    DEFAULT_SPAWN_DEPTH
+    codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH
 }
 
 fn default_fleet_output_format() -> String {
@@ -4832,7 +4862,7 @@ fn resolve_deepseek_base_url(
     }
 }
 
-fn xiaomi_mimo_base_url_for_mode(mode: &str) -> Option<&'static str> {
+pub fn xiaomi_mimo_base_url_for_mode(mode: &str) -> Option<&'static str> {
     let normalized = mode.trim().to_ascii_lowercase().replace(['_', ' '], "-");
     if normalized.is_empty() || xiaomi_mimo_mode_uses_standard_endpoint(&normalized) {
         return None;
@@ -4865,7 +4895,7 @@ fn xiaomi_mimo_base_url_for_mode(mode: &str) -> Option<&'static str> {
     })
 }
 
-fn xiaomi_mimo_mode_uses_standard_endpoint(normalized_mode: &str) -> bool {
+pub fn xiaomi_mimo_mode_uses_standard_endpoint(normalized_mode: &str) -> bool {
     matches!(
         normalized_mode,
         "standard" | "default" | "payg" | "paygo" | "pay-as-you-go" | "pay-as-go"
@@ -4912,7 +4942,7 @@ fn xiaomi_mimo_env_api_key_for_runtime(
     env_value(XIAOMI_MIMO_TOKEN_PLAN_ENV_VARS).or_else(|| env_value(XIAOMI_MIMO_STANDARD_ENV_VARS))
 }
 
-fn resolve_xiaomi_mimo_base_url(
+pub fn resolve_xiaomi_mimo_base_url(
     configured: Option<String>,
     api_key: Option<&str>,
     mode: Option<&str>,
@@ -4948,7 +4978,7 @@ fn resolve_xiaomi_mimo_base_url(
     }
 }
 
-fn xiaomi_mimo_api_key_uses_token_plan(api_key: Option<&str>) -> bool {
+pub fn xiaomi_mimo_api_key_uses_token_plan(api_key: Option<&str>) -> bool {
     api_key.is_some_and(|key| key.trim_start().starts_with("tp-"))
 }
 
@@ -5196,7 +5226,7 @@ fn base_url_uses_local_host(base_url: &str) -> bool {
         .is_ok_and(|addr| addr.is_loopback() || addr.is_unspecified())
 }
 
-fn base_url_host(base_url: &str) -> Option<&str> {
+pub fn base_url_host(base_url: &str) -> Option<&str> {
     let without_scheme = base_url
         .split_once("://")
         .map_or(base_url, |(_, rest)| rest);

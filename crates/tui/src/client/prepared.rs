@@ -31,6 +31,11 @@ use codewhale_runtime::hashing::canonical_json;
 
 use codewhale_config::ProviderKind;
 
+pub(super) const REQUEST_BODY_BYTE_TRIGGER: usize = 32 * 1024 * 1024;
+pub(super) const REQUEST_BODY_BYTE_TARGET: usize = 16 * 1024 * 1024;
+pub(super) const REQUEST_BODY_IMAGE_NOTE: &str = "[Image omitted from this request to fit Codewhale's local request-byte budget. The original remains in the session. Do not guess what it showed. Take a fresh observation if needed; do not repeat an action to recover its image.]";
+pub(super) const REQUEST_BODY_413_IMAGE_NOTE: &str = "[Image omitted from this retry because the provider rejected the request body as too large (HTTP 413). The original remains in the session. Do not guess what it showed. Take a fresh observation if needed; do not repeat an action to recover its image.]";
+
 /// The wire protocol a prepared request speaks.
 ///
 /// This is the production dialect set. It is deliberately *not* collapsed to
@@ -109,7 +114,7 @@ impl RouteShape {
 /// Which endpoint this request would be POSTed to, as typed facts.
 ///
 /// `url` is the real, unredacted target: production needs it to send. Every
-/// display surface must go through [`super::redact_url_for_display`] rather
+/// display surface must go through [`codewhale_secrets::sanitize::redact_url_for_display`] rather
 /// than printing it, and the manifest only ever publishes the redacted
 /// scheme/host and a fingerprint — never the path, which can itself carry a
 /// deployment secret.
@@ -294,6 +299,8 @@ pub(crate) struct PreparedOutboundRequest {
     /// check. This stopgap receipt is intentionally not a projection layer;
     /// it only transports a bounded user-visible warning.
     pub(crate) omitted_tool_names: Vec<String>,
+    pub(crate) image_omission_notice: Option<String>,
+    pub(crate) image_projection: Option<crate::llm_client::ImageProjectionReceipt>,
 }
 
 impl PreparedOutboundRequest {
@@ -316,7 +323,15 @@ impl PreparedOutboundRequest {
             replay_input_tokens,
             entrypoint,
             omitted_tool_names: Vec::new(),
+            image_omission_notice: None,
+            image_projection: None,
         }
+    }
+
+    pub(crate) fn serialized_body_bytes(&self) -> anyhow::Result<usize> {
+        let mut writer = codewhale_util::utils::CountingWriter::new();
+        serde_json::to_writer(&mut writer, &self.body)?;
+        Ok(writer.count())
     }
 
     #[must_use]
@@ -658,10 +673,11 @@ pub(crate) fn chat_route_shape(
     if url.contains("/beta/chat/completions") {
         return RouteShape::DeepseekBetaStrictTools;
     }
-    if crate::config::is_exact_kimi_code_k3_route(provider, base_url, wire_model) {
+    if codewhale_runtime::config::is_exact_kimi_code_k3_route(provider, base_url, wire_model) {
         return RouteShape::KimiCodeK3;
     }
-    if crate::config::is_exact_direct_moonshot_k3_route(provider, base_url, wire_model) {
+    if codewhale_runtime::config::is_exact_direct_moonshot_k3_route(provider, base_url, wire_model)
+    {
         return RouteShape::DirectMoonshotK3;
     }
     if provider == ProviderKind::Custom {
@@ -1012,6 +1028,10 @@ mod tests {
     fn assert_partition_exact(request: &PreparedOutboundRequest, what: &str) {
         let view = request.wire_view();
         assert_eq!(
+            request.serialized_body_bytes().unwrap(),
+            serde_json::to_vec(&request.body).unwrap().len()
+        );
+        assert_eq!(
             view.body_bytes,
             request.canonical_body().len(),
             "{what}: the view must measure the bytes that would be POSTed"
@@ -1216,9 +1236,9 @@ mod tests {
 #[cfg(test)]
 mod dialect_seam_tests {
     use super::*;
-    use crate::config::{Config, ProviderConfig, ProvidersConfig};
     use codewhale_models::Role;
     use codewhale_models::{ContentBlock, Message, MessageRequest, SystemPrompt, Tool};
+    use codewhale_runtime::config::{Config, ProviderConfig, ProvidersConfig};
     use serde_json::json;
 
     use super::super::CodewhaleClient;
@@ -1263,10 +1283,13 @@ mod dialect_seam_tests {
     fn client(provider: &str, configure: impl FnOnce(&mut ProvidersConfig)) -> CodewhaleClient {
         let mut providers = ProvidersConfig::default();
         configure(&mut providers);
-        CodewhaleClient::new(&Config {
-            provider: Some(provider.to_string()),
-            providers: Some(providers),
-            ..Config::default()
+        CodewhaleClient::new(&{
+            let __cw_config_init_0_0 = Some(provider.to_string());
+            let __cw_config_init_0_1 = Some(providers);
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value
         })
         .expect("client resolves for this route")
     }
@@ -1298,9 +1321,9 @@ mod dialect_seam_tests {
     fn output_cap_reaches_all_three_wire_dialects_with_reasoning_inside_allowance() {
         let _env = crate::test_support::lock_test_env();
         for wire in ["chat-completions", "anthropic-messages", "responses"] {
-            let config = Config {
-                provider: Some("output-cap-fixture".into()),
-                providers: Some(ProvidersConfig {
+            let config = {
+                let __cw_config_init_1_0 = Some("output-cap-fixture".into());
+                let __cw_config_init_1_1 = Some(ProvidersConfig {
                     custom: std::collections::HashMap::from([(
                         "output-cap-fixture".into(),
                         ProviderConfig {
@@ -1313,8 +1336,11 @@ mod dialect_seam_tests {
                         },
                     )]),
                     ..Default::default()
-                }),
-                ..Config::default()
+                });
+                let mut __cw_config_init_1_value: Config = Config::default();
+                __cw_config_init_1_value.provider = __cw_config_init_1_0;
+                __cw_config_init_1_value.providers = __cw_config_init_1_1;
+                __cw_config_init_1_value
             };
             let client = CodewhaleClient::new(&config).unwrap();
             let mut request = request("fixture-model");
@@ -1566,15 +1592,18 @@ mod dialect_seam_tests {
             .canonicalize()
             .expect("canonical credential home");
         let _home = crate::test_support::EnvVarGuard::set("CODEWHALE_HOME", &root);
-        let mut config = Config {
-            provider: Some("openai-codex".to_string()),
-            ..Config::default()
+        let mut config = {
+            let __cw_config_init_2_0 = Some("openai-codex".to_string());
+            let mut __cw_config_init_2_value: Config = Config::default();
+            __cw_config_init_2_value.provider = __cw_config_init_2_0;
+            __cw_config_init_2_value
         };
         config
             .provider_config_for_mut(&config.test_identity_for_kind(ProviderKind::OpenaiCodex))
             .unwrap()
             .model = Some("gpt-5-codex".into());
-        crate::oauth::install_test_chatgpt_registration(&mut config).expect("official test grant");
+        codewhale_runtime::oauth::install_test_chatgpt_registration(&mut config)
+            .expect("official test grant");
         CodewhaleClient::new(&config).expect("official ChatGPT client")
     }
 

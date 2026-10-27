@@ -2,6 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod auto_route_evidence;
+pub mod image_window;
+pub mod reasoning_effort_tier;
+pub mod schema_canonicalize;
+pub mod schema_sanitize;
+pub mod tool_projection;
+pub mod turn_classify;
+
 /// Context window used only for legacy DeepSeek model IDs that do not name a
 /// newer V4 alias and do not carry an explicit `*k` suffix.
 pub const LEGACY_DEEPSEEK_CONTEXT_WINDOW_TOKENS: u32 = 128_000;

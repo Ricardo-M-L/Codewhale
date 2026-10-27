@@ -13,15 +13,15 @@ use crate::project_context::find_git_root;
 use crate::tools::goal::{GoalPauseReason, GoalSnapshot};
 use crate::tools::plan::PlanSnapshot;
 use crate::tools::todo::TodoListSnapshot;
-use crate::utils::write_atomic;
-use crate::work_graph::ReasoningEffortTier;
 use chrono::{DateTime, Utc};
 use codewhale_config::ProviderKind;
 use codewhale_core::ContextReference;
 #[cfg(test)]
 use codewhale_core::{ContextReferenceKind, ContextReferenceSource};
+use codewhale_models::reasoning_effort_tier::ReasoningEffortTier;
 use codewhale_models::{ContentBlock, Message, SystemPrompt};
 use codewhale_runtime::session_tree::{SessionEntry, SessionImportContainer, SessionJournal};
+use codewhale_util::utils::write_atomic;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
@@ -1306,7 +1306,7 @@ impl SavedSession {
                     .iter()
                     .filter(|entry| {
                         matches!(
-                            entry.kind,
+                            *entry.kind,
                             codewhale_runtime::session_tree::SessionEntryKind::Message { .. }
                         )
                     })
@@ -1835,7 +1835,7 @@ impl SessionManager {
         };
         let file = self.live_lease_path(id, true).and_then(|path| {
             let file = open_private_lock_file(&path)?;
-            Ok(crate::runtime_threads::try_lock_file_exclusive(&file)?.then_some(file))
+            Ok(codewhale_util::lock::try_lock_file_exclusive(&file)?.then_some(file))
         });
         match &file {
             Ok(Some(_)) => {}
@@ -1891,7 +1891,7 @@ impl SessionManager {
         // A liveness probe from another process holds this lock for a moment;
         // a few short retries tell that apart from a running owner.
         for attempt in 0..LIVE_LEASE_ATTACH_ATTEMPTS {
-            if crate::runtime_threads::try_lock_file_exclusive(&file).map_err(lease_unavailable)? {
+            if codewhale_util::lock::try_lock_file_exclusive(&file).map_err(lease_unavailable)? {
                 return Ok(SessionLease {
                     id: id.to_string(),
                     file: Some(file),
@@ -1966,7 +1966,7 @@ impl SessionManager {
         // Contention means a live holder; acquiring proves none, and the
         // probe's lock is released when `file` drops here.
         !matches!(
-            crate::runtime_threads::try_lock_file_exclusive(&file),
+            codewhale_util::lock::try_lock_file_exclusive(&file),
             Ok(true)
         )
     }
@@ -1977,7 +1977,7 @@ impl SessionManager {
     pub(crate) fn hold_live_lease_elsewhere(&self, session_id: &str) -> fs::File {
         let path = self.live_lease_path(session_id, true).expect("lease path");
         let lease = open_private_lock_file(&path).expect("open lease");
-        assert!(crate::runtime_threads::try_lock_file_exclusive(&lease).expect("lock lease"));
+        assert!(codewhale_util::lock::try_lock_file_exclusive(&lease).expect("lock lease"));
         lease
     }
 
@@ -2981,7 +2981,7 @@ impl SessionManager {
         let path = journal_archive_path(&self.sessions_dir, session_id)?;
         let dir = self.sessions_dir.join(JOURNAL_ARCHIVE_DIR);
         if let Ok(metadata) = fs::symlink_metadata(&dir)
-            && crate::plugins::metadata_is_link_or_reparse(&metadata)
+            && codewhale_util::path_identity::metadata_is_link_or_reparse(&metadata)
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -3101,7 +3101,9 @@ impl SessionManager {
     fn remove_journal_archive(&self, id: &str) -> io::Result<()> {
         let dir = self.sessions_dir.join(JOURNAL_ARCHIVE_DIR);
         match fs::symlink_metadata(&dir) {
-            Ok(metadata) if crate::plugins::metadata_is_link_or_reparse(&metadata) => {
+            Ok(metadata)
+                if codewhale_util::path_identity::metadata_is_link_or_reparse(&metadata) =>
+            {
                 tracing::warn!(
                     path = %dir.display(),
                     "journal archive directory is a link; its copies were not removed"
@@ -3698,10 +3700,11 @@ impl SessionManager {
     /// it while the turn's file edits stayed on disk.
     pub fn attach_session(&self, id: &str) -> std::io::Result<(SessionRecovery, SessionLease)> {
         let lease = self.reserve_session_for_attach(id)?;
-        let recovery = match self.promote_interrupted_checkpoint(id) {
-            Some(kept) => self.persist_resumed_repair(kept),
-            None => self.resume_session(id)?,
-        };
+        let stale_checkpoint = self.promote_interrupted_checkpoint(id);
+        let recovery = self.resume_session(id)?;
+        if stale_checkpoint {
+            let _ = self.clear_session_checkpoint(id);
+        }
         Ok((recovery, lease))
     }
 
@@ -3709,35 +3712,35 @@ impl SessionManager {
     /// checkpoint is the newer of the two (or there is no document yet), then
     /// consume it. Callers hold the session's attach lease. A stale checkpoint
     /// never replaces a newer document; an unreadable document and a failed
-    /// save leave both files as they were.
-    pub(crate) fn promote_interrupted_checkpoint(&self, id: &str) -> Option<SessionRecovery> {
+    /// save leave both files as they were. Only a document about to be
+    /// replaced is read in full; otherwise the comparison reads its metadata.
+    /// Returns true when the checkpoint is stale: it is left for the caller to
+    /// clear once the full document has been read.
+    pub(crate) fn promote_interrupted_checkpoint(&self, id: &str) -> bool {
         let Ok(Some(checkpoint)) = self.load_session_checkpoint(id) else {
-            return None;
+            return false;
         };
-        let kept = match self.recover_session_for_resume(id) {
-            Ok(saved) if saved.session.metadata.updated_at >= checkpoint.metadata.updated_at => {
-                Some(saved)
-            }
+        match self.load_session_metadata_by_id(id) {
+            Ok(saved) if saved.updated_at >= checkpoint.metadata.updated_at => return true,
             Ok(_) => {
+                if self.load_session_snapshot(id).is_err() {
+                    return false;
+                }
                 let mut promoted = checkpoint;
                 self.merge_persisted_lifecycle(&mut promoted.metadata);
                 if self.save_session(&promoted).is_err() {
-                    return None;
+                    return false;
                 }
-                None
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 if self.save_session(&checkpoint).is_err() {
-                    return None;
+                    return false;
                 }
-                None
             }
-            // A document that exists but cannot be read is not ours to
-            // replace here; the attach reports it and the checkpoint stays.
-            Err(_) => return None,
-        };
+            Err(_) => return false,
+        }
         let _ = self.clear_session_checkpoint(id);
-        kept
+        false
     }
 
     /// [`Self::attach_session`] with a partial-ID prefix.
@@ -4073,7 +4076,9 @@ impl SessionManager {
         };
         let dir = self.sessions_dir.join(WORK_GRAPH_IMPORT_ARCHIVE_DIR);
         match fs::symlink_metadata(&dir) {
-            Ok(metadata) if crate::plugins::metadata_is_link_or_reparse(&metadata) => {
+            Ok(metadata)
+                if codewhale_util::path_identity::metadata_is_link_or_reparse(&metadata) =>
+            {
                 tracing::warn!(
                     path = %dir.display(),
                     "work-graph import archive is a link; its copies were not removed"
@@ -4197,7 +4202,9 @@ impl SessionManager {
         self.clear_session_boot_owner(id);
         let session_dir = self.sessions_dir.join(id.trim());
         if session_dir.exists() {
-            if crate::plugins::metadata_is_link_or_reparse(&fs::symlink_metadata(&session_dir)?) {
+            if codewhale_util::path_identity::metadata_is_link_or_reparse(&fs::symlink_metadata(
+                &session_dir,
+            )?) {
                 // Preserve remove_dir_all's existing no-follow behavior.
                 fs::remove_dir_all(session_dir)?;
                 return Ok(());
@@ -4707,7 +4714,7 @@ fn copy_file_create_new(src: &Path, dst: &Path) -> io::Result<bool> {
 /// Always non-fatal. Returns silently — callers don't need the count
 /// (the underlying repo logs at WARN if anything blew up).
 pub fn prune_workspace_snapshots(workspace: &Path, max_age: std::time::Duration) {
-    match crate::snapshot::prune_older_than(workspace, max_age) {
+    match codewhale_snapshot::prune_older_than(workspace, max_age) {
         Ok(0) => {}
         Ok(n) => {
             tracing::debug!(target: "snapshot", "boot prune removed {n} snapshot(s)");
@@ -5142,8 +5149,8 @@ fn recovered_legacy_title(
     array_complete: bool,
 ) -> Option<String> {
     let stale = messages.iter().any(|message| {
-        crate::runtime_handoff::classify_user_turn_prompt(message)
-            == crate::runtime_handoff::UserTurnPromptKind::NotPrompt
+        codewhale_models::turn_classify::classify_user_turn_prompt(message)
+            == codewhale_models::turn_classify::UserTurnPromptKind::NotPrompt
             && message.content.iter().any(|block| match block {
                 ContentBlock::Text { text, .. } => {
                     truncate_title(text, 50) == stored
@@ -5290,8 +5297,8 @@ pub(crate) fn conversation_title_prompt(messages: &[Message]) -> Option<&str> {
     messages
         .iter()
         .find(|message| {
-            crate::runtime_handoff::classify_user_turn_prompt(message)
-                != crate::runtime_handoff::UserTurnPromptKind::NotPrompt
+            codewhale_models::turn_classify::classify_user_turn_prompt(message)
+                != codewhale_models::turn_classify::UserTurnPromptKind::NotPrompt
         })
         .and_then(|m| {
             m.content.iter().find_map(|block| match block {

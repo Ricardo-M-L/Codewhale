@@ -272,8 +272,8 @@ const ITEM_SEPARATOR_WIDTH: usize = 3;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::tui::app::TuiOptions;
+    use codewhale_runtime::config::Config;
     use std::path::PathBuf;
 
     fn test_app() -> App {
@@ -436,13 +436,14 @@ mod tests {
     #[test]
     fn session_metrics_strip_is_on_by_default() {
         assert!(
-            crate::config::StatusItem::default_footer().contains(&crate::config::StatusItem::Ttft)
-                && crate::config::StatusItem::default_footer()
-                    .contains(&crate::config::StatusItem::OutputRate)
+            codewhale_runtime::config::StatusItem::default_footer()
+                .contains(&codewhale_runtime::config::StatusItem::Ttft)
+                && codewhale_runtime::config::StatusItem::default_footer()
+                    .contains(&codewhale_runtime::config::StatusItem::OutputRate)
         );
         assert_eq!(
-            crate::config::StatusItem::from_key("session_metrics"),
-            Some(crate::config::StatusItem::SessionMetrics)
+            codewhale_runtime::config::StatusItem::from_key("session_metrics"),
+            Some(codewhale_runtime::config::StatusItem::SessionMetrics)
         );
     }
 
@@ -1038,7 +1039,10 @@ pub(crate) fn tideline_footer_from_app(app: &mut App, width: u16) -> TidelineFoo
     // the working clocks (#5914) and the live counts are the bar's own
     // posture statement and stay unconditional.
     let mode_chip = mode_chip
-        .filter(|_| app.status_items.contains(&crate::config::StatusItem::Mode))
+        .filter(|_| {
+            app.status_items
+                .contains(&codewhale_runtime::config::StatusItem::Mode)
+        })
         .map(|(text, ink)| (text.into_owned(), ink));
     // Cycle keys come from the binding table and only when that binding is
     // live for the current focus.
@@ -1192,13 +1196,14 @@ mod neutrality_tests {
     #[test]
     fn session_metrics_strip_is_on_by_default() {
         assert!(
-            crate::config::StatusItem::default_footer().contains(&crate::config::StatusItem::Ttft)
-                && crate::config::StatusItem::default_footer()
-                    .contains(&crate::config::StatusItem::OutputRate)
+            codewhale_runtime::config::StatusItem::default_footer()
+                .contains(&codewhale_runtime::config::StatusItem::Ttft)
+                && codewhale_runtime::config::StatusItem::default_footer()
+                    .contains(&codewhale_runtime::config::StatusItem::OutputRate)
         );
         assert_eq!(
-            crate::config::StatusItem::from_key("session_metrics"),
-            Some(crate::config::StatusItem::SessionMetrics)
+            codewhale_runtime::config::StatusItem::from_key("session_metrics"),
+            Some(codewhale_runtime::config::StatusItem::SessionMetrics)
         );
     }
 }

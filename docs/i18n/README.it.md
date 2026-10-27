@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -200,10 +200,10 @@ sessione e degli strumenti. La modalità codice (sperimentale, attiva per
 impostazione predefinita) consente al modello di scrivere un unico programma
 `execute_tools` che chiama più strumenti MCP e dei plugin; ogni chiamata resta
 soggetta alle tue regole di approvazione e conserva la sua ricevuta. Il plugin
-Computer Use incluso (sperimentale, solo macOS) può osservare e usare altre
+Computer Use installato separatamente (sperimentale, solo macOS) può osservare e usare altre
 applicazioni. Resta disattivato finché non ne
 controlli gli accessi e lo abiliti
-([guida](../../crates/tui/plugins/computer-use/README.md)).
+([guida](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## Modi di eseguirlo
 

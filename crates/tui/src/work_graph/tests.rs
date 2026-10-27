@@ -4,6 +4,7 @@
 
 use super::compat;
 use super::*;
+use codewhale_models::reasoning_effort_tier::ReasoningEffortTier;
 
 const SESSION: &str = "sess-test";
 

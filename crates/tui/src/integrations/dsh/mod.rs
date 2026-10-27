@@ -741,7 +741,7 @@ pub(crate) fn launch_spec(
     let provider_env_vars: Vec<String> =
         record.identity.source.api_key_env.iter().cloned().collect();
     let strip_env = launch_env_strip_list(
-        crate::config::cli_api_key_source().as_deref(),
+        codewhale_runtime::config::cli_api_key_source().as_deref(),
         &provider_env_vars,
     );
     Ok(LaunchSpec {
@@ -936,7 +936,7 @@ pub(crate) fn bundle_availability_now() -> BundleAvailability {
 
 /// Derive the non-secret route identity from a loaded Codewhale config.
 pub(crate) fn codewhale_route_identity(
-    config: &crate::config::Config,
+    config: &codewhale_runtime::config::Config,
     workspace: &Path,
 ) -> Result<CodewhaleRouteIdentity, String> {
     let identity = config.active_provider_identity()?;
@@ -956,7 +956,8 @@ pub(crate) fn codewhale_route_identity(
             WireProtocol::AnthropicMessages
         }
     };
-    let keyless_local = crate::config::provider_route_is_keyless_self_hosted(provider, &base_url);
+    let keyless_local =
+        codewhale_runtime::config::provider_route_is_keyless_self_hosted(provider, &base_url);
     let api_key_env = provider
         .provider()
         .env_vars()

@@ -110,7 +110,7 @@ async fn reviewer_tool_with(
         backup.base_url()
     };
     write_replacement_config(&config_path, &pin_url, parent_url, pin).await;
-    let config = crate::config::Config::load(Some(config_path), None).unwrap();
+    let config = crate::plugins::providers::load_config(Some(config_path), None).unwrap();
     let client = CodewhaleClient::new(&config).unwrap();
     let manager = new_shared_subagent_manager(root.to_path_buf(), 2);
     let context = ToolContext::new(root).with_state_namespace("route-replacement");
@@ -270,7 +270,7 @@ fn replacement_reasons_are_typed_never_message_matched() {
 
 #[test]
 fn replacements_must_name_their_provider() {
-    let config: crate::config::Config = toml::from_str(
+    let config: codewhale_runtime::config::Config = toml::from_str(
         r#"
 [subagents.roles.reviewer]
 model = "deepseek-v4-pro"
@@ -661,7 +661,7 @@ replacements = ["BackupRoute/fixture-backup-model"]
 "#,
     )
     .await;
-    let config = crate::config::Config::load(Some(config_path), None).unwrap();
+    let config = crate::plugins::providers::load_config(Some(config_path), None).unwrap();
     let client = CodewhaleClient::new(&config).unwrap();
     assert_eq!(
         client.wire_format(),

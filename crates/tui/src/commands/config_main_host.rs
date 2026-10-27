@@ -1,22 +1,7 @@
 //! Config commands: config, settings, mode switches, trust, logout
 
 use crate::commands::CommandResult;
-use crate::config::{
-    Config, DEFAULT_STREAM_CHUNK_TIMEOUT_SECS, DEFAULT_SUBAGENT_API_TIMEOUT_SECS,
-    DEFAULT_SUBAGENT_HEARTBEAT_TIMEOUT_SECS, MAX_STREAM_CHUNK_TIMEOUT_SECS,
-    MAX_SUBAGENT_API_TIMEOUT_SECS, MAX_SUBAGENT_HEARTBEAT_TIMEOUT_SECS, MAX_SUBAGENTS,
-    MIN_STREAM_CHUNK_TIMEOUT_SECS, MIN_SUBAGENT_API_TIMEOUT_SECS,
-    MIN_SUBAGENT_HEARTBEAT_TIMEOUT_SECS, SearchProvider, SearchProviderSource, SubagentsConfig,
-    XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL, normalize_custom_model_id,
-    normalize_model_name_for_provider, validate_route,
-};
-use crate::config_persistence::{
-    persist_root_bool_key, persist_root_string_key, persist_subagents_bool_key,
-    persist_subagents_integer_key, persist_table_string_key, persist_table_value_key,
-    persist_unset_root_key,
-};
 use crate::reasoning_preference::ReasoningEffort;
-use crate::settings::Settings;
 use crate::tui::app::{App, AppAction, AppModeUi, SettingSelection, VimMode};
 use anyhow::Result;
 use codewhale_command_contract::config::{CommandWorkflowSummary, ConfigMessage, ConfigReply};
@@ -28,6 +13,21 @@ use codewhale_config::notifications::{
 };
 use codewhale_execpolicy::ApprovalMode;
 use codewhale_localization::{MessageId, resolve_locale, tr};
+use codewhale_runtime::config::{
+    Config, DEFAULT_STREAM_CHUNK_TIMEOUT_SECS, DEFAULT_SUBAGENT_API_TIMEOUT_SECS,
+    DEFAULT_SUBAGENT_HEARTBEAT_TIMEOUT_SECS, MAX_STREAM_CHUNK_TIMEOUT_SECS,
+    MAX_SUBAGENT_API_TIMEOUT_SECS, MAX_SUBAGENT_HEARTBEAT_TIMEOUT_SECS, MAX_SUBAGENTS,
+    MIN_STREAM_CHUNK_TIMEOUT_SECS, MIN_SUBAGENT_API_TIMEOUT_SECS,
+    MIN_SUBAGENT_HEARTBEAT_TIMEOUT_SECS, SearchProvider, SearchProviderSource, SubagentsConfig,
+    XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL, normalize_custom_model_id,
+    normalize_model_name_for_provider, validate_route,
+};
+use codewhale_runtime::config_persistence::{
+    persist_root_bool_key, persist_root_string_key, persist_subagents_bool_key,
+    persist_subagents_integer_key, persist_table_string_key, persist_table_value_key,
+    persist_unset_root_key,
+};
+use codewhale_runtime::settings::Settings;
 use std::path::PathBuf;
 
 /// Reject a preset bundle *before* anything is written, returning the message
@@ -103,7 +103,7 @@ pub(crate) fn apply_preset(app: &mut App, name: &str, persist: bool) -> ConfigRe
         );
     }
 
-    let Some(fields) = crate::settings::preset_fields(name) else {
+    let Some(fields) = codewhale_runtime::settings::preset_fields(name) else {
         return ConfigReply::error(format!("Unknown preset '{name}'. Available presets: calm."));
     };
 
@@ -160,7 +160,11 @@ pub(crate) fn apply_preset(app: &mut App, name: &str, persist: bool) -> ConfigRe
 
 /// Show the current value of a single setting.
 fn config_context_window_override(app: &App) -> Option<u32> {
-    let mut config = Config::load(app.config_path.clone(), app.config_profile.as_deref()).ok()?;
+    let mut config = crate::plugins::providers::load_config(
+        app.config_path.clone(),
+        app.config_profile.as_deref(),
+    )
+    .ok()?;
     let identity = app.admitted_provider_identity().ok()?;
     config.scope_to_provider_identity(identity).ok()?;
     config.context_window_for_provider_config(identity)
@@ -224,8 +228,10 @@ pub(crate) fn show_single_setting(app: &App, key: &str) -> ConfigReply {
         "approval_mode" | "approval" => Some(app.approval_mode.permission_chip_label().to_string()),
         "allow_shell" | "shell" | "exec_shell" => Some(app.allow_shell.to_string()),
         "base_url" => {
-            let config = match Config::load(app.config_path.clone(), app.config_profile.as_deref())
-            {
+            let config = match crate::plugins::providers::load_config(
+                app.config_path.clone(),
+                app.config_profile.as_deref(),
+            ) {
                 Ok(config) => config,
                 Err(err) => {
                     return ConfigReply::error(format!("Failed to load config: {err}"));
@@ -242,8 +248,10 @@ pub(crate) fn show_single_setting(app: &App, key: &str) -> ConfigReply {
                 .unwrap_or_else(|| "(unset)".to_string()),
         ),
         "provider_url" | "provider_base_url" | "endpoint" => {
-            let config = match Config::load(app.config_path.clone(), app.config_profile.as_deref())
-            {
+            let config = match crate::plugins::providers::load_config(
+                app.config_path.clone(),
+                app.config_profile.as_deref(),
+            ) {
                 Ok(mut config) => {
                     config.provider = Some(app.provider_identity_for_persistence().to_string());
                     config
@@ -384,7 +392,7 @@ pub(crate) fn show_single_setting(app: &App, key: &str) -> ConfigReply {
         // copy, and printing "false" unconditionally would misreport a user who
         // has it on.
         "session_auto_resume" | "auto_resume" => Some(
-            if crate::settings::Settings::load_persisted()
+            if codewhale_runtime::settings::Settings::load_persisted()
                 .map(|settings| settings.session_auto_resume)
                 .unwrap_or(false)
             {
@@ -480,7 +488,10 @@ pub(crate) fn show_single_setting(app: &App, key: &str) -> ConfigReply {
 fn unknown_setting_message(key: &str) -> String {
     // Suggest only keys `/set` accepts, the same set `known` checks above
     // (#6563).
-    let nearest = crate::config_keys::nearest_key(key, crate::config_keys::settings_toml_keys());
+    let nearest = codewhale_runtime::config_keys::nearest_key(
+        key,
+        codewhale_runtime::config_keys::settings_toml_keys(),
+    );
     match nearest {
         Some(candidate) => format!(
             "Unknown setting '{key}'. Did you mean `/config {candidate}`? Run `/settings text` to list every setting."
@@ -565,9 +576,10 @@ pub(crate) fn config_editability_audit(
     app: &App,
 ) -> Result<codewhale_command_contract::config::CommandConfigAuditReport, String> {
     let config = load_command_config(app)?;
-    let config_path = crate::config_persistence::config_toml_path(app.config_path.as_deref())
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|_| "(unresolved)".to_string());
+    let config_path =
+        codewhale_runtime::config_persistence::config_toml_path(app.config_path.as_deref())
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|_| "(unresolved)".to_string());
 
     let mut provider_config = config.clone();
     provider_config.provider = Some(app.provider_identity_for_persistence().to_string());
@@ -1111,11 +1123,12 @@ pub(crate) fn set_notifications_value(
         Err(_) => return invalid_notification_value(app, setting.key(), value, setting.choices()),
     };
     let scope = if persist {
-        let result = crate::config_persistence::config_toml_path(app.config_path.as_deref())
-            .and_then(|path| {
-                update.persist_for_profile(&path, app.config_profile.as_deref())?;
-                Ok(path)
-            });
+        let result =
+            codewhale_runtime::config_persistence::config_toml_path(app.config_path.as_deref())
+                .and_then(|path| {
+                    update.persist_for_profile(&path, app.config_profile.as_deref())?;
+                    Ok(path)
+                });
         match result {
             Ok(path) => ConfigMessage::concat(vec![
                 ConfigMessage::keyed("config_scope_saved"),
@@ -1165,14 +1178,14 @@ fn stream_chunk_timeout_value_label(raw: u64, resolved: u64) -> String {
 }
 
 fn load_command_config(app: &App) -> Result<Config, String> {
-    Config::load(app.config_path.clone(), app.config_profile.as_deref())
+    crate::plugins::providers::load_config(app.config_path.clone(), app.config_profile.as_deref())
         .map_err(|err| format!("Failed to load config: {err}"))
 }
 
 /// The compatibility default_model command describes saved DeepSeek config,
 /// independent of the active provider and one-launch environment overrides.
 fn saved_deepseek_default_model(app: &App) -> Result<String, String> {
-    let path = crate::config_persistence::config_toml_path(app.config_path.as_deref())
+    let path = codewhale_runtime::config_persistence::config_toml_path(app.config_path.as_deref())
         .map_err(|error| format!("Failed to resolve config: {error}"))?;
     let read = || -> anyhow::Result<String> {
         let store = codewhale_config::ConfigStore::load(Some(path.clone()))?;
@@ -1180,7 +1193,7 @@ fn saved_deepseek_default_model(app: &App) -> Result<String, String> {
             store.original_body().unwrap_or(""),
             app.config_profile.as_deref(),
         )?;
-        if app.config_profile.is_none() && crate::config::is_home_config_path(&path) {
+        if app.config_profile.is_none() && codewhale_runtime::config::is_home_config_path(&path) {
             config.apply_saved_selection(&Settings::load_legacy_route_preferences_read_only()?);
         }
         let key = if app.admitted_provider_identity().is_ok_and(|identity| {
@@ -1209,7 +1222,7 @@ pub(crate) fn subagents_status(
     app: &App,
 ) -> Result<codewhale_command_contract::config::CommandSubagentsReport, String> {
     let config = load_command_config(app)?;
-    let path = crate::config_persistence::config_toml_path(app.config_path.as_deref())
+    let path = codewhale_runtime::config_persistence::config_toml_path(app.config_path.as_deref())
         .map(|path| path.display().to_string())
         .unwrap_or_else(|_| "(unresolved)".to_string());
     let disabled_reason = config.subagents_disabled_reason();
@@ -1614,7 +1627,7 @@ fn subagents_config_display_value(config: &Config, key: &str) -> String {
 }
 
 fn subagents_runtime_action(
-    identity: &crate::config::ProviderIdentity,
+    identity: &codewhale_runtime::config::ProviderIdentity,
     config: &Config,
 ) -> AppAction {
     let max_subagents = config
@@ -1643,18 +1656,16 @@ fn subagents_runtime_action(
 ///
 /// `default_mode` is deliberately absent: it is a restart default that
 /// `set_config_value` explicitly does *not* apply to the live session, so
-/// refusing it would lock a key that cannot affect the turn.
+/// refusing it would lock a key that cannot affect the turn. `mode` and the
+/// approval keys are absent too: the engine applies a posture change at its
+/// next step boundary in the running turn.
 fn live_route_setting_subject(key: &str) -> Option<MessageId> {
     match key {
-        "mode" => Some(MessageId::SettingSubjectMode),
         // `default_model` is not merely a startup default: for the DeepSeek
         // routes `set_config_value` installs it as the live model.
         "model" | "default_model" => Some(MessageId::SettingSubjectModel),
         "reasoning_effort" | "effort" => Some(MessageId::SettingSubjectThinking),
         "provider" => Some(MessageId::SettingSubjectProvider),
-        "approval_mode" | "approval_policy" | "approval" => {
-            Some(MessageId::SettingSubjectPermissions)
-        }
         _ => None,
     }
 }
@@ -1800,7 +1811,7 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
                 // endpoint owns its model namespace, so an id declared for the
                 // saved DeepSeek route validates verbatim before the catalog
                 // normalization runs.
-                if crate::config::configured_model_for_route(
+                if codewhale_runtime::config::configured_model_for_route(
                     &saved,
                     ProviderKind::Deepseek,
                     identity.key.as_str(),
@@ -1822,7 +1833,7 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
                     model
                 }
             };
-            return match crate::config_persistence::persist_provider_model_key(
+            return match codewhale_runtime::config_persistence::persist_provider_model_key(
                 app.config_path.as_deref(),
                 &identity,
                 &model,
@@ -1885,7 +1896,7 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
                 model
             };
             let saved = if persist {
-                match crate::config_persistence::persist_provider_selection(
+                match crate::route_preferences::persist_provider_selection(
                     app.config_path.as_deref(),
                     match app.admitted_provider_identity() {
                         Ok(identity) => identity,
@@ -1969,8 +1980,8 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
                 };
                 if !matches!(
                     control,
-                    crate::config::ApprovalPolicyControl::RootConfig
-                        | crate::config::ApprovalPolicyControl::Unset
+                    codewhale_runtime::config::ApprovalPolicyControl::RootConfig
+                        | codewhale_runtime::config::ApprovalPolicyControl::Unset
                 ) {
                     return ConfigReply::error(format!(
                         "Approval posture is controlled by {}; change that source first.",
@@ -2010,13 +2021,19 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
             let control_allows_change = if persist {
                 control.editable_root()
             } else {
-                matches!(control, crate::config::ApprovalPolicyControl::Unset)
+                matches!(
+                    control,
+                    codewhale_runtime::config::ApprovalPolicyControl::Unset
+                )
             };
             if !control_allows_change {
                 return ConfigReply::error(format!(
                     "Approval posture is controlled by {}; {}.",
                     control.label(),
-                    if matches!(control, crate::config::ApprovalPolicyControl::RootConfig) {
+                    if matches!(
+                        control,
+                        codewhale_runtime::config::ApprovalPolicyControl::RootConfig
+                    ) {
                         "save a new config value or choose Use TUI permission default"
                     } else {
                         "change that source first"
@@ -2027,7 +2044,10 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
             return match mode {
                 Some(ApprovalMode::Bypass)
                     if persist
-                        && matches!(control, crate::config::ApprovalPolicyControl::RootConfig) =>
+                        && matches!(
+                            control,
+                            codewhale_runtime::config::ApprovalPolicyControl::RootConfig
+                        ) =>
                 {
                     match app.adopt_root_approval_posture(ApprovalMode::Bypass) {
                         Ok(()) => config_action_reply(
@@ -2199,7 +2219,7 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
                 Err(err) => return ConfigReply::error(err),
             };
             if persist {
-                match crate::config_persistence::persist_route_base_url(
+                match codewhale_runtime::config_persistence::persist_route_base_url(
                     app.config_path.as_deref(),
                     match app.admitted_provider_identity() {
                         Ok(identity) => identity,
@@ -2226,7 +2246,8 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
         // writes the owning `[tui]` table. `/statusline` composes what is in a row;
         // this only decides whether and how much of it paints.
         row_key @ ("posture_bar" | "metrics_line") => {
-            let Some(preset) = crate::config::ChromeRowPreset::from_setting(value) else {
+            let Some(preset) = codewhale_runtime::config::ChromeRowPreset::from_setting(value)
+            else {
                 return ConfigReply::error(ConfigMessage::keyed_with(
                     "config_command_invalid_value",
                     vec![
@@ -2235,7 +2256,7 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
                         (
                             "choices".to_string(),
                             ConfigMessage::literal(
-                                crate::config::ChromeRowPreset::SETTINGS.join(", "),
+                                codewhale_runtime::config::ChromeRowPreset::SETTINGS.join(", "),
                             ),
                         ),
                     ],
@@ -2243,30 +2264,34 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
             };
             let value = preset.as_setting();
             let scope = if persist {
-                let saved = crate::config_persistence::config_toml_path(app.config_path.as_deref())
-                    .and_then(|path| {
-                        crate::config_persistence::mutate_config_document(&path, |doc| {
-                            // Profiles replace the whole TUI table on load. Edit its
-                            // existing owner without creating an empty override that
-                            // would reset the other inherited display settings.
-                            let mut segments = Vec::new();
-                            if let Some(profile) = app.config_profile.as_deref() {
-                                let table = doc
-                                    .get("profiles")
-                                    .and_then(|v| v.get(profile))
-                                    .and_then(toml_edit::Item::as_table_like)
-                                    .ok_or_else(|| {
-                                        anyhow::anyhow!("active profile is missing or malformed")
-                                    })?;
-                                if table.contains_key("tui") {
-                                    segments.extend(["profiles", profile]);
-                                }
+                let saved = codewhale_runtime::config_persistence::config_toml_path(
+                    app.config_path.as_deref(),
+                )
+                .and_then(|path| {
+                    codewhale_runtime::config_persistence::mutate_config_document(&path, |doc| {
+                        // Profiles replace the whole TUI table on load. Edit its
+                        // existing owner without creating an empty override that
+                        // would reset the other inherited display settings.
+                        let mut segments = Vec::new();
+                        if let Some(profile) = app.config_profile.as_deref() {
+                            let table = doc
+                                .get("profiles")
+                                .and_then(|v| v.get(profile))
+                                .and_then(toml_edit::Item::as_table_like)
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("active profile is missing or malformed")
+                                })?;
+                            if table.contains_key("tui") {
+                                segments.extend(["profiles", profile]);
                             }
-                            segments.extend(["tui", row_key]);
-                            crate::config_persistence::set_document_value(doc, &segments, value)
-                        })?;
-                        Ok(path)
-                    });
+                        }
+                        segments.extend(["tui", row_key]);
+                        codewhale_runtime::config_persistence::set_document_value(
+                            doc, &segments, value,
+                        )
+                    })?;
+                    Ok(path)
+                });
                 match saved {
                     Ok(path) => ConfigMessage::concat(vec![
                         ConfigMessage::keyed("config_scope_saved"),
@@ -2474,7 +2499,8 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
             app.mark_history_updated();
         }
         "inline_diffs" | "inline_diff" | "diffs" => {
-            app.inline_diff_mode = crate::settings::InlineDiffMode::parse(&settings.inline_diffs);
+            app.inline_diff_mode =
+                codewhale_runtime::settings::InlineDiffMode::parse(&settings.inline_diffs);
             app.mark_history_updated();
             app.needs_redraw = true;
         }
@@ -2531,11 +2557,12 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
             // Persist first: a failed save leaves the live layout as it was
             // (C01-08).
             if persist
-                && let Err(err) = crate::config_persistence::persist_mini_window_bool_key(
-                    app.config_path.as_deref(),
-                    field,
-                    value,
-                )
+                && let Err(err) =
+                    codewhale_runtime::config_persistence::persist_mini_window_bool_key(
+                        app.config_path.as_deref(),
+                        field,
+                        value,
+                    )
             {
                 return ConfigReply::error(format!("Failed to persist: {err}"));
             }
@@ -2787,7 +2814,7 @@ pub(crate) async fn set_workspace_trust(app: &mut App, trusted: bool, save: bool
     tokio::task::spawn_blocking(move || {
         #[cfg(test)]
         let _membership = crate::test_support::join_env_scope(ticket);
-        crate::config::set_workspace_trust(&workspace, trusted)
+        codewhale_runtime::config::set_workspace_trust(&workspace, trusted)
     })
     .await??;
     app.trust_mode = trusted;
@@ -2896,12 +2923,12 @@ pub(crate) fn clear_legacy_sandbox_slot() -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::test_support::{EnvVarGuard, TestEnvLock, lock_test_env};
     use crate::tui::app::OnboardingState;
     use crate::tui::app::ScreenMode;
     use crate::tui::app::{App, TuiOptions};
     use codewhale_config::notifications::NotificationMethod;
+    use codewhale_runtime::config::Config;
     use std::env;
 
     /// Invoke the portable `/logout` handler through a real capability envelope
@@ -3312,9 +3339,12 @@ mod tests {
 
     #[test]
     fn title_config_reports_the_default_not_the_session_override() {
-        let config = Config {
-            title: Some(" workspace\u{1b}]0;ignored\u{7}\u{202e}-default ".to_string()),
-            ..Config::default()
+        let config = {
+            let __cw_config_init_0_0 =
+                Some(" workspace\u{1b}]0;ignored\u{7}\u{202e}-default ".to_string());
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.title = __cw_config_init_0_0;
+            __cw_config_init_0_value
         };
         let mut app = create_test_app_with_config(&config);
         assert_eq!(
@@ -3348,7 +3378,8 @@ mod tests {
         assert!(!result.is_error, "{:?}", result.message);
         assert_eq!(app.title_default.as_deref(), Some("Ev]0;PWNEDil Beta"));
         assert!(app.needs_redraw);
-        let loaded = Config::load(Some(config_path), None).expect("reload saved config");
+        let loaded = crate::plugins::providers::load_config(Some(config_path), None)
+            .expect("reload saved config");
         assert_eq!(loaded.title.as_deref(), Some("Ev]0;PWNEDil Beta"));
     }
 
@@ -3357,7 +3388,8 @@ mod tests {
     #[test]
     fn the_shipped_preset_passes_its_own_preflight() {
         let app = create_test_app();
-        let fields = crate::settings::preset_fields("calm").expect("the calm preset exists");
+        let fields =
+            codewhale_runtime::settings::preset_fields("calm").expect("the calm preset exists");
         assert_eq!(preset_preflight(&app, fields), None);
     }
 
@@ -3399,52 +3431,36 @@ mod tests {
     }
 
     /// The refusal list is the contract for #2982 on the slash surfaces. Keep
-    /// restart-only `default_mode` out of it: `set_config_value` deliberately
-    /// does not apply that key to the live session.
+    /// restart-only `default_mode` out of it, and mode and permissions, which
+    /// the engine applies at its next step boundary mid-turn.
     #[test]
     fn live_route_key_list_covers_every_route_mutating_alias() {
         for key in [
-            "mode",
             "model",
             "default_model",
             "reasoning_effort",
             "effort",
             "provider",
-            "approval_mode",
-            "approval_policy",
-            "approval",
         ] {
             assert!(
                 live_route_setting_subject(key).is_some(),
                 "{key} mutates the active route and must be locked mid-turn"
             );
         }
-        for key in ["default_mode", "theme", "calm_mode", "rail_panel"] {
+        for key in [
+            "default_mode",
+            "mode",
+            "approval_mode",
+            "approval_policy",
+            "approval",
+            "theme",
+            "calm_mode",
+            "rail_panel",
+        ] {
             assert!(
                 live_route_setting_subject(key).is_none(),
                 "{key} does not mutate the active route and must stay settable"
             );
-        }
-    }
-
-    #[test]
-    fn approval_aliases_are_inert_while_a_turn_is_running() {
-        let mut app = create_test_app();
-        app.approval_mode = ApprovalMode::Suggest;
-        app.is_loading = true;
-
-        for key in ["approval_mode", "approval_policy", "approval"] {
-            let result = set_config_value(&mut app, key, "never", false);
-            assert!(result.is_error, "{key} must be refused mid-turn");
-            assert!(
-                result
-                    .message
-                    .as_deref()
-                    .is_some_and(|message| message.contains("locked while a turn is running")),
-                "unexpected refusal for {key}: {:?}",
-                result.message
-            );
-            assert_eq!(app.approval_mode, ApprovalMode::Suggest);
         }
     }
 
@@ -3917,7 +3933,8 @@ mod tests {
     fn config_default_model_cannot_replace_a_non_deepseek_live_route() {
         let temp_root = tempfile::tempdir().expect("isolated configuration");
         let _guard = EnvGuard::new(temp_root.path());
-        let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+        let config_path =
+            codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
         fs::create_dir_all(config_path.parent().expect("config directory")).expect("mkdir");
         fs::write(
             &config_path,
@@ -3981,7 +3998,7 @@ mod tests {
     fn saved_automatic_model_selection_round_trips_every_provider_route() {
         let temp_root = tempfile::tempdir().expect("isolated configuration");
         let _guard = EnvGuard::new(temp_root.path());
-        let config_path = crate::config_persistence::config_toml_path(None).unwrap();
+        let config_path = codewhale_runtime::config_persistence::config_toml_path(None).unwrap();
         fs::create_dir_all(config_path.parent().unwrap()).unwrap();
         for (provider, selector, table, initial) in [
             (
@@ -4022,7 +4039,8 @@ mod tests {
                 persisted["providers"][table]["model"].as_str(),
                 Some("auto")
             );
-            let loaded = Config::load(Some(config_path.clone()), None).unwrap();
+            let loaded =
+                crate::plugins::providers::load_config(Some(config_path.clone()), None).unwrap();
             assert_eq!(
                 loaded.default_model(),
                 "auto",
@@ -4041,7 +4059,8 @@ mod tests {
             EnvVarGuard::remove("CODEWHALE_BASE_URL"),
             EnvVarGuard::remove("DEEPSEEK_BASE_URL"),
         ];
-        let config_path = crate::config_persistence::config_toml_path(None).expect("config path");
+        let config_path =
+            codewhale_runtime::config_persistence::config_toml_path(None).expect("config path");
         fs::create_dir_all(config_path.parent().expect("config directory")).expect("mkdir");
         fs::write(
             &config_path,
@@ -4078,7 +4097,7 @@ mod tests {
     fn saved_model_display_uses_the_same_profile_root_precedence_as_startup() {
         let temp_root = tempfile::tempdir().unwrap();
         let _guard = EnvGuard::new(temp_root.path());
-        let path = crate::config_persistence::config_toml_path(None).unwrap();
+        let path = codewhale_runtime::config_persistence::config_toml_path(None).unwrap();
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut app = create_test_app();
         app.config_path = Some(path.clone());
@@ -4193,8 +4212,9 @@ mod tests {
         let result = config_command(&mut app, Some("model deepseek-v4-flash --save"));
         assert!(!result.is_error, "{:?}", result.message);
         assert_eq!(app.model, "deepseek-v4-flash");
-        let config_path = crate::config_persistence::config_toml_path(app.config_path.as_deref())
-            .expect("config path");
+        let config_path =
+            codewhale_runtime::config_persistence::config_toml_path(app.config_path.as_deref())
+                .expect("config path");
         let persisted: toml::Value =
             toml::from_str(&fs::read_to_string(config_path).expect("saved config")).expect("toml");
         assert_eq!(persisted["provider"].as_str(), Some("deepseek"));
@@ -4244,7 +4264,7 @@ mod tests {
         let mut app = create_test_app();
         app.config_path = Some(config_path.clone());
         app.set_provider_identity_record(
-            Config::load(Some(config_path.clone()), None)
+            crate::plugins::providers::load_config(Some(config_path.clone()), None)
                 .expect("captured hosted config")
                 .active_provider_identity()
                 .expect("captured hosted identity"),
@@ -4372,7 +4392,7 @@ mod tests {
             Some("base_url https://example.internal.local/v1 --save"),
         );
         let msg = result.message.unwrap();
-        let saved_path = crate::config_persistence::config_toml_path(None).unwrap();
+        let saved_path = codewhale_runtime::config_persistence::config_toml_path(None).unwrap();
         let saved = fs::read_to_string(&saved_path).unwrap();
 
         // The active DeepSeek route's own table, not a top-level key (#6394).
@@ -4526,7 +4546,8 @@ mod tests {
         // Safety: EnvGuard holds the process-wide environment lock and restores
         // this variable on drop.
         unsafe { env::set_var("DEEPSEEK_ALLOW_SHELL", "false") };
-        let config = Config::load(Some(config_path.clone()), None).unwrap();
+        let config =
+            crate::plugins::providers::load_config(Some(config_path.clone()), None).unwrap();
         let mut app = create_test_app_with_config(&config);
         app.config_path = Some(config_path);
         app.set_agent_shell_access(false);
@@ -4822,7 +4843,7 @@ completion_sound = "bell"
         app.config_path = Some(config_path.clone());
         // This fixture starts App with defaults; seed its current Config view
         // as the real constructor does before asking a live-session query.
-        app.notification_settings = Config::load(Some(config_path), None)
+        app.notification_settings = crate::plugins::providers::load_config(Some(config_path), None)
             .unwrap()
             .notifications_config();
 
@@ -4923,7 +4944,8 @@ api_key = "tvly-autodetected"
         assert!(saved.contains("prompt_suggestion = true"), "{saved}");
         assert!(saved.contains("method = \"osc9\""), "{saved}");
 
-        let loaded = Config::load(Some(config_path), None).expect("reloaded config");
+        let loaded = crate::plugins::providers::load_config(Some(config_path), None)
+            .expect("reloaded config");
         assert_eq!(loaded.search_provider(), SearchProvider::DuckDuckGo);
         assert!(loaded.prompt_suggestion_enabled());
         assert_eq!(
@@ -5008,7 +5030,7 @@ context_window = 262144
         let mut app = create_test_app();
         app.config_path = Some(config_path);
         app.set_provider_identity_record(
-            crate::config::Config::default()
+            codewhale_runtime::config::Config::default()
                 .resolve_provider_identity(ProviderKind::Moonshot.as_str())
                 .expect("captured fixture provider"),
         );
@@ -5233,7 +5255,7 @@ context_window = 262144
     /// `--save` writes the `[tui]` key; an unknown preset names the three.
     #[test]
     fn config_command_row_presets_apply_live_and_persist_to_tui_table() {
-        use crate::config::ChromeRowPreset;
+        use codewhale_runtime::config::ChromeRowPreset;
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -5331,7 +5353,7 @@ context_window = 262144
 
     #[test]
     fn row_preset_saved_in_active_profile_reloads_without_resetting_other_rows() {
-        use crate::config::ChromeRowPreset;
+        use codewhale_runtime::config::ChromeRowPreset;
         let temp = tempfile::tempdir().unwrap();
         let _guard = EnvGuard::new(temp.path());
         let path = temp.path().join("selected.toml");
@@ -5341,7 +5363,9 @@ context_window = 262144
                 body.push_str("[profiles.\"work.team\".tui]\nposture_bar = \"hidden\"\nmetrics_line = \"compact\"\n");
             }
             fs::write(&path, body).unwrap();
-            let config = Config::load(Some(path.clone()), Some("work.team")).unwrap();
+            let config =
+                crate::plugins::providers::load_config(Some(path.clone()), Some("work.team"))
+                    .unwrap();
             let mut app = create_test_app_with_config(&config);
             app.config_path = Some(path.clone());
             app.config_profile = Some("work.team".to_string());
@@ -5349,7 +5373,9 @@ context_window = 262144
             let result = config_command(&mut app, Some("posture_bar compact --save"));
             assert!(!result.is_error, "{result:?}");
             assert_eq!(app.posture_bar, ChromeRowPreset::Compact);
-            let reloaded = Config::load(Some(path.clone()), Some("work.team")).unwrap();
+            let reloaded =
+                crate::plugins::providers::load_config(Some(path.clone()), Some("work.team"))
+                    .unwrap();
             let restarted = create_test_app_with_config(&reloaded);
             assert_eq!(restarted.posture_bar, app.posture_bar);
             assert_eq!(restarted.metrics_line, metrics_before);
@@ -5426,7 +5452,7 @@ context_window = 262144
 
         let mut app = create_test_app();
         app.set_provider_identity_record(
-            crate::config::Config::default()
+            codewhale_runtime::config::Config::default()
                 .resolve_provider_identity(ProviderKind::XiaomiMimo.as_str())
                 .expect("captured fixture provider"),
         );
@@ -5886,7 +5912,8 @@ context_window = 262144
         );
         assert!(saved.contains("approval_policy = \"on-request\""));
 
-        let loaded = Config::load(Some(config_path.clone()), None).unwrap();
+        let loaded =
+            crate::plugins::providers::load_config(Some(config_path.clone()), None).unwrap();
         assert_eq!(loaded.approval_policy.as_deref(), Some("on-request"));
 
         let mut restarted = create_test_app_with_config(&loaded);
@@ -5902,7 +5929,7 @@ context_window = 262144
             })
         );
         assert_eq!(restarted.approval_mode, ApprovalMode::Auto);
-        let reloaded = Config::load(Some(config_path), None).unwrap();
+        let reloaded = crate::plugins::providers::load_config(Some(config_path), None).unwrap();
         assert_eq!(reloaded.approval_policy.as_deref(), Some("auto"));
     }
 
@@ -5921,7 +5948,8 @@ context_window = 262144
             "permission_posture = \"full-access\"\n",
         )
         .unwrap();
-        let loaded = Config::load(Some(config_path.clone()), None).unwrap();
+        let loaded =
+            crate::plugins::providers::load_config(Some(config_path.clone()), None).unwrap();
         let mut app = create_test_app_with_config(&loaded);
         app.config_path = Some(config_path.clone());
 
@@ -5954,7 +5982,8 @@ context_window = 262144
             "permission_posture = \"ask\"\n",
         )
         .unwrap();
-        let loaded = Config::load(Some(config_path.clone()), None).unwrap();
+        let loaded =
+            crate::plugins::providers::load_config(Some(config_path.clone()), None).unwrap();
         let mut app = create_test_app_with_config(&loaded);
         app.config_path = Some(config_path.clone());
         // The production constructor receives the path up front and marks a
@@ -6140,11 +6169,17 @@ context_window = 262144
                     saved,
                     "session toggle must not write config"
                 );
-                assert_eq!(crate::config::is_workspace_trusted(&workspace), trusted);
+                assert_eq!(
+                    codewhale_runtime::config::is_workspace_trusted(&workspace),
+                    trusted
+                );
             }
             app.trust_mode = trusted;
             assert!(trust_command(&mut app, Some("on --typo")).is_error);
-            assert_eq!(crate::config::is_workspace_trusted(&workspace), trusted);
+            assert_eq!(
+                codewhale_runtime::config::is_workspace_trusted(&workspace),
+                trusted
+            );
             crate::commands::user_registry::with_registry_for_workspace(
                 Some(&workspace),
                 |registry| {

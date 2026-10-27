@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use regex::Regex;
 
-use crate::config::Config;
+use codewhale_runtime::config::Config;
 
 /// Transcription model requested from the provider's chat-completions API.
 const ASR_MODEL: &str = "mimo-v2.5-asr";

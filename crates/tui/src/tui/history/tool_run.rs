@@ -341,7 +341,7 @@ fn sentence_case_activity(text: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools::canonical_action::canonical_action_alias;
+    use codewhale_execpolicy::canonical_action::canonical_action_alias;
     use serde_json::json;
 
     #[test]

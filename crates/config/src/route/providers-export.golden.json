@@ -1249,7 +1249,7 @@
       "label": "StepFun / StepFlash",
       "endpoint": "https://api.stepfun.ai/v1",
       "wire": "chat-completions",
-      "defaultModel": "step-3.7-flash",
+      "defaultModel": "step-5-preview",
       "envVars": [
         "STEPFUN_API_KEY",
         "STEP_API_KEY"
@@ -1271,12 +1271,12 @@
         },
         {
           "id": "step-3.7-flash",
-          "canonical": "stepfun/step-3.7-flash",
-          "default": true
+          "canonical": "stepfun/step-3.7-flash"
         },
         {
           "id": "step-5-preview",
-          "canonical": "stepfun/step-5-preview"
+          "canonical": "stepfun/step-5-preview",
+          "default": true
         }
       ],
       "transport": "chat-completions"

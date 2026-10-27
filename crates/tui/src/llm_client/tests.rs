@@ -116,6 +116,9 @@ fn retryability_distinguishes_transient_failures_from_durable_failures() {
 
 #[test]
 fn http_response_boundary_classifies_status_contract() {
+    let body = LlmError::from_http_response(413, "maximum images exceeded model token limit");
+    assert!(matches!(body, LlmError::InvalidRequest { status: 413, .. }));
+    assert!(!body.is_retryable());
     assert!(matches!(
         LlmError::from_http_response(429, "rate limit exceeded"),
         LlmError::RateLimited { .. }

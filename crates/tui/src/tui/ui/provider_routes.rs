@@ -18,7 +18,7 @@ pub(crate) fn complete_trust_directory_onboarding(
     // reported a `DEEPSEEK_SESSION_ID`, and it has to keep meaning the same
     // session afterwards.
     app.hooks = app.hooks.rebind(
-        crate::hooks::HooksConfig::load_with_project_and_plugins(
+        crate::hooks::config::load_with_project_and_plugins(
             config.hooks_config(),
             &app.workspace,
             Some(app.plugin_registry.as_ref()),
@@ -332,7 +332,7 @@ async fn balance_get_json<T: serde::de::DeserializeOwned>(
 
 pub(crate) fn should_fetch_provider_balance(app: &App) -> bool {
     app.status_items.contains(&StatusItem::Balance)
-        && crate::config::provider_has_balance_api(app.api_provider)
+        && codewhale_runtime::config::provider_has_balance_api(app.api_provider)
 }
 
 /// The balance cell for this route. A reading belongs to the route that
@@ -367,7 +367,7 @@ pub(crate) fn balance_cell_for_route(
 /// `force` skips the status-item gate (used by `/balance`). Providers without
 /// a known endpoint clear the parked chip so a previous route cannot linger.
 pub(crate) fn schedule_balance_fetch(app: &mut App, api_key: &str, base_url: &str, force: bool) {
-    if !crate::config::provider_has_balance_api(app.api_provider) {
+    if !codewhale_runtime::config::provider_has_balance_api(app.api_provider) {
         // A fresh cell, not a cleared one: a fetch still in flight for the
         // previous route holds the old cell and cannot repaint the chip.
         app.balance_cell = std::sync::Arc::new(std::sync::Mutex::new(None));
@@ -627,7 +627,7 @@ pub(crate) fn reasoning_effort_receipt_for_route(
     .unwrap_or(EffectiveReasoningEffort::Tier(tier))
 }
 
-pub(crate) async fn sync_mode_update(app: &App, engine_handle: &EngineHandle) {
+pub(crate) async fn sync_mode_update(app: &mut App, engine_handle: &EngineHandle) {
     // #6150: non-blocking send on the input path. ChangeMode is safe to drop
     // on a full channel — `try_send` still publishes the live authority
     // snapshot, which the drain applies before the next queued op.
@@ -639,6 +639,17 @@ pub(crate) async fn sync_mode_update(app: &App, engine_handle: &EngineHandle) {
         approval_mode: app.approval_mode,
         configured_sandbox_mode: app.configured_sandbox_mode.clone(),
     });
+    if app.is_loading {
+        app.push_status_toast(
+            format!(
+                "{} · {} — applies at the agent's next step in this turn",
+                crate::tui::app::AppModeUi::display_name_localized(app.mode, app.ui_locale),
+                app.effective_permission_label(),
+            ),
+            StatusToastLevel::Info,
+            Some(6_000),
+        );
+    }
 }
 
 /// Apply a `/provider` switch by resolving a complete route candidate before
@@ -649,7 +660,7 @@ pub(crate) async fn switch_provider(
     app: &mut App,
     engine_handle: &mut EngineHandle,
     config: &mut Config,
-    identity: crate::config::ProviderIdentity,
+    identity: codewhale_runtime::config::ProviderIdentity,
     model_override: Option<String>,
 ) -> bool {
     if app.reject_setting_change_while_busy(MessageId::SettingSubjectProvider) {
@@ -704,7 +715,7 @@ pub(crate) async fn switch_provider(
                 // no key or local runtime, hand off to /provider already focused
                 // on that provider's key prompt instead of dead-ending with an
                 // error the user has to translate into an action.
-                if !crate::config::has_api_key_for(config, &identity)
+                if !crate::provider_readiness::has_api_key_for(config, &identity)
                     && app.view_stack.top_kind() != Some(ModalKind::ProviderPicker)
                 {
                     let runtime_status = query_provider_runtime_status(engine_handle).await;
@@ -785,14 +796,14 @@ pub(crate) async fn switch_provider(
     // picker with Esc first; otherwise the stale flag keeps the info line on
     // "model not connected" and keeps local-Ollama adoption armed against the
     // provider the user just chose. An auth-failure rollback restores it.
-    app.onboarding_needs_api_key = !crate::config::has_api_key(config);
+    app.onboarding_needs_api_key = !crate::provider_readiness::has_api_key(config);
     if !app.onboarding_needs_api_key {
         app.onboarding_missing_key_recovery = false;
     }
     app.billing_presentation = crate::route_billing::for_route(config, &target_identity_record);
     app.max_subagents = config
         .max_subagents_for_provider(&target_identity_record)
-        .clamp(1, crate::config::MAX_SUBAGENTS);
+        .clamp(1, codewhale_runtime::config::MAX_SUBAGENTS);
     app.provider_chain = (target_identity_record.key.as_str() == target.as_str()
         && target != ProviderKind::Antigravity)
         .then(|| codewhale_config::ProviderChain::new(target, &config.fallback_providers))
@@ -905,7 +916,7 @@ pub(crate) fn sync_config_provider_from_app(config: &mut Config, app: &App) {
 pub(crate) fn provider_picker_model_override(
     app: &App,
     config: &Config,
-    identity: &crate::config::ProviderIdentity,
+    identity: &codewhale_runtime::config::ProviderIdentity,
 ) -> Option<String> {
     config.verify_provider_identity(identity).ok()?;
     (app.admitted_provider_identity().ok() == Some(identity)).then(|| app.model.clone())
@@ -1156,7 +1167,7 @@ pub(crate) fn picker_provider_identity(
     config: &Config,
     provider: ProviderKind,
     provider_id: Option<&str>,
-) -> Result<crate::config::ProviderIdentity, String> {
+) -> Result<codewhale_runtime::config::ProviderIdentity, String> {
     let identity = match provider_id {
         Some(provider_id) => config
             .resolve_persisted_provider_identity(Some(provider.as_str()), Some(provider_id))?,

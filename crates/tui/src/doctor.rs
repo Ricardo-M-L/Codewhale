@@ -39,7 +39,7 @@ impl DoctorPathReport {
             None => codewhale_config::resolve_config_path(None)
                 .unwrap_or_else(|_| home.join(codewhale_config::CONFIG_FILE_NAME)),
         };
-        let settings = crate::settings::Settings::path()
+        let settings = codewhale_runtime::settings::Settings::path()
             .context("could not resolve the canonical settings path")?;
         let sessions = codewhale_config::resolve_state_dir("sessions")
             .context("could not resolve the sessions path")?;
@@ -302,10 +302,10 @@ pub(crate) enum DoctorSearchProbeFailure {
 /// Probe the selected search provider without reading credentials, issuing a
 /// query, following redirects, or writing a network-policy audit receipt.
 pub(crate) async fn doctor_search_probe(
-    config: &crate::config::Config,
+    config: &codewhale_runtime::config::Config,
     probes: DoctorProbeRequest,
 ) -> DoctorSearchProbeReport {
-    use crate::network_policy::{Decision, NetworkPolicyDecider};
+    use codewhale_net::network_policy::{Decision, NetworkPolicyDecider};
 
     if !probes.should_probe_search() {
         return DoctorSearchProbeReport::NotChecked;
@@ -331,7 +331,10 @@ pub(crate) async fn doctor_search_probe(
     if let Some(policy) = config.network.clone().map(|network| {
         // Doctor is a read-only diagnostic. Evaluate the same typed policy as
         // web_search, but do not attach the runtime audit writer.
-        NetworkPolicyDecider::new(crate::network_policy::NetworkPolicy::from(network), None)
+        NetworkPolicyDecider::new(
+            codewhale_net::network_policy::NetworkPolicy::from(network),
+            None,
+        )
     }) {
         match policy.evaluate(&target.host, "web_search") {
             Decision::Allow => {}
@@ -534,12 +537,12 @@ pub(crate) async fn print_update_report(probes: DoctorProbeRequest) {
     }
 }
 
-pub(crate) fn is_keyless_ds4_route(config: &crate::config::Config) -> bool {
+pub(crate) fn is_keyless_ds4_route(config: &codewhale_runtime::config::Config) -> bool {
     config
         .provider
         .as_deref()
         .is_some_and(|provider| provider.eq_ignore_ascii_case("ds4"))
-        && crate::config::base_url_uses_local_host(&config.active_route_base_url())
+        && codewhale_runtime::config::base_url_uses_local_host(&config.active_route_base_url())
         && codewhale_config::auth_mode_disables_api_key(
             config
                 .active_provider_identity()
@@ -551,11 +554,14 @@ pub(crate) fn is_keyless_ds4_route(config: &crate::config::Config) -> bool {
 
 /// Probe DS4 through its cheap `/v1/models` contract instead of waking the
 /// model for a completion. The selected model must be advertised.
-pub(crate) async fn probe_ds4_models(config: &crate::config::Config) -> anyhow::Result<()> {
+pub(crate) async fn probe_ds4_models(
+    config: &codewhale_runtime::config::Config,
+) -> anyhow::Result<()> {
     use crate::client::CodewhaleClient;
     use crate::core::model_client::ModelClient;
 
-    let endpoint = crate::client::redact_url_for_display(&config.active_route_base_url());
+    let endpoint =
+        codewhale_secrets::sanitize::redact_url_for_display(&config.active_route_base_url());
     let client = CodewhaleClient::new(config)?;
     let configured_alias = client.model().to_string();
     let models = match tokio::time::timeout(
@@ -591,8 +597,9 @@ pub(crate) async fn probe_ds4_models(config: &crate::config::Config) -> anyhow::
     Ok(())
 }
 
-fn ds4_probe_error(config: &crate::config::Config, error: &str) -> String {
-    let endpoint = crate::client::redact_url_for_display(&config.active_route_base_url());
+fn ds4_probe_error(config: &codewhale_runtime::config::Config, error: &str) -> String {
+    let endpoint =
+        codewhale_secrets::sanitize::redact_url_for_display(&config.active_route_base_url());
     let status = error
         .split_whitespace()
         .collect::<Vec<_>>()

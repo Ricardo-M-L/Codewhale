@@ -131,7 +131,7 @@ impl BrokerSession {
                 command_process
             },
         );
-        crate::utils::suppress_tokio_console_window(&mut cmd);
+        codewhale_util::utils::suppress_tokio_console_window(&mut cmd);
         cmd.stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -198,7 +198,7 @@ impl BrokerSession {
                 && super::is_node_command(command)
                 && launch_cwd.is_none_or(|directory| directory.is_dir())
             {
-                format!("MCP server {server_name} could not start because Node.js was not found. Install Node.js from https://nodejs.org/ and restart Codewhale with node on PATH. Built-in Computer Use requires Node.js 20 or newer.")
+                format!("MCP server {server_name} could not start because Node.js was not found. Install Node.js from https://nodejs.org/ and restart Codewhale with node on PATH. Computer Use requires Node.js 20 or newer.")
             } else if config.reviewed_plugin.is_some() {
                 format!(
                     "MCP stdio spawn failed (transport=stdio server={server_name} reviewed-plugin argv_count={} env_count={})",

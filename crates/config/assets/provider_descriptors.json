@@ -1133,7 +1133,7 @@
       "id": "stepfun",
       "label": "StepFun / StepFlash",
       "base_url": "https://api.stepfun.ai/v1",
-      "default_model": "step-3.7-flash",
+      "default_model": "step-5-preview",
       "env_vars": [
         "STEPFUN_API_KEY",
         "STEP_API_KEY"

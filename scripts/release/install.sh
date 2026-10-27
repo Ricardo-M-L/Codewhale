@@ -7,6 +7,17 @@ PREFIX="${PREFIX:-$HOME/.local}"
 BIN_DIR="${PREFIX}/bin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        echo "ERROR: sha256sum or shasum is required for the ownership receipt" >&2
+        return 1
+    fi
+}
+
 version_code() {
     local version="$1"
     local major minor patch
@@ -111,6 +122,9 @@ case "$BIN_DIR/" in
         ;;
 esac
 [[ -w "$BIN_DIR" ]] || { echo "ERROR: $BIN_DIR is not writable; choose a user PREFIX (no sudo)" >&2; exit 1; }
+for cargo_receipt in "$BIN_DIR/../.crates.toml" "$BIN_DIR/../.crates2.json"; do
+    [[ ! -e "$cargo_receipt" && ! -L "$cargo_receipt" ]] || { echo "ERROR: Cargo install metadata beside this directory; choose a fresh PREFIX" >&2; exit 1; }
+done
 
 check_destination() {
     local src="$1" dst="$2" mode="${3:-0755}"
@@ -147,6 +161,8 @@ check_destination() {
 
 # The image is an explicit installer choice; presence never changes Core's
 # Node default. Archives carry notices/source beside any qualified image.
+receipt_tmp="$(mktemp -d "$BIN_DIR/.codewhale-receipt.XXXXXX")"
+receipt_name=".codewhale-install.sha256"
 forced_backups=()
 stage=""
 stage_dir=""
@@ -171,7 +187,7 @@ on_exit() {
     if [[ -n "$stage_dir" ]]; then rmdir "$stage_dir"; fi
     if [[ "$status" -ne 0 && -n "$published" ]]; then rollback_published; fi
     if [[ "$status" -ne 0 ]]; then
-        for backup in "${forced_backups[@]}"; do
+        for backup in ${forced_backups[@]+"${forced_backups[@]}"}; do
             [[ -e "$backup" ]] || continue
             dst="$(printf '%s' "$backup" | sed 's/\.bak-[0-9TZ]*\(-[0-9][0-9]*\)\{0,1\}$//')"
             if [[ ! -e "$dst" && ! -L "$dst" ]]; then
@@ -179,6 +195,8 @@ on_exit() {
             fi
         done
     fi
+    rm -f "$receipt_tmp/$receipt_name"
+    rmdir "$receipt_tmp"
 }
 trap on_exit EXIT
 payloads=(codewhale codew)
@@ -196,6 +214,16 @@ for bin in "${payloads[@]}"; do
     case "$bin" in codewhale|codew|codewhale-extension-host) mode=0755; preflight_glibc "$src" "${bin/codewhale-extension-host/compiled host}" ;; esac
     check_destination "$src" "$BIN_DIR/$bin" "$mode"
 done
+
+for command_name in codewhale codew; do
+    command_digest="$(sha256_file "$SCRIPT_DIR/$command_name" | tr '[:upper:]' '[:lower:]')"
+    [[ "$command_digest" =~ ^[0-9a-f]{64}$ ]] || { echo "ERROR: invalid command digest for $command_name" >&2; exit 1; }
+    printf '%s  %s\n' "$command_digest" "$command_name"
+done > "$receipt_tmp/$receipt_name"
+if [[ -e "$BIN_DIR/$receipt_name" || -L "$BIN_DIR/$receipt_name" ]]; then
+    [[ ! -L "$BIN_DIR/$receipt_name" && -f "$BIN_DIR/$receipt_name" ]] && cmp -s "$receipt_tmp/$receipt_name" "$BIN_DIR/$receipt_name" || { echo "ERROR: existing command receipt differs; use the updater or a fresh PREFIX" >&2; exit 1; }
+fi
+check_destination "$receipt_tmp/$receipt_name" "$BIN_DIR/$receipt_name" 0644
 
 install_binary() {
     local src="$1" dst="$2" mode="${3:-0755}"
@@ -233,7 +261,9 @@ for bin in "${payloads[@]}"; do
 done
 
 echo ""
+install_binary "$receipt_tmp/$receipt_name" "$BIN_DIR/$receipt_name" 0644
 echo "Done. Commands installed to $BIN_DIR."
+echo "Uninstall this receipted copy: \"$BIN_DIR/codewhale\" uninstall --yes"
 echo "Future updates: \"$BIN_DIR/codewhale\" update"
 for bin in codewhale codew; do
     resolved="$(command -v "$bin" || true)"

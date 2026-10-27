@@ -1,4 +1,4 @@
-<!-- source: README.md sha256:a027945e67d4 -->
+<!-- source: README.md sha256:1e61f10f7706 -->
 <div align="center">
 
 <picture>
@@ -208,10 +208,10 @@ et des [plugins](../PLUGINS.md), et exécutez des [hooks](../HOOKS.md) sur
 les événements de session et d’outil. Le mode code (expérimental, activé par
 défaut) permet au modèle d’écrire un seul programme `execute_tools` qui appelle
 plusieurs outils MCP et de plugins ; chaque appel reste soumis à vos règles
-d’approbation et conserve son reçu. Le plugin Computer Use fourni
+d’approbation et conserve son reçu. Le plugin Computer Use installé séparément
 (expérimental, macOS uniquement) peut observer et utiliser d’autres
 applications. Il reste désactivé tant que vous n’avez pas examiné ses accès et
-ne l’avez pas activé ([guide](../../crates/tui/plugins/computer-use/README.md)).
+ne l’avez pas activé ([guide](https://github.com/codewhale-hq/codewhale-cu-plugin)).
 
 ## Façons de l’exécuter
 

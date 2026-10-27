@@ -43,7 +43,7 @@ fn render(result: &CommandResult) -> String {
 fn balance_branch_pair_matches_baseline() {
     let mut harness = DiagnosticsHarness::new();
     harness.app.set_provider_identity_record(
-        crate::config::Config::default()
+        codewhale_runtime::config::Config::default()
             .resolve_provider_identity(ProviderKind::Deepseek.as_str())
             .expect("captured fixture provider"),
     );
@@ -54,7 +54,7 @@ fn balance_branch_pair_matches_baseline() {
 
     let mut harness = DiagnosticsHarness::new();
     harness.app.set_provider_identity_record(
-        crate::config::Config::default()
+        codewhale_runtime::config::Config::default()
             .resolve_provider_identity(ProviderKind::Ollama.as_str())
             .expect("captured fixture provider"),
     );

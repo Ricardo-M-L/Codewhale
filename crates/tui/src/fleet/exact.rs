@@ -33,20 +33,20 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use codewhale_protocol::fleet::PermissionCeiling;
 #[cfg(test)]
-use codewhale_workflow::ShellCeiling;
+use codewhale_protocol::fleet::ShellCeiling;
 use codewhale_workflow::{
     CapturedReasoningRouter, CredentialReadiness, EffectiveReasoning, EndpointIdentity,
     FleetDocument, FleetRouterRef, FleetSearchRoot, FleetSnapshot, FleetSnapshotMember,
-    FleetTaskReceipt, NamedFleetError, PermissionCeiling, PreflightError, PreflightedRoute,
-    ProviderReasoningControl, QualifiedFleetId, ReasoningCapability, ReasoningRouterProfile,
-    ReasoningTier, ResolvedReasoning, RoutePreflight, RouterAvailability, RouterCallInput,
-    RouterCallPlan, RouterIdentity, RoutingDisclosure, bounded_routing_payload,
-    captured_legacy_inline_router, parse_router_decision, resolve_exact_member_reasoning,
-    router_call_plan, router_system_prompt, router_user_message,
+    FleetTaskReceipt, NamedFleetError, PreflightError, PreflightedRoute, ProviderReasoningControl,
+    QualifiedFleetId, ReasoningCapability, ReasoningRouterProfile, ReasoningTier,
+    ResolvedReasoning, RoutePreflight, RouterAvailability, RouterCallInput, RouterCallPlan,
+    RouterIdentity, RoutingDisclosure, bounded_routing_payload, captured_legacy_inline_router,
+    parse_router_decision, resolve_exact_member_reasoning, router_call_plan, router_system_prompt,
+    router_user_message,
 };
 
-use crate::config::Config;
 use crate::llm_client::LlmClient;
 use crate::reasoning_preference::ReasoningEffort;
 use codewhale_agent_contract::role::{ChildAuthority, public_role_label};
@@ -57,6 +57,7 @@ use codewhale_agent_contract::role::{
 };
 use codewhale_config::ProviderKind;
 use codewhale_models::Role;
+use codewhale_runtime::config::Config;
 
 /// Where exact Fleet definitions and Reasoning Router profiles are looked up,
 /// labelled so an identity can be qualified (`workspace/glm-pair`) instead of
@@ -373,7 +374,7 @@ pub(crate) fn reasoning_capability_for_route(
     let body_for = |effort: ReasoningEffort| -> String {
         let mut body = serde_json::json!({});
         let value = effort.api_value_for_route(provider, base_url, wire_model);
-        crate::client::apply_reasoning_effort(&mut body, value, provider);
+        crate::client::reasoning_effort::apply_reasoning_effort(&mut body, value, provider);
         // `reasoning_split` is a transport concern the client sets for every
         // tier; it carries no reasoning depth, so it must not make tiers look
         // distinct or make a no-control route look controllable.
@@ -512,21 +513,22 @@ pub(crate) fn preflight_route(
 
     // The canonical wire model, resolved once. The receipt and the child spawn
     // both read this value, so they cannot disagree about what actually ran.
-    let wire_model = crate::config::requested_model_for_provider(identity.provider, model.trim())
-        .ok_or_else(|| PreflightError::ModelUnresolved {
-        member: member_id.to_string(),
-        provider: identity.key.to_string(),
-        model: model.to_string(),
-        detail: "not a known model for this provider".to_string(),
-    })?;
-    crate::config::validate_route(identity.provider, &wire_model).map_err(|detail| {
-        PreflightError::ModelUnresolved {
+    let wire_model =
+        codewhale_runtime::config::requested_model_for_provider(identity.provider, model.trim())
+            .ok_or_else(|| PreflightError::ModelUnresolved {
+                member: member_id.to_string(),
+                provider: identity.key.to_string(),
+                model: model.to_string(),
+                detail: "not a known model for this provider".to_string(),
+            })?;
+    codewhale_runtime::config::validate_route(identity.provider, &wire_model).map_err(
+        |detail| PreflightError::ModelUnresolved {
             member: member_id.to_string(),
             provider: identity.key.to_string(),
             model: wire_model.clone(),
             detail,
-        }
-    })?;
+        },
+    )?;
 
     let mut scoped = config.clone();
     scoped
@@ -542,26 +544,28 @@ pub(crate) fn preflight_route(
     // design, and that is a valid, first-class state — not a downgrade and
     // not a missing credential. Ollama Cloud is hosted and falls through to
     // the ordinary credential checks.
-    let credential =
-        if crate::config::provider_route_is_keyless_self_hosted(identity.provider, &base_url) {
-            CredentialReadiness::KeylessLocal
-        } else if crate::config::has_api_key_for(&scoped, &identity) {
-            CredentialReadiness::Configured
-        } else {
-            // The discriminant only. `Missing { detail }` names the provider table
-            // key, which for a custom route is the customer's own string.
-            codewhale_telemetry::session_counters()
-                .bump_error(codewhale_telemetry::ErrorCounter::AuthPreflightFailed);
-            CredentialReadiness::Missing {
-                detail: format!("no credential configured for `{}`", identity.key),
-            }
-        };
+    let credential = if codewhale_runtime::config::provider_route_is_keyless_self_hosted(
+        identity.provider,
+        &base_url,
+    ) {
+        CredentialReadiness::KeylessLocal
+    } else if crate::provider_readiness::has_api_key_for(&scoped, &identity) {
+        CredentialReadiness::Configured
+    } else {
+        // The discriminant only. `Missing { detail }` names the provider table
+        // key, which for a custom route is the customer's own string.
+        codewhale_telemetry::session_counters()
+            .bump_error(codewhale_telemetry::ErrorCounter::AuthPreflightFailed);
+        CredentialReadiness::Missing {
+            detail: format!("no credential configured for `{}`", identity.key),
+        }
+    };
 
     Ok(PreflightedRoute {
         member_id: member_id.to_string(),
         provider_id: identity.key.to_string(),
         provider_config_id: identity
-            .migrated_legacy_ollama_cloud_route
+            .migrated_legacy_ollama_cloud_route()
             .then(|| provider.trim().to_string()),
         provider_kind: if identity.provider == ProviderKind::OllamaCloud {
             identity.provider.as_str().to_string()
@@ -1924,7 +1928,7 @@ permissions = "read_only"
             write: true,
             network_tool: true,
             shell: ShellCeiling::Full,
-            delegation_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+            delegation_depth: codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH,
             tools: true,
         }
     }
@@ -2854,9 +2858,11 @@ permissions = "read_only"
     fn preflight_freezes_provider_model_endpoint_and_local_readiness() {
         let _env_lock = crate::test_support::lock_test_env();
         let _key = crate::test_support::EnvVarGuard::set("ZAI_API_KEY", "zai-key");
-        let config = Config {
-            provider: Some("zai".to_string()),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_0_0 = Some("zai".to_string());
+            let mut __cw_config_init_0_value: Config = Default::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value
         };
 
         let route = preflight_route(
@@ -2886,9 +2892,11 @@ permissions = "read_only"
     #[test]
     fn a_keyless_local_provider_preflights_as_ready() {
         let _env_lock = crate::test_support::lock_test_env();
-        let config = Config {
-            provider: Some("ollama".to_string()),
-            ..Default::default()
+        let config = {
+            let __cw_config_init_1_0 = Some("ollama".to_string());
+            let mut __cw_config_init_1_value: Config = Default::default();
+            __cw_config_init_1_value.provider = __cw_config_init_1_0;
+            __cw_config_init_1_value
         };
 
         let Ok(route) = preflight_route("worker", "ollama", "qwen3", &config) else {
@@ -2916,16 +2924,19 @@ permissions = "read_only"
             .set("ollama", "legacy-cloud-key")
             .expect("seed released Ollama Cloud slot");
 
-        let cloud = Config {
-            provider: Some("deepseek".to_string()),
-            providers: Some(crate::config::ProvidersConfig {
-                ollama: crate::config::ProviderConfig {
+        let cloud = {
+            let __cw_config_init_2_0 = Some("deepseek".to_string());
+            let __cw_config_init_2_1 = Some(codewhale_runtime::config::ProvidersConfig {
+                ollama: codewhale_runtime::config::ProviderConfig {
                     base_url: Some(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
                     ..Default::default()
                 },
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_2_value: Config = Default::default();
+            __cw_config_init_2_value.provider = __cw_config_init_2_0;
+            __cw_config_init_2_value.providers = __cw_config_init_2_1;
+            __cw_config_init_2_value
         };
         let cloud_route = preflight_route(
             "cloud-worker",
@@ -2941,16 +2952,19 @@ permissions = "read_only"
         assert!(!cloud_route.endpoint.local);
         cloud_route.require_ready().expect("Cloud env key is ready");
 
-        let custom_remote = Config {
-            provider: Some("ollama".to_string()),
-            providers: Some(crate::config::ProvidersConfig {
-                ollama: crate::config::ProviderConfig {
+        let custom_remote = {
+            let __cw_config_init_3_0 = Some("ollama".to_string());
+            let __cw_config_init_3_1 = Some(codewhale_runtime::config::ProvidersConfig {
+                ollama: codewhale_runtime::config::ProviderConfig {
                     base_url: Some("https://ollama-gateway.example.test/v1".to_string()),
                     ..Default::default()
                 },
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_3_value: Config = Default::default();
+            __cw_config_init_3_value.provider = __cw_config_init_3_0;
+            __cw_config_init_3_value.providers = __cw_config_init_3_1;
+            __cw_config_init_3_value
         };
         let custom_route = preflight_route(
             "custom-worker",
@@ -2979,10 +2993,10 @@ permissions = "read_only"
             .set("ollama", "legacy-cloud-fleet-key")
             .expect("seed released Ollama Cloud slot");
 
-        let config = Config {
-            provider: Some("deepseek".to_string()),
-            providers: Some(crate::config::ProvidersConfig {
-                ollama: crate::config::ProviderConfig {
+        let config = {
+            let __cw_config_init_4_0 = Some("deepseek".to_string());
+            let __cw_config_init_4_1 = Some(codewhale_runtime::config::ProvidersConfig {
+                ollama: codewhale_runtime::config::ProviderConfig {
                     base_url: Some(codewhale_config::provider::OLLAMA_CLOUD_BASE_URL.to_string()),
                     model: Some(
                         codewhale_config::descriptors::defaults::DEFAULT_OLLAMA_CLOUD_MODEL
@@ -2991,8 +3005,11 @@ permissions = "read_only"
                     ..Default::default()
                 },
                 ..Default::default()
-            }),
-            ..Default::default()
+            });
+            let mut __cw_config_init_4_value: Config = Default::default();
+            __cw_config_init_4_value.provider = __cw_config_init_4_0;
+            __cw_config_init_4_value.providers = __cw_config_init_4_1;
+            __cw_config_init_4_value
         };
         let document = FleetDocument::parse(&format!(
             r#"
@@ -3377,10 +3394,13 @@ mod saved_fleet_tests {
     }
 
     fn zai_session() -> Config {
-        Config {
-            provider: Some("zai".to_string()),
-            reasoning_effort: Some("high".to_string()),
-            ..Default::default()
+        {
+            let __cw_config_init_5_0 = Some("zai".to_string());
+            let __cw_config_init_5_1 = Some("high".to_string());
+            let mut __cw_config_init_5_value: Config = Default::default();
+            __cw_config_init_5_value.provider = __cw_config_init_5_0;
+            __cw_config_init_5_value.reasoning_effort = __cw_config_init_5_1;
+            __cw_config_init_5_value
         }
     }
 
@@ -3388,8 +3408,8 @@ mod saved_fleet_tests {
         PermissionCeiling {
             write: true,
             network_tool: true,
-            shell: codewhale_workflow::ShellCeiling::Full,
-            delegation_depth: codewhale_config::DEFAULT_SPAWN_DEPTH,
+            shell: codewhale_protocol::fleet::ShellCeiling::Full,
+            delegation_depth: codewhale_protocol::fleet::DEFAULT_SPAWN_DEPTH,
             tools: true,
         }
     }
@@ -3657,7 +3677,7 @@ mod saved_fleet_tests {
         assert_eq!(reviewer.route.frozen().model, reviewer.route.wire_model);
         assert_eq!(
             reviewer.route.wire_model,
-            crate::config::requested_model_for_provider(
+            codewhale_runtime::config::requested_model_for_provider(
                 config.active_provider_identity().unwrap().provider,
                 &config.default_model()
             )

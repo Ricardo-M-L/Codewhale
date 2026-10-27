@@ -2,7 +2,7 @@
 //!
 //! Tracks conversation history, token usage, and session metadata.
 
-use crate::project_context::{ProjectContext, load_project_context_with_parents};
+use crate::project_context::ProjectContext;
 use crate::working_set::WorkingSet;
 use codewhale_core::prefix_cache::PrefixStabilityManager;
 use codewhale_execpolicy::ApprovalMode;
@@ -318,6 +318,7 @@ pub struct Session {
 
     /// System prompt (optional)
     pub system_prompt: Option<SystemPrompt>,
+    pub instruction_assembly: Option<std::sync::Arc<crate::project_context::InstructionAssembly>>,
     /// True when `system_prompt` is a persisted/runtime-supplied prefix that
     /// should not be replaced by mode/context refreshes.
     pub system_prompt_override: bool,
@@ -448,10 +449,6 @@ impl Session {
         notes_path: PathBuf,
         mcp_config_path: PathBuf,
     ) -> Self {
-        // Load project context from AGENTS.md, CLAUDE.md, etc.
-        let project_context = load_project_context_with_parents(&workspace);
-        let has_context = project_context.has_instructions();
-
         Self {
             model,
             reasoning_effort: None,
@@ -459,6 +456,7 @@ impl Session {
             auto_model: false,
             workspace,
             system_prompt: None,
+            instruction_assembly: None,
             system_prompt_override: false,
             compaction_summary_prompt: None,
             messages: AppendLog::new(),
@@ -470,11 +468,7 @@ impl Session {
             notes_path,
             mcp_config_path,
             id: uuid::Uuid::new_v4().to_string(),
-            project_context: if has_context {
-                Some(project_context)
-            } else {
-                None
-            },
+            project_context: None,
             last_system_prompt_hash: None,
             pending_prefix_change_reason: None,
             pinned_prompt_context: None,

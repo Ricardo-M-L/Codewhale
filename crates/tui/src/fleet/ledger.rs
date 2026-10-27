@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::sync::{Mutex, OnceLock};
 
-use super::files::{WorkspaceFile, same_file};
+use codewhale_util::files::{WorkspaceFile, same_file};
 use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 

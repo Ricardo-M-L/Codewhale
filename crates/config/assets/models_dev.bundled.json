@@ -6102,7 +6102,6 @@
           "knowledge": "2026-03-01",
           "release_date": "2026-05-29",
           "last_updated": "2026-05-29",
-          "default": true,
           "attachment": true,
           "reasoning": true,
           "reasoning_options": [
@@ -6150,6 +6149,7 @@
           "description": "StepFun's next-generation flagship base model for coding and professional knowledge work, with native text, image, and video input and a 1M-token context window",
           "release_date": "2026-09-16",
           "last_updated": "2026-09-20",
+          "default": true,
           "attachment": true,
           "reasoning": true,
           "reasoning_options": [

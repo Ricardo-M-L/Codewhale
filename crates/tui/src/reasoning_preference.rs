@@ -4,8 +4,8 @@
 //! tools can resolve and normalize reasoning effort without depending on
 //! presentation types.
 
-use crate::work_graph::ReasoningEffortTier;
 use codewhale_config::ProviderKind;
+use codewhale_models::reasoning_effort_tier::ReasoningEffortTier;
 
 /// Reasoning-effort tier, mirrored across DeepSeek and Codex effort pickers.
 ///
@@ -253,13 +253,15 @@ impl ReasoningEffort {
         wire_model: &str,
     ) -> Self {
         let normalized = self.normalize_for_provider(provider);
-        if crate::config::is_exact_kimi_code_k3_route(provider, base_url, wire_model) {
+        if codewhale_runtime::config::is_exact_kimi_code_k3_route(provider, base_url, wire_model) {
             return match normalized {
                 Self::Off => Self::Low,
                 other => other,
             };
         }
-        if crate::config::is_exact_direct_moonshot_k3_route(provider, base_url, wire_model) {
+        if codewhale_runtime::config::is_exact_direct_moonshot_k3_route(
+            provider, base_url, wire_model,
+        ) {
             return match normalized {
                 Self::Off => Self::Low,
                 Self::Medium => Self::High,

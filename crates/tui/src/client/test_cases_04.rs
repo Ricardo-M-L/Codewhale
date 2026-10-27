@@ -93,14 +93,17 @@
 
     #[test]
     fn client_new_rejects_provider_scoped_tls_skip_verify() {
-        let mut providers = crate::config::ProvidersConfig::default();
+        let mut providers = codewhale_runtime::config::ProvidersConfig::default();
         providers.openai.api_key = Some("sk-test".to_string());
         providers.openai.base_url = Some(codewhale_config::descriptors::defaults::DEFAULT_OPENAI_BASE_URL.to_string());
         providers.openai.insecure_skip_tls_verify = Some(true);
-        let config = Config {
-            provider: Some("openai".to_string()),
-            providers: Some(providers),
-            ..Config::default()
+        let config = {
+            let __cw_config_init_0_0 = Some("openai".to_string());
+            let __cw_config_init_0_1 = Some(providers);
+            let mut __cw_config_init_0_value: Config = Config::default();
+            __cw_config_init_0_value.provider = __cw_config_init_0_0;
+            __cw_config_init_0_value.providers = __cw_config_init_0_1;
+            __cw_config_init_0_value
         };
         assert!(config.insecure_skip_tls_verify());
 
@@ -116,16 +119,18 @@
     #[test]
     fn client_stream_idle_timeout_uses_tui_config() {
         let client = CodewhaleClient::new(
-            &Config {
-                tui: Some(crate::config::TuiConfig {
+            &{
+                let __cw_config_init_1_0 = Some(codewhale_runtime::config::TuiConfig {
                     stream_chunk_timeout_secs: Some(777),
                     max_model_steps: None,
                     turn_wall_clock_secs: None,
                     stream_max_content_mb: None,
                     stream_max_duration_secs: None,
-                    ..crate::config::TuiConfig::default()
-                }),
-                ..Config::default()
+                    ..codewhale_runtime::config::TuiConfig::default()
+                });
+                let mut __cw_config_init_1_value: Config = Config::default();
+                __cw_config_init_1_value.tui = __cw_config_init_1_0;
+                __cw_config_init_1_value
             }
             .with_legacy_root(Some("sk-test".to_string()), None),
         )
@@ -184,7 +189,7 @@
                 "sk-test",
                 &HashMap::new(),
                 ProviderKind::XiaomiMimo,
-                crate::config::XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL,
+                codewhale_runtime::config::XIAOMI_MIMO_PAY_AS_YOU_GO_BASE_URL,
             )
             .expect("headers");
 

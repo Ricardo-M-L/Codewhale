@@ -11,22 +11,23 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::llm_client::StreamEventBox;
-use crate::tools::schema_sanitize;
 use codewhale_config::ProviderKind;
+use codewhale_models::schema_sanitize;
 use codewhale_models::{
     ContentBlock, ContentBlockStart, Delta, MessageDelta, MessageRequest, MessageResponse,
     OpaqueReasoningState, StreamEvent, Tool, Usage,
 };
 use codewhale_runtime::logging;
 
+use super::CodewhaleClient;
 use super::chat::REASONING_REPLAY_PLACEHOLDER;
 use super::prepared::WireDialect;
 use super::role_placement::{RolePlacement, role_placement};
-use super::wire::{extract_sse_data_value, next_sse_line, push_sse_event_data};
-use super::{
-    CodewhaleClient, ERROR_BODY_MAX_BYTES, bounded_error_text, from_api_tool_name,
-    system_to_instructions, to_api_tool_name,
+use super::wire::{
+    ERROR_BODY_MAX_BYTES, bounded_error_text, from_api_tool_name, system_to_instructions,
+    to_api_tool_name,
 };
+use super::wire::{extract_sse_data_value, next_sse_line, push_sse_event_data};
 use crate::llm_client::LlmError;
 
 const CHATGPT_TOOL_NAMESPACE: &str = "codewhale";
@@ -790,7 +791,7 @@ impl CodewhaleClient {
 
 pub(super) fn responses_tool_output(content: &str, content_blocks: Option<&[Value]>) -> Value {
     let (image, omitted) = crate::image_attach::provider_tool_result_image_refs(content_blocks);
-    let content = crate::image_attach::tool_result_text_with_omission(content, omitted);
+    let content = codewhale_models::image_window::tool_result_text_with_omission(content, omitted);
     let Some((mime_type, data)) = image else {
         return json!(content);
     };
